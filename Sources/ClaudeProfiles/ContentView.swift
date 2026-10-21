@@ -6,17 +6,21 @@ struct ContentView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            if model.updater.state != .idle && model.updater.state != .upToDate {
-                UpdateBannerView(model: model)
-                Divider()
-            }
-            NavigationSplitView {
-                sidebar
-                    .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 360)
-            } detail: {
-                detail
-            }
+        // The split view is the root of the window so the title bar, the
+        // sidebar and the scrolling detail pane are laid out by the system.
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 360)
+        } detail: {
+            detail
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if model.updater.state != .idle && model.updater.state != .upToDate {
+                        VStack(spacing: 0) {
+                            UpdateBannerView(model: model)
+                            Divider()
+                        }
+                    }
+                }
         }
         .navigationTitle(model.loc.t("app.title"))
         .onChange(of: model.selectedSlug) { _, slug in
@@ -90,7 +94,12 @@ struct ContentView: View {
     @ViewBuilder
     private var detail: some View {
         if model.draft != nil {
-            ProfileEditorView(model: model)
+            // Pin the editor to the space the window gives it: a plain
+            // ProfileEditorView made the split view taller than the window.
+            GeometryReader { geo in
+                ProfileEditorView(model: model)
+                    .frame(width: geo.size.width, height: geo.size.height)
+            }
         } else {
             ContentUnavailableView {
                 Label(model.loc.t("detail.empty.title"), systemImage: "sidebar.left")

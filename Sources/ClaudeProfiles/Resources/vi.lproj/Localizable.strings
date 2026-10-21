@@ -31,6 +31,7 @@
 "editor.auth.bearer" = "Bearer token (ANTHROPIC_AUTH_TOKEN)";
 "editor.auth.apiKey" = "API key (ANTHROPIC_API_KEY)";
 "editor.auth.none" = "Không cần key";
+"editor.apiKey.label" = "API key";
 "editor.apiKey.stored" = "đã lưu trong Keychain — để trống nếu không đổi";
 "editor.apiKey.hint" = "dán key vào đây";
 "editor.apiKey.show" = "Hiện";
@@ -58,7 +59,7 @@
 
 /* Thao tác */
 "actions.save" = "Lưu";
-"actions.openTerminal" = "Mở terminal với profile này";
+"actions.openTerminal" = "Mở trong terminal";
 "actions.copyCommand" = "Sao chép lệnh";
 "actions.delete" = "Xóa";
 "actions.cancel" = "Hủy";

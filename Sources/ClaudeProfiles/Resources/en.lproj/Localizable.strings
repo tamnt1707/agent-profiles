@@ -31,6 +31,7 @@
 "editor.auth.bearer" = "Bearer token (ANTHROPIC_AUTH_TOKEN)";
 "editor.auth.apiKey" = "API key (ANTHROPIC_API_KEY)";
 "editor.auth.none" = "No key needed";
+"editor.apiKey.label" = "API key";
 "editor.apiKey.stored" = "stored in the Keychain — leave empty to keep it";
 "editor.apiKey.hint" = "paste the key here";
 "editor.apiKey.show" = "Show";
@@ -58,7 +59,7 @@
 
 /* Actions */
 "actions.save" = "Save";
-"actions.openTerminal" = "Open terminal with this profile";
+"actions.openTerminal" = "Open in terminal";
 "actions.copyCommand" = "Copy command";
 "actions.delete" = "Delete";
 "actions.cancel" = "Cancel";

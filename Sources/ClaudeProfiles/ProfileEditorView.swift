@@ -8,19 +8,26 @@ struct ProfileEditorView: View {
     @State private var presetID = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                providerSection
-                modelsSection
-                environmentSection
-                workspaceSection
-                isolationSection
+        Form {
+            providerSection
+            modelsSection
+            environmentSection
+            workspaceSection
+            isolationSection
+        }
+        .formStyle(.grouped)
+        // Without an explicit minimum the grouped form asks for the height of
+        // all its sections, which grows the split view past the window.
+        .frame(minHeight: 200, maxHeight: .infinity)
+        // The bars live in a bottom safe-area inset, so the form is the only
+        // part that scrolls and the bars stay pinned to the window bottom.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                actionBar
+                StatusBar(model: model)
             }
-            .formStyle(.grouped)
-
-            Divider()
-            actionBar
-            StatusBar(model: model)
+            .background(.bar)
         }
         .alert(model.loc.t("actions.confirmDelete"), isPresented: $model.isConfirmingDelete) {
             Button(model.loc.t("delete.button"), role: .destructive) { model.deleteCurrent() }
@@ -73,14 +80,16 @@ struct ProfileEditorView: View {
 
             if model.draft?.auth != AuthKind.none {
                 VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent(model.loc.t("editor.apiKey.label")) {
                     HStack(spacing: 8) {
                         Group {
                             if model.revealKey {
-                                TextField("", text: $model.keyInput)
+                                TextField(model.loc.t("editor.apiKey.label"), text: $model.keyInput)
                             } else {
-                                SecureField("", text: $model.keyInput)
+                                SecureField(model.loc.t("editor.apiKey.label"), text: $model.keyInput)
                             }
                         }
+                        .labelsHidden()
                         .textFieldStyle(.roundedBorder)
 
                         Button {
@@ -90,6 +99,7 @@ struct ProfileEditorView: View {
                         }
                         .buttonStyle(.borderless)
                         .help(model.loc.t(model.revealKey ? "editor.apiKey.hide" : "editor.apiKey.show"))
+                    }
                     }
 
                     if model.hasStoredKey {
@@ -120,6 +130,7 @@ struct ProfileEditorView: View {
                             .foregroundStyle(.secondary)
                             .padding(.leading, 6)
                         TextField(model.loc.t("editor.command.label"), text: commandBinding(), prompt: Text(model.loc.t("editor.command.hint")))
+                            .labelsHidden()
                             .textFieldStyle(.plain)
                             .font(.system(.body, design: .monospaced))
                             .padding(.trailing, 6)
@@ -260,6 +271,8 @@ struct ProfileEditorView: View {
             if model.hasUnsavedChanges {
                 Label(model.loc.t("actions.unsaved"), systemImage: "circle.fill")
                     .font(.callout)
+                    .lineLimit(1)
+                    .fixedSize()
                     .foregroundStyle(.secondary)
                     .labelStyle(.titleAndIcon)
             }
