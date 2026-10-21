@@ -1,0 +1,122 @@
+/* Claude Profiles — English strings */
+
+/* App */
+"app.title" = "Claude Profiles";
+
+/* Sidebar */
+"sidebar.add" = "Add profile";
+"sidebar.empty.title" = "No profiles yet";
+"sidebar.empty.description" = "Add a profile to get a claude-<name> command.";
+
+/* Detail */
+"detail.empty.title" = "Select a profile";
+"detail.empty.description" = "Choose a profile on the left, or add a new one.";
+
+/* Editor */
+"editor.provider.section" = "Provider";
+"editor.preset.label" = "Provider template";
+"editor.preset.choose" = "Choose a template…";
+"editor.preset.hint" = "Provider URLs change over time — check the provider's documentation.";
+"editor.name.label" = "Profile name";
+"editor.name.hint" = "e.g. GLM";
+"editor.slug.hint" = "→ command claude-%@";
+"editor.baseURL.label" = "Base URL";
+"editor.baseURL.hint" = "empty = the original Anthropic API";
+"editor.auth.label" = "Authentication";
+"editor.auth.bearer" = "Bearer token (ANTHROPIC_AUTH_TOKEN)";
+"editor.auth.apiKey" = "API key (ANTHROPIC_API_KEY)";
+"editor.auth.none" = "No key needed";
+"editor.apiKey.stored" = "stored in the Keychain — leave empty to keep it";
+"editor.apiKey.hint" = "paste the key here";
+"editor.apiKey.show" = "Show";
+"editor.apiKey.hide" = "Hide";
+"editor.models.section" = "Models";
+"editor.model.label" = "Main model";
+"editor.model.hint" = "ANTHROPIC_MODEL, e.g. glm-4.6";
+"editor.models.disclosure" = "Map opus / sonnet / haiku";
+"editor.models.help" = "When you type /model opus, sonnet or haiku in Claude Code, these names point to the provider's models. The haiku model is also used for background tasks.";
+"editor.model.opus" = "opus";
+"editor.model.sonnet" = "sonnet";
+"editor.model.haiku" = "haiku";
+"editor.env.section" = "Environment";
+"editor.env.disclosure" = "Extra environment variables";
+"editor.env.help" = "One KEY=VALUE per line. Example: API_TIMEOUT_MS=600000";
+"editor.workspace.section" = "Workspace";
+"editor.workdir.label" = "Working directory";
+"editor.workdir.hint" = "optional";
+"editor.workdir.choose" = "Choose…";
+"editor.isolation.section" = "Isolation";
+"editor.isolate.toggle" = "Give this profile its own Claude configuration (recommended)";
+"editor.isolate.help" = "CLAUDE_CONFIG_DIR = %@";
+"editor.share.toggle" = "Share CLAUDE.md, skills, commands, agents from ~/.claude";
+"editor.isolation.help" = "The original ~/.claude configuration and the Claude Desktop app are never touched.";
+
+/* Actions */
+"actions.save" = "Save";
+"actions.openTerminal" = "Open terminal with this profile";
+"actions.copyCommand" = "Copy command";
+"actions.delete" = "Delete";
+"actions.cancel" = "Cancel";
+"actions.confirmDelete" = "Delete profile";
+"actions.deleteMessage" = "Delete \"%@\"? The command and the Keychain entry are removed, the configuration folder is kept.";
+"actions.unsaved" = "Unsaved changes";
+"actions.reveal" = "Open folder";
+
+/* Status */
+"status.saved" = "Saved. Run it in a terminal with: %@";
+"status.launched" = "Opened %@ with profile \"%@\"";
+"status.deleted" = "Deleted \"%@\". The configuration folder %@ is kept.";
+"status.copied" = "Copied: %@";
+"status.pathHint" = "Add %@ to your PATH to call claude-<name> from every terminal.";
+"status.scriptsUpdated" = "Updated the launcher of every profile for the new language.";
+"status.scriptsFailed" = "Could not update the launcher of: %@";
+
+/* Errors */
+"error.emptyName" = "The profile needs a name.";
+"error.emptySlug" = "The profile name needs at least one letter or digit.";
+"error.duplicateSlug" = "Another profile already uses the command claude-%@.";
+"error.invalidBaseURL" = "The base URL must start with https:// or http://";
+"error.envMissingEquals" = "Line %d of the environment variables is missing the '=': %@";
+"error.invalidEnvName" = "Invalid variable name on line %d: %@";
+"error.missingAPIKey" = "Enter an API key for this profile (the key is stored in the Keychain).";
+"error.keychainRead" = "Could not read the Keychain.";
+"error.keychainWrite" = "Could not save the key to the Keychain.";
+"error.keychainDelete" = "Could not delete the key in the Keychain.";
+"error.io" = "Could not write %@.";
+"error.corruptFile" = "profiles.json could not be read. A copy was saved to %@.";
+"error.launcher" = "Could not open %@ (osascript failed).";
+"error.generic" = "Something went wrong.";
+
+/* Settings */
+"settings.general" = "General";
+"settings.language.section" = "Language";
+"settings.language" = "Language";
+"settings.language.system" = "System";
+"settings.language.en" = "English";
+"settings.language.vi" = "Tiếng Việt";
+"settings.appearance.section" = "Appearance";
+"settings.appearance" = "Appearance";
+"settings.appearance.system" = "System";
+"settings.appearance.light" = "Light";
+"settings.appearance.dark" = "Dark";
+"settings.terminal.section" = "Terminal app";
+"settings.terminal" = "Open with";
+"settings.terminal.terminal" = "Terminal";
+"settings.terminal.iterm" = "iTerm2";
+
+/* Menu */
+"menu.profile" = "Profile";
+
+/* Provider templates */
+"preset.custom" = "Custom";
+"preset.openrouter" = "OpenRouter";
+"preset.deepseek" = "DeepSeek";
+"preset.kimi" = "Kimi (Moonshot)";
+"preset.glm" = "GLM (Z.ai)";
+"preset.minimax" = "MiniMax";
+"preset.local-proxy" = "Local proxy (no key)";
+
+/* Sentences inside the launcher script */
+"script.header" = "# Created by Claude Profiles for profile \"%@\". This file is overwritten every time you save.";
+"script.unset" = "# Remove leftover provider settings from the shell so profiles do not get mixed up";
+"script.missingKey" = "No API key for profile %@ in the Keychain. Open the Claude Profiles app to enter it.";

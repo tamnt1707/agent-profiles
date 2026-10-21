@@ -1,0 +1,122 @@
+/* Claude Profiles — chuỗi tiếng Việt */
+
+/* Ứng dụng */
+"app.title" = "Claude Profiles";
+
+/* Cột bên */
+"sidebar.add" = "Thêm profile";
+"sidebar.empty.title" = "Chưa có profile nào";
+"sidebar.empty.description" = "Thêm một profile để có lệnh claude-<tên>.";
+
+/* Phần chi tiết */
+"detail.empty.title" = "Chọn một profile";
+"detail.empty.description" = "Chọn profile ở bên trái, hoặc bấm “Thêm profile”.";
+
+/* Trình soạn thảo */
+"editor.provider.section" = "Nhà cung cấp";
+"editor.preset.label" = "Mẫu nhà cung cấp";
+"editor.preset.choose" = "Chọn mẫu…";
+"editor.preset.hint" = "URL mẫu có thể thay đổi theo thời gian — kiểm tra lại trang docs của nhà cung cấp.";
+"editor.name.label" = "Tên profile";
+"editor.name.hint" = "vd: GLM";
+"editor.slug.hint" = "→ lệnh claude-%@";
+"editor.baseURL.label" = "Base URL";
+"editor.baseURL.hint" = "để trống = API gốc của Anthropic";
+"editor.auth.label" = "Xác thực";
+"editor.auth.bearer" = "Bearer token (ANTHROPIC_AUTH_TOKEN)";
+"editor.auth.apiKey" = "API key (ANTHROPIC_API_KEY)";
+"editor.auth.none" = "Không cần key";
+"editor.apiKey.stored" = "đã lưu trong Keychain — để trống nếu không đổi";
+"editor.apiKey.hint" = "dán key vào đây";
+"editor.apiKey.show" = "Hiện";
+"editor.apiKey.hide" = "Ẩn";
+"editor.models.section" = "Model";
+"editor.model.label" = "Model chính";
+"editor.model.hint" = "ANTHROPIC_MODEL, vd: glm-4.6";
+"editor.models.disclosure" = "Ánh xạ model cho opus / sonnet / haiku";
+"editor.models.help" = "Khi bạn gõ /model opus, sonnet hay haiku trong Claude Code, các tên này sẽ trỏ tới model của nhà cung cấp. Model haiku cũng được dùng cho tác vụ nền.";
+"editor.model.opus" = "opus";
+"editor.model.sonnet" = "sonnet";
+"editor.model.haiku" = "haiku";
+"editor.env.section" = "Biến môi trường";
+"editor.env.disclosure" = "Biến môi trường thêm";
+"editor.env.help" = "Mỗi dòng một biến KEY=VALUE. Ví dụ: API_TIMEOUT_MS=600000";
+"editor.workspace.section" = "Thư mục làm việc";
+"editor.workdir.label" = "Thư mục làm việc";
+"editor.workdir.hint" = "tùy chọn";
+"editor.workdir.choose" = "Chọn…";
+"editor.isolation.section" = "Tách biệt";
+"editor.isolate.toggle" = "Tách riêng cấu hình Claude cho profile này (khuyên dùng)";
+"editor.isolate.help" = "CLAUDE_CONFIG_DIR = %@";
+"editor.share.toggle" = "Dùng chung CLAUDE.md, skills, commands, agents từ ~/.claude";
+"editor.isolation.help" = "Cấu hình gốc ~/.claude và app Claude Desktop không bị thay đổi.";
+
+/* Thao tác */
+"actions.save" = "Lưu";
+"actions.openTerminal" = "Mở terminal với profile này";
+"actions.copyCommand" = "Sao chép lệnh";
+"actions.delete" = "Xóa";
+"actions.cancel" = "Hủy";
+"actions.confirmDelete" = "Xóa profile";
+"actions.deleteMessage" = "Xóa \"%@\"? Lệnh chạy và mục trong Keychain sẽ bị xóa, thư mục cấu hình vẫn được giữ lại.";
+"actions.unsaved" = "Có thay đổi chưa lưu.";
+"actions.reveal" = "Mở thư mục";
+
+/* Thông báo */
+"status.saved" = "Đã lưu. Chạy trong terminal bằng lệnh: %@";
+"status.launched" = "Đã mở %@ với profile \"%@\"";
+"status.deleted" = "Đã xóa \"%@\". Thư mục cấu hình %@ vẫn được giữ lại.";
+"status.copied" = "Đã sao chép: %@";
+"status.pathHint" = "Thêm %@ vào PATH để gọi claude-<tên> từ mọi terminal.";
+"status.scriptsUpdated" = "Đã cập nhật lệnh chạy của mọi profile theo ngôn ngữ mới.";
+"status.scriptsFailed" = "Không cập nhật được lệnh chạy của: %@";
+
+/* Lỗi */
+"error.emptyName" = "Profile cần có tên";
+"error.emptySlug" = "Tên profile cần có ít nhất một chữ cái hoặc số";
+"error.duplicateSlug" = "Đã có profile khác dùng lệnh claude-%@";
+"error.invalidBaseURL" = "Base URL phải bắt đầu bằng https:// hoặc http://";
+"error.envMissingEquals" = "Dòng %d của biến môi trường thiếu dấu '=': %@";
+"error.invalidEnvName" = "Tên biến không hợp lệ ở dòng %d: %@";
+"error.missingAPIKey" = "Nhập API key cho profile này (key sẽ được lưu vào Keychain)";
+"error.keychainRead" = "Không đọc được Keychain";
+"error.keychainWrite" = "Không lưu được key vào Keychain";
+"error.keychainDelete" = "Không xóa được key trong Keychain";
+"error.io" = "Không ghi được %@";
+"error.corruptFile" = "Không đọc được profiles.json. Một bản sao đã được lưu ở %@.";
+"error.launcher" = "Không mở được %@ (osascript lỗi)";
+"error.generic" = "Đã xảy ra lỗi.";
+
+/* Cài đặt */
+"settings.general" = "Chung";
+"settings.language.section" = "Ngôn ngữ";
+"settings.language" = "Ngôn ngữ";
+"settings.language.system" = "Hệ thống";
+"settings.language.en" = "English";
+"settings.language.vi" = "Tiếng Việt";
+"settings.appearance.section" = "Giao diện";
+"settings.appearance" = "Giao diện";
+"settings.appearance.system" = "Hệ thống";
+"settings.appearance.light" = "Sáng";
+"settings.appearance.dark" = "Tối";
+"settings.terminal.section" = "Ứng dụng terminal";
+"settings.terminal" = "Mở bằng";
+"settings.terminal.terminal" = "Terminal";
+"settings.terminal.iterm" = "iTerm2";
+
+/* Menu */
+"menu.profile" = "Profile";
+
+/* Mẫu nhà cung cấp */
+"preset.custom" = "Tùy chỉnh";
+"preset.openrouter" = "OpenRouter";
+"preset.deepseek" = "DeepSeek";
+"preset.kimi" = "Kimi (Moonshot)";
+"preset.glm" = "GLM (Z.ai)";
+"preset.minimax" = "MiniMax";
+"preset.local-proxy" = "Proxy nội bộ (không key)";
+
+/* Câu trong lệnh chạy */
+"script.header" = "# Tạo bởi Claude Profiles cho profile \"%@\". File này được ghi đè mỗi lần lưu.";
+"script.unset" = "# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn";
+"script.missingKey" = "Chưa có API key cho profile %@ trong Keychain. Mở app Claude Profiles để nhập.";

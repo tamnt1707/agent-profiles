@@ -7,11 +7,20 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "ClaudeProfilesCore", targets: ["ClaudeProfilesCore"]),
+        .executable(name: "ClaudeProfiles", targets: ["ClaudeProfiles"]),
     ],
     targets: [
         .target(
             name: "ClaudeProfilesCore",
             path: "Sources/ClaudeProfilesCore"
+        ),
+        .executableTarget(
+            name: "ClaudeProfiles",
+            dependencies: ["ClaudeProfilesCore"],
+            path: "Sources/ClaudeProfiles",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "ClaudeProfilesCoreTests",
