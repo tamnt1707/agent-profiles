@@ -21,7 +21,8 @@ final class InstallHelperTests: XCTestCase {
             pid: 4242,
             currentBundle: URL(fileURLWithPath: "/Applications/Claude Profiles.app"),
             newBundle: URL(fileURLWithPath: "/tmp/work/Claude Profiles.app"),
-            workDirectory: URL(fileURLWithPath: "/tmp/work")
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: logFile
         )
 
         XCTAssertTrue(script.contains("PID='4242'"))
@@ -41,7 +42,8 @@ final class InstallHelperTests: XCTestCase {
             pid: 1,
             currentBundle: URL(fileURLWithPath: "/Applications/Claude Profile's.app"),
             newBundle: URL(fileURLWithPath: "/tmp/work/new.app"),
-            workDirectory: URL(fileURLWithPath: "/tmp/work")
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: logFile
         )
 
         // The single quote inside the name is closed, escaped and opened again.
@@ -71,7 +73,7 @@ final class InstallHelperTests: XCTestCase {
     }
 
     /// Runs the helper and waits for it.
-    private func run(_ script: String, extraPath: URL?, log: URL) throws {
+    private func run(_ script: String, extraPath: URL?, log: URL) throws -> Int32 {
         let path = temp.url.appendingPathComponent("helper.sh")
         try Data(script.utf8).write(to: path)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
@@ -87,7 +89,14 @@ final class InstallHelperTests: XCTestCase {
         process.environment = environment
         try process.run()
         process.waitUntilExit()
-        XCTAssertEqual(process.terminationStatus, 0)
+        return process.terminationStatus
+    }
+
+    /// The log the helper writes to, inside the test folder.
+    private var logFile: URL { temp.url.appendingPathComponent("logs/ClaudeProfilesUpdate.log") }
+
+    private func logText() -> String {
+        (try? String(contentsOf: logFile, encoding: .utf8)) ?? ""
     }
 
     private func openedApps(_ log: URL) -> [String] {
@@ -116,9 +125,10 @@ final class InstallHelperTests: XCTestCase {
             pid: 999_999,           // a process that does not exist
             currentBundle: current,
             newBundle: newBundle,
-            workDirectory: work
+            workDirectory: work,
+            logFile: logFile
         )
-        try run(script, extraPath: fake.directory, log: fake.log)
+        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 0)
 
         // The new app is in place.
         XCTAssertTrue(FileManager.default.fileExists(atPath: current.appendingPathComponent("marker.txt").path))
@@ -152,9 +162,14 @@ final class InstallHelperTests: XCTestCase {
             pid: 999_999,
             currentBundle: current,
             newBundle: newBundle,
-            workDirectory: work
+            workDirectory: work,
+            logFile: logFile
         )
-        try run(script, extraPath: fake.directory, log: fake.log)
+        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 1)
+
+        // The failure is in the log, one line.
+        XCTAssertEqual(logText().split(separator: "\n").count, 1)
+        XCTAssertTrue(logText().contains("update failed"))
 
         // The old app is still there and was started again.
         XCTAssertTrue(FileManager.default.fileExists(atPath: current.appendingPathComponent("marker.txt").path))
@@ -186,11 +201,12 @@ final class InstallHelperTests: XCTestCase {
             pid: pid,
             currentBundle: current,
             newBundle: newBundle,
-            workDirectory: work
+            workDirectory: work,
+            logFile: logFile
         )
 
         let start = Date()
-        try run(script, extraPath: fake.directory, log: fake.log)
+        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 0)
         let duration = Date().timeIntervalSince(start)
 
         sleeper.waitUntilExit()
@@ -198,5 +214,122 @@ final class InstallHelperTests: XCTestCase {
         XCTAssertGreaterThan(duration, 0.5)
         // And the new app is in place.
         XCTAssertTrue(FileManager.default.fileExists(atPath: current.path))
+    }
+
+    // MARK: - The failure branches
+
+    func testTheStaleBackupIsRemovedBeforeTheFirstMove() throws {
+        let fake = try makeFakeOpen()
+
+        let applications = temp.url.appendingPathComponent("Applications", isDirectory: true)
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true)
+        let current = applications.appendingPathComponent("Claude Profiles.app")
+        try FileManager.default.createDirectory(at: current, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: current.appendingPathComponent("marker.txt"))
+        // A leftover of an earlier attempt.
+        let stale = applications.appendingPathComponent("Claude Profiles.app.old", isDirectory: true)
+        try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
+        try Data("stale".utf8).write(to: stale.appendingPathComponent("marker.txt"))
+
+        let work = temp.url.appendingPathComponent("work", isDirectory: true)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let newBundle = work.appendingPathComponent("Claude Profiles.app")
+        try FileManager.default.createDirectory(at: newBundle, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: newBundle.appendingPathComponent("marker.txt"))
+
+        let script = InstallHelper.script(
+            pid: 999_999,
+            currentBundle: current,
+            newBundle: newBundle,
+            workDirectory: work,
+            logFile: logFile
+        )
+        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 0)
+
+        // The new app is in place and the old one is gone; nothing was nested in the stale copy.
+        XCTAssertEqual(try String(contentsOf: current.appendingPathComponent("marker.txt"), encoding: .utf8), "new")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: applications.appendingPathComponent("Claude Profiles.app.old").path))
+        // A success writes nothing to the log.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: logFile.path))
+    }
+
+    func testTheBundleIsLeftAloneWhenTheAppStillRuns() throws {
+        let fake = try makeFakeOpen()
+
+        let applications = temp.url.appendingPathComponent("Applications", isDirectory: true)
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true)
+        let current = applications.appendingPathComponent("Claude Profiles.app")
+        try FileManager.default.createDirectory(at: current, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: current.appendingPathComponent("marker.txt"))
+
+        let work = temp.url.appendingPathComponent("work", isDirectory: true)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let newBundle = work.appendingPathComponent("Claude Profiles.app")
+        try FileManager.default.createDirectory(at: newBundle, withIntermediateDirectories: true)
+
+        // A process that keeps running, like an app that did not quit.
+        let running = Process()
+        running.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        running.arguments = ["30"]
+        try running.run()
+        defer {
+            running.terminate()
+            running.waitUntilExit()
+        }
+
+        let script = InstallHelper.script(
+            pid: running.processIdentifier,
+            currentBundle: current,
+            newBundle: newBundle,
+            workDirectory: work,
+            waitSeconds: 1,
+            logFile: logFile
+        )
+        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 1)
+
+        // Nothing was swapped and the app was not started.
+        XCTAssertEqual(try String(contentsOf: current.appendingPathComponent("marker.txt"), encoding: .utf8), "old")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: applications.appendingPathComponent("Claude Profiles.app.old").path))
+        XCTAssertEqual(openedApps(fake.log), [])
+        XCTAssertTrue(logText().contains("update failed"))
+    }
+
+    func testTheScriptHasItsFailureBranches() {
+        let script = InstallHelper.script(
+            pid: 1,
+            currentBundle: URL(fileURLWithPath: "/Applications/Claude Profiles.app"),
+            newBundle: URL(fileURLWithPath: "/tmp/work/Claude Profiles.app"),
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: URL(fileURLWithPath: "/tmp/logs/ClaudeProfilesUpdate.log")
+        )
+
+        // The log file and its folder are quoted; the folder is created on failure.
+        XCTAssertTrue(script.contains("LOG='/tmp/logs/ClaudeProfilesUpdate.log'"))
+        XCTAssertTrue(script.contains("LOG_DIR='/tmp/logs'"))
+        XCTAssertTrue(script.contains("mkdir -p \"$LOG_DIR\""))
+        XCTAssertTrue(script.contains(">> \"$LOG\""))
+        // Every failure stops with a non zero status.
+        XCTAssertTrue(script.contains("exit 1"))
+        XCTAssertTrue(script.contains("fail \"the app did not quit in time\""))
+        // A running app stops the helper before anything is moved.
+        XCTAssertLessThan(
+            script.range(of: "fail \"the app did not quit in time\"")!.lowerBound,
+            script.range(of: "mv \"$CURRENT\" \"$BACKUP\"")!.lowerBound
+        )
+        // A stale copy is removed before the first move.
+        XCTAssertLessThan(
+            script.range(of: "rm -rf \"$BACKUP\"")!.lowerBound,
+            script.range(of: "mv \"$CURRENT\" \"$BACKUP\"")!.lowerBound
+        )
+        // A half moved bundle is removed before the old one is put back.
+        XCTAssertLessThan(
+            script.range(of: "rm -rf \"$CURRENT\"")!.lowerBound,
+            script.range(of: "mv \"$BACKUP\" \"$CURRENT\"")!.lowerBound
+        )
+    }
+
+    func testTheDefaultLogFileIsInTheUserLibrary() {
+        XCTAssertTrue(InstallHelper.defaultLogFile.path.hasSuffix("/Library/Logs/ClaudeProfilesUpdate.log"))
     }
 }
