@@ -11,8 +11,6 @@ final class StubURLProtocol: URLProtocol {
         var headers: [String: String] = [:]
         var body = Data()
         var error: Error?
-        /// When it is set, the stub answers with a redirect to this address.
-        var redirectTo: String?
 
         /// A JSON answer.
         static func json(_ text: String, statusCode: Int = 200) -> Answer {
@@ -104,14 +102,20 @@ final class StubURLProtocol: URLProtocol {
             return
         }
 
-        if let redirect = answer.redirectTo,
-           let location = URL(string: redirect),
+        // A redirect is reported the way URLSession expects it, so the delegate
+        // of the session decides whether it is followed. When it is refused,
+        // URLSession hands the redirect answer itself to the delegate.
+        if (300...399).contains(answer.statusCode),
+           let location = answer.headers["Location"],
+           let target = URL(string: location, relativeTo: url),
            let response = HTTPURLResponse(
                url: url,
-               statusCode: 302,
+               statusCode: answer.statusCode,
                httpVersion: "HTTP/1.1",
-               headerFields: ["Location": location.absoluteString]
+               headerFields: answer.headers
            ) {
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: target), redirectResponse: response)
+            // When the session refuses the redirect, its answer is this response.
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocolDidFinishLoading(self)
             return

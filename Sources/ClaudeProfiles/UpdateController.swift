@@ -111,6 +111,14 @@ final class UpdateController {
 
     /// Downloads the new version, checks it and hands it to the helper.
     func install() async throws {
+        // A second call while the update is running must not start another
+        // download; it is refused and the running update keeps its state.
+        switch state {
+        case .downloading, .verifying, .installing:
+            throw UpdateError.cancelled
+        default:
+            break
+        }
         guard let installer, case .available(let info) = state else {
             throw UpdateError.notConfigured
         }

@@ -470,6 +470,107 @@ final class UpdateInstallerTests: XCTestCase {
         XCTAssertNil(ReleaseSigning.publicKey(fromBase64: ""))
     }
 
+    // MARK: - The redirects of the download
+
+    private let releaseAssetURL = "https://release-assets.githubusercontent.com/github-production-release-asset/1/update.zip?X-Amz-Signature=abc"
+
+    /// The installer of the tests, with a configuration that is installed.
+    private func redirectInstaller() -> UpdateInstaller {
+        UpdateInstaller(
+            configuration: configuration(app: temp.url.appendingPathComponent("Claude Profiles.app")),
+            session: StubURLProtocol.session()
+        )
+    }
+
+    func testFollowsTheRedirectToTheReleaseAssets() async throws {
+        // The same redirect GitHub answers with for a release asset.
+        StubURLProtocol.answer(.redirect(to: releaseAssetURL), for: zipURL)
+        StubURLProtocol.answer(.bytes(Data("archive".utf8)), for: releaseAssetURL)
+        let destination = temp.url.appendingPathComponent("update.zip")
+
+        try await redirectInstaller().download(URL(string: zipURL)!, to: destination, limit: 1024) { _, _ in }
+
+        XCTAssertEqual(try Data(contentsOf: destination), Data("archive".utf8))
+        XCTAssertTrue(StubURLProtocol.requests.contains { $0.url?.host == "release-assets.githubusercontent.com" })
+    }
+
+    func testRefusesARedirectToAnotherHostAndWritesNothing() async throws {
+        StubURLProtocol.answer(
+            StubURLProtocol.Answer(
+                statusCode: 302,
+                headers: ["Location": "https://evil.example/update.zip"],
+                body: Data("payload".utf8)
+            ),
+            for: zipURL
+        )
+        let destination = temp.url.appendingPathComponent("update.zip")
+
+        await assertThrows(.disallowedHost("evil.example")) {
+            try await redirectInstaller().download(URL(string: zipURL)!, to: destination, limit: 1024) { _, _ in }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path), "no bytes may be written")
+        XCTAssertFalse(StubURLProtocol.requests.contains { $0.url?.host == "evil.example" }, "the target is never requested")
+    }
+
+    func testRefusesARedirectToPlainHTTPAndWritesNothing() async throws {
+        StubURLProtocol.answer(
+            StubURLProtocol.Answer(
+                statusCode: 302,
+                headers: ["Location": "http://github.com/update.zip"],
+                body: Data("payload".utf8)
+            ),
+            for: zipURL
+        )
+        let destination = temp.url.appendingPathComponent("update.zip")
+
+        await assertThrows(.insecureURL) {
+            try await redirectInstaller().download(URL(string: zipURL)!, to: destination, limit: 1024) { _, _ in }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path), "no bytes may be written")
+        XCTAssertFalse(StubURLProtocol.requests.contains { $0.url?.scheme == "http" }, "plain http is never requested")
+    }
+
+    // MARK: - The bundles inside the archive
+
+    func testOnlyARealFolderCountsAsTheApp() throws {
+        // A link with the name of the app is not opened.
+        let real = try makeApp(in: temp.url.appendingPathComponent("real"), version: "2.0.0")
+        let links = temp.url.appendingPathComponent("links", isDirectory: true)
+        try FileManager.default.createDirectory(at: links, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: links.appendingPathComponent("Claude Profiles.app"),
+            withDestinationURL: real
+        )
+        XCTAssertEqual(UpdateInstaller.appBundles(in: links), [])
+
+        // A file with the name of the app is not an app either.
+        let files = temp.url.appendingPathComponent("files", isDirectory: true)
+        try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+        try Data("not an app".utf8).write(to: files.appendingPathComponent("Claude Profiles.app"))
+        XCTAssertEqual(UpdateInstaller.appBundles(in: files), [])
+
+        // The real folder is found.
+        XCTAssertEqual(UpdateInstaller.appBundles(in: temp.url.appendingPathComponent("real")).count, 1)
+    }
+
+    func testTwoBundlesInTheArchiveAreRefused() async throws {
+        let app = try makeApp(in: temp.url, version: "1.0.0")
+        let parent = temp.url.appendingPathComponent("two", isDirectory: true)
+        try makeApp(in: parent.appendingPathComponent("first", isDirectory: true), version: "2.0.0")
+        try makeApp(in: parent.appendingPathComponent("second", isDirectory: true), version: "2.0.0")
+        XCTAssertEqual(UpdateInstaller.appBundles(in: parent).count, 2)
+
+        let archive = try makeArchive(of: parent)
+        serve(archive: archive, signature: try sign(archive))
+
+        var installer = UpdateInstaller(configuration: configuration(app: app), session: StubURLProtocol.session())
+        installer.launchingHelper = { _ in }
+
+        await assertThrows(.unexpectedBundle) {
+            try await installer.install(self.info()) { _ in }
+        }
+    }
+
     // MARK: - Helpers
 
     private func assertThrows(
