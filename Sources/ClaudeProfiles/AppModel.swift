@@ -799,6 +799,8 @@ extension ProfileError {
             return loc.t("error.io", path)
         case .corruptFileBackedUp(let path):
             return loc.t("error.corruptFile", URL(fileURLWithPath: path).lastPathComponent)
+        case .dataUnreadable:
+            return loc.t("error.dataUnreadable")
         case .launcherFailed(let message):
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
@@ -814,6 +816,8 @@ extension StoreError {
         switch self {
         case .dataFileNotLoaded:
             return loc.t("error.dataNotLoaded")
+        case .dataFileUnreadable:
+            return loc.t("error.dataNotLoadedNoCopy")
         case .unsafeSlug:
             return loc.t("error.unsafeSlug")
         case .targetHomeExists:

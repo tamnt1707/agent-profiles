@@ -134,6 +134,8 @@
 "error.corruptFile" = "Không đọc được danh sách profile. Một bản sao đã được lưu với tên %@. Lưu một profile bây giờ sẽ tạo danh sách MỚI: các profile khác không bị xóa và vẫn nằm trong bản sao. Sau khi sửa file, hãy bấm Tải lại.";
 "error.launcher" = "Không mở được %@ (osascript lỗi)";
 "error.dataNotLoaded" = "Không đọc được danh sách profile, nên profiles.json không bị thay đổi. Lưu một profile bây giờ sẽ tạo danh sách MỚI: các profile khác không bị xóa và vẫn nằm trong bản sao. Sau khi sửa file, hãy bấm Tải lại.";
+"error.dataNotLoadedNoCopy" = "Không đọc được danh sách profile, nên profiles.json không bị thay đổi, và chưa có bản sao nào của nó. Chưa lưu được gì cho đến khi đọc lại được file. Sau khi sửa file, hãy bấm Tải lại.";
+"error.dataUnreadable" = "Không đọc được danh sách profile, và cũng chưa tạo được bản sao của nó. Chưa lưu được gì cho đến khi đọc lại được file. Hãy sửa file hoặc thư mục của nó, rồi bấm Tải lại.";
 "error.unsafeSlug" = "Tên lệnh chứa ký tự không được phép.";
 "error.targetHomeExists" = "Thư mục cấu hình của tên mới đã tồn tại. Hãy xóa thư mục đó hoặc chọn tên khác.";
 "error.noBackup" = "Không đọc được danh sách profile và cũng không lưu được bản sao của nó, nên profiles.json không bị thay thế. Hãy sửa file hoặc thư mục của nó, rồi bấm Tải lại.";

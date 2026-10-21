@@ -134,6 +134,8 @@
 "error.corruptFile" = "The profile list could not be read. A copy was saved as %@. Saving a profile now starts a NEW list: the other profiles are not deleted and stay in that copy. Use Reload after fixing the file.";
 "error.launcher" = "Could not open %@ (osascript failed).";
 "error.dataNotLoaded" = "The profile list could not be read, so profiles.json was not changed. Saving a profile now starts a NEW list: the other profiles are not deleted and stay in the copy. Use Reload after fixing the file.";
+"error.dataNotLoadedNoCopy" = "The profile list could not be read, so profiles.json was not changed, and no copy of it exists. Nothing is saved until the file can be read again. Use Reload after fixing the file.";
+"error.dataUnreadable" = "The profile list could not be read, and no copy of it could be made. Nothing is saved until the file can be read again. Fix the file or its folder, then use Reload.";
 "error.unsafeSlug" = "The command name contains characters that are not allowed.";
 "error.targetHomeExists" = "The config folder of the new name already exists. Remove it or choose another name.";
 "error.noBackup" = "The profile list could not be read and no copy of it could be saved, so profiles.json is not replaced. Fix the file or its folder, then use Reload.";

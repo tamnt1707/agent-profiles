@@ -29,6 +29,8 @@ public enum ProfileError: LocalizedError, Equatable {
     case ioFailed(String)
     /// `profiles.json` was unreadable and has been copied aside.
     case corruptFileBackedUp(path: String)
+    /// `profiles.json` could not be read and no copy of it could be made.
+    case dataUnreadable(String)
     /// The terminal could not be opened.
     case launcherFailed(String)
     /// The folder of a profile is not a safe place to delete something.
@@ -49,6 +51,7 @@ public enum ProfileError: LocalizedError, Equatable {
         case .keychainDeleteFailed: return "keychain delete failed"
         case .ioFailed(let path): return "io error: \(path)"
         case .corruptFileBackedUp(let path): return "corrupt data file backed up to \(path)"
+        case .dataUnreadable(let path): return "data file could not be read and was not copied: \(path)"
         case .launcherFailed(let message): return "could not open terminal: \(message)"
         case .unsafeDeletePath(let path): return "refusing to delete an unsafe path: \(path)"
         }

@@ -60,8 +60,11 @@ public struct SaveResult: Equatable, Sendable {
 /// Store failures that have no case in `ProfileError`.
 public enum StoreError: LocalizedError, Equatable, Sendable {
     /// `profiles.json` could not be read, so it is not overwritten by an
-    /// automatic save. An explicit profile save clears this state.
+    /// automatic save. A copy of the unreadable file exists. A successful write
+    /// of `profiles.json` clears this state.
     case dataFileNotLoaded(String)
+    /// `profiles.json` could not be read and no copy of it exists, so nothing is written.
+    case dataFileUnreadable(String)
     /// A slug that is not safe to use as a file name.
     case unsafeSlug(String)
     /// The config folder of the new slug already exists. It is never adopted.
@@ -72,6 +75,7 @@ public enum StoreError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .dataFileNotLoaded(let path): return "profiles.json was not loaded and is not overwritten: \(path)"
+        case .dataFileUnreadable(let path): return "profiles.json could not be read and no copy exists: \(path)"
         case .unsafeSlug(let slug): return "unsafe profile slug: \(slug)"
         case .targetHomeExists(let path): return "config folder already exists: \(path)"
         case .noBackup(let path): return "no copy of the unreadable file could be made: \(path)"
@@ -85,6 +89,9 @@ private final class LoadState {
     var failed = false
     /// The copy of the unreadable file, when one was made.
     var backup: URL?
+    /// An explicit profile save succeeded while the file was unreadable. The
+    /// failed state ends only when the next write of `profiles.json` succeeds.
+    var recovering = false
 }
 
 /// What a rename changed, so that a later failure can undo exactly that.
@@ -123,8 +130,14 @@ public struct Store {
     }
 
     /// `true` when the last `load()` could not read `profiles.json`. Automatic
-    /// saves are refused until a profile is saved explicitly.
+    /// saves are refused until `profiles.json` is written again.
     public var loadFailed: Bool { loadState.failed }
+
+    /// `true` when the copy of the unreadable file exists on disk.
+    private var hasCopyOfDataFile: Bool {
+        guard let backup = loadState.backup else { return false }
+        return FileManager.default.fileExists(atPath: backup.path)
+    }
 
     /// Items shared read-through from `~/.claude`. `settings.json` and the
     /// credentials are deliberately NOT shared, so every profile keeps its own
@@ -145,6 +158,7 @@ public struct Store {
         let file = paths.dataFile
         guard FileManager.default.fileExists(atPath: file.path) else {
             loadState.failed = false
+            loadState.recovering = false
             loadState.backup = nil
             return LoadedData(data: AppData())
         }
@@ -158,6 +172,7 @@ public struct Store {
             return failedLoad(bytes: bytes)
         }
         loadState.failed = false
+        loadState.recovering = false
         loadState.backup = nil
         return LoadedData(data: data)
     }
@@ -165,10 +180,11 @@ public struct Store {
     /// Records the failed load, copies the file aside and names the copy.
     private func failedLoad(bytes: Data?) -> LoadedData {
         loadState.failed = true
+        loadState.recovering = false
         let settings = bytes.map(AppData.settingsOnly(from:)) ?? AppData()
         loadState.backup = backUpDataFile(bytes)
         guard let backup = loadState.backup else {
-            return LoadedData(data: settings, warning: .ioFailed(paths.dataFile.path))
+            return LoadedData(data: settings, warning: .dataUnreadable(paths.dataFile.path))
         }
         return LoadedData(data: settings, warning: .corruptFileBackedUp(path: backup.path))
     }
@@ -176,10 +192,14 @@ public struct Store {
     /// Writes `profiles.json` atomically: a temporary file then a rename.
     ///
     /// Refused while the last load failed, so that a file which could not be
-    /// read is never overwritten by a save of the (empty) in-memory list.
+    /// read is never overwritten by a save of the (empty) in-memory list. The
+    /// one exception is the write that follows a successful explicit profile
+    /// save. A successful write clears the failed state.
     public func save(_ data: AppData) throws {
-        guard !loadState.failed else {
-            throw StoreError.dataFileNotLoaded(paths.dataFile.path)
+        guard !loadState.failed || loadState.recovering else {
+            throw hasCopyOfDataFile
+                ? StoreError.dataFileNotLoaded(paths.dataFile.path)
+                : StoreError.dataFileUnreadable(paths.dataFile.path)
         }
         try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
         // The name carries the pid, so two running instances never share one file.
@@ -197,6 +217,9 @@ public struct Store {
             try? FileManager.default.removeItem(at: temporary)
             throw ProfileError.ioFailed(paths.dataFile.path)
         }
+        // Only now is profiles.json readable again.
+        loadState.failed = false
+        loadState.recovering = false
     }
 
     /// Copies `profiles.json` aside as `profiles.json.corrupt-<unix time>`.
@@ -439,8 +462,8 @@ public struct Store {
     /// Everything that can be checked without a side effect is checked first.
     /// A rename happens before the launcher is written, and the typed key is
     /// written last: a failure at any earlier step leaves the old key and the
-    /// old files as they were. A successful explicit save clears the state set
-    /// by a failed load.
+    /// old files as they were. A successful explicit save lets the write of
+    /// `profiles.json` that follows it clear the state set by a failed load.
     @discardableResult
     public func saveProfile(
         _ profile: Profile,
@@ -455,7 +478,7 @@ public struct Store {
         // After a failed load the first explicit save needs the copy of the
         // original file. Without it the unreadable list is never replaced.
         if loadState.failed {
-            guard let backup = loadState.backup, FileManager.default.fileExists(atPath: backup.path) else {
+            guard hasCopyOfDataFile else {
                 throw StoreError.noBackup(paths.dataFile.path)
             }
         }
@@ -494,7 +517,10 @@ public struct Store {
             throw error
         }
 
-        loadState.failed = false
+        // The failed state ends with the next successful write of profiles.json.
+        if loadState.failed {
+            loadState.recovering = true
+        }
         return SaveResult(slug: profile.slug, renamedFrom: renamedFrom)
     }
 

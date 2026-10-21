@@ -87,12 +87,36 @@ final class StoreLoadTests: XCTestCase {
 
         let profile = Profile.sample(name: "New", slug: "new")
         try store.saveProfile(profile, others: [], key: "the-key")
-        XCTAssertFalse(store.loadFailed)
+        XCTAssertTrue(store.loadFailed, "the failed state ends only when profiles.json is written")
 
         try store.save(AppData(profiles: [profile]))
+        XCTAssertFalse(store.loadFailed)
         let reloaded = store.load()
         XCTAssertNil(reloaded.warning)
         XCTAssertEqual(reloaded.data.profiles, [profile])
+    }
+
+    /// The explicit save succeeded, but profiles.json cannot be written: the file
+    /// is still unreadable, so the failed state, the warning and the refusal of
+    /// automatic saves all stay.
+    func testAFailedWriteAfterARecoveringProfileSaveKeepsTheLoadFailure() throws {
+        try write(partlyMalformed)
+        _ = store.load()
+        try FileManager.default.createDirectory(at: paths.binDir, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: paths.root.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.root.path) }
+        if FileManager.default.isWritableFile(atPath: paths.root.path) {
+            throw XCTSkip("file permissions are not enforced for this user")
+        }
+
+        // The launcher goes into bin/, which stays writable; no config folder is made.
+        let profile = Profile.sample(name: "New", slug: "new", isolate: false)
+        XCTAssertNoThrow(try store.saveProfile(profile, others: [], key: "the-key"))
+        XCTAssertTrue(store.loadFailed)
+
+        XCTAssertThrowsError(try store.save(AppData(profiles: [profile])))
+        XCTAssertTrue(store.loadFailed, "a write that failed must not end the failed state")
+        XCTAssertEqual(try read(), partlyMalformed)
     }
 
     func testAFailedSaveProfileKeepsTheLoadFailure() throws {
@@ -145,10 +169,13 @@ final class StoreLoadTests: XCTestCase {
             throw CocoaError(.fileWriteNoPermission)
         })
         let loaded = failing.load()
-        guard case .ioFailed? = loaded.warning else {
-            return XCTFail("expected an I/O warning, got \(String(describing: loaded.warning))")
+        guard case .dataUnreadable? = loaded.warning else {
+            return XCTFail("expected an unreadable-file warning, got \(String(describing: loaded.warning))")
         }
         XCTAssertTrue(failing.loadFailed)
+        XCTAssertThrowsError(try failing.save(AppData())) { error in
+            XCTAssertEqual(error as? StoreError, .dataFileUnreadable(self.paths.dataFile.path))
+        }
 
         XCTAssertThrowsError(
             try failing.saveProfile(Profile.sample(name: "New", slug: "new"), others: [], key: "the-key")
@@ -255,8 +282,8 @@ final class StoreLoadTests: XCTestCase {
 
         let loaded = store.load()
 
-        guard case .ioFailed(let path)? = loaded.warning else {
-            return XCTFail("expected an I/O warning, got \(String(describing: loaded.warning))")
+        guard case .dataUnreadable(let path)? = loaded.warning else {
+            return XCTFail("expected an unreadable-file warning, got \(String(describing: loaded.warning))")
         }
         XCTAssertEqual(path, paths.dataFile.path)
         XCTAssertTrue(store.loadFailed)
