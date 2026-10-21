@@ -259,18 +259,60 @@ final class AppModel {
         isConfirmingDelete = true
     }
 
-    /// Removes the profile: the command and the key go away, the history stays.
+    /// The message of the delete confirmation. It names everything that goes
+    /// away, so nothing is deleted by surprise.
+    var deleteDialogMessage: String {
+        let profile = draft
+        let slug = profile?.slug ?? ""
+        let items = [
+            loc.t("delete.item.key"),
+            loc.t("delete.item.command", store.paths.command(for: slug)),
+            deleteFolderItem(for: slug),
+        ]
+        let list = items.map { "• \($0)" }.joined(separator: "\n")
+        return loc.t("delete.dialog.intro", profile?.name ?? "")
+            + "\n\n" + list + "\n\n" + loc.t("delete.dialog.warning")
+    }
+
+    /// The folder of a profile with its size, when that is cheap to compute.
+    private func deleteFolderItem(for slug: String) -> String {
+        let path = store.paths.home(for: slug).path
+        guard let bytes = DirectorySize.measure(at: store.paths.home(for: slug)) else {
+            return loc.t("delete.item.folder", path)
+        }
+        let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        return loc.t("delete.item.folderSize", path, size)
+    }
+
+    /// Removes the profile: the key, the command and the config folder go away.
     func deleteCurrent() {
         guard let index = draftIndex, data.profiles.indices.contains(index) else { return }
-        let profile = data.profiles.remove(at: index)
+        let profile = data.profiles[index]
         isConfirmingDelete = false
+
+        let removal: RemovalReport
         do {
-            try store.remove(profile)
-            try store.save(data)
-            status = Status(kind: .success, text: loc.t("status.deleted", profile.name, store.paths.home(for: profile.slug).path))
+            removal = try store.remove(profile)
         } catch {
+            // The path is not safe: nothing was deleted and the profile stays.
             report(error)
+            return
         }
+
+        // The entry always leaves the list and the data file.
+        var failures = removal.failures
+        data.profiles.remove(at: index)
+        do {
+            try store.save(data)
+        } catch {
+            failures.append(.dataFile)
+        }
+
+        status = Status(
+            kind: failures.isEmpty ? .success : .failure,
+            text: deleteStatusText(removal, failures, profile)
+        )
+
         draft = nil
         draftIndex = nil
         command = CommandNameDraft()
@@ -280,6 +322,41 @@ final class AppModel {
             select(first)
         } else {
             selectedSlug = nil
+        }
+    }
+
+    /// The message of the status bar after a delete: what went away and what
+    /// is still on the disk.
+    private func deleteStatusText(_ report: RemovalReport, _ failures: [RemovalFailure], _ profile: Profile) -> String {
+        var removed: [String] = []
+        if report.removedKey {
+            removed.append(loc.t("delete.item.key"))
+        }
+        if report.removedScript {
+            removed.append(loc.t("delete.item.command", store.paths.command(for: profile.slug)))
+        }
+        if report.removedHome {
+            removed.append(loc.t("delete.item.folder", store.paths.home(for: profile.slug).path))
+        }
+
+        var text = loc.t("status.deleted", profile.name)
+        if !removed.isEmpty {
+            text += " " + loc.t("status.deletedItems", removed.joined(separator: ", "))
+        }
+        let leftovers = failures.map { failureText($0) }
+        if !leftovers.isEmpty {
+            text += " " + loc.t("status.deleteFailed", leftovers.joined(separator: ", "))
+        }
+        return text
+    }
+
+    /// What is left on the disk, in the language of the user.
+    private func failureText(_ failure: RemovalFailure) -> String {
+        switch failure {
+        case .key(let account): return loc.t("delete.failure.key", account)
+        case .script(let path): return loc.t("delete.failure.command", path)
+        case .home(let path): return loc.t("delete.failure.folder", path)
+        case .dataFile: return loc.t("delete.failure.dataFile")
         }
     }
 
@@ -403,6 +480,8 @@ extension ProfileError {
             return loc.t("error.corruptFile", path)
         case .launcherFailed(let message):
             return loc.t("error.launcher", message)
+        case .unsafeDeletePath(let path):
+            return loc.t("error.unsafeDeletePath", path)
         }
     }
 }

@@ -31,6 +31,8 @@ public enum ProfileError: LocalizedError, Equatable {
     case corruptFileBackedUp(path: String)
     /// The terminal could not be opened.
     case launcherFailed(String)
+    /// The folder of a profile is not a safe place to delete something.
+    case unsafeDeletePath(String)
 
     public var errorDescription: String? {
         switch self {
@@ -48,6 +50,7 @@ public enum ProfileError: LocalizedError, Equatable {
         case .ioFailed(let path): return "io error: \(path)"
         case .corruptFileBackedUp(let path): return "corrupt data file backed up to \(path)"
         case .launcherFailed(let message): return "could not open terminal: \(message)"
+        case .unsafeDeletePath(let path): return "refusing to delete an unsafe path: \(path)"
         }
     }
 }

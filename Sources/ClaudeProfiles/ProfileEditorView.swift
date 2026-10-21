@@ -23,10 +23,10 @@ struct ProfileEditorView: View {
             StatusBar(model: model)
         }
         .alert(model.loc.t("actions.confirmDelete"), isPresented: $model.isConfirmingDelete) {
-            Button(model.loc.t("actions.delete"), role: .destructive) { model.deleteCurrent() }
+            Button(model.loc.t("delete.button"), role: .destructive) { model.deleteCurrent() }
             Button(model.loc.t("actions.cancel"), role: .cancel) { model.isConfirmingDelete = false }
         } message: {
-            Text(model.loc.t("actions.deleteMessage", model.draft?.name ?? ""))
+            Text(verbatim: model.deleteDialogMessage)
         }
     }
 

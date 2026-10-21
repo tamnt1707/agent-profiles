@@ -63,14 +63,28 @@
 "actions.delete" = "Delete";
 "actions.cancel" = "Cancel";
 "actions.confirmDelete" = "Delete profile";
-"actions.deleteMessage" = "Delete \"%@\"? The command and the Keychain entry are removed, the configuration folder is kept.";
 "actions.unsaved" = "Unsaved changes";
 "actions.reveal" = "Open folder";
+
+/* Delete */
+"delete.dialog.intro" = "Delete \"%@\"?";
+"delete.dialog.warning" = "This cannot be undone.";
+"delete.button" = "Delete everything";
+"delete.item.key" = "the API key in the Keychain";
+"delete.item.command" = "the command %@";
+"delete.item.folder" = "the folder %@ (sessions and history)";
+"delete.item.folderSize" = "the folder %@ (sessions and history, %@)";
+"delete.failure.key" = "the Keychain entry \"%@\"";
+"delete.failure.command" = "the file %@";
+"delete.failure.folder" = "the folder %@";
+"delete.failure.dataFile" = "the entry in profiles.json";
 
 /* Status */
 "status.saved" = "Saved. Run it in a terminal with: %@";
 "status.launched" = "Opened %@ with profile \"%@\"";
-"status.deleted" = "Deleted \"%@\". The configuration folder %@ is kept.";
+"status.deleted" = "Deleted \"%@\".";
+"status.deletedItems" = "Removed: %@.";
+"status.deleteFailed" = "Could not remove %@. Please remove it by hand.";
 "status.copied" = "Copied: %@";
 "status.pathHint" = "Add %@ to your PATH to call claude-<name> from every terminal.";
 "status.scriptsUpdated" = "Updated the launcher of every profile for the new language.";
@@ -81,6 +95,7 @@
 "error.emptySlug" = "The profile name needs at least one letter or digit.";
 "error.duplicateCommand" = "The command claude-%@ is already used by the profile \"%@\".";
 "error.foreignCommand" = "The command claude-%@ is taken by the file %@, which was not created by this app.";
+"error.unsafeDeletePath" = "Refused to delete %@: this is not a safe profile folder.";
 "error.invalidBaseURL" = "The base URL must start with https:// or http://";
 "error.envMissingEquals" = "Line %d of the environment variables is missing the '=': %@";
 "error.invalidEnvName" = "Invalid variable name on line %d: %@";

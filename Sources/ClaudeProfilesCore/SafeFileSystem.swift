@@ -51,3 +51,35 @@ enum SafeFileSystem {
         }
     }
 }
+
+/// The size of a folder in bytes, without following symbolic links.
+public enum DirectorySize {
+    /// The size of the folder, or `nil` when it is not a folder.
+    ///
+    /// The walk stops after `limit` entries, so a huge folder cannot block the
+    /// user interface.
+    public static func measure(at url: URL, limit: Int = 20_000) -> Int? {
+        guard SafeFileSystem.kind(of: url) == .directory else { return nil }
+
+        var total = 0
+        var visited = 0
+        var stack = [url]
+        while let current = stack.popLast() {
+            visited += 1
+            if visited > limit { return total }
+            switch SafeFileSystem.kind(of: current) {
+            case .directory:
+                let children = (try? FileManager.default.contentsOfDirectory(atPath: current.path)) ?? []
+                for child in children {
+                    stack.append(current.appendingPathComponent(child))
+                }
+            case .file:
+                let attributes = try? FileManager.default.attributesOfItem(atPath: current.path)
+                total += (attributes?[.size] as? NSNumber)?.intValue ?? 0
+            default:
+                break
+            }
+        }
+        return total
+    }
+}

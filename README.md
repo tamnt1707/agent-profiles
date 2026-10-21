@@ -75,7 +75,7 @@ Ngoài ra bạn có thể thêm biến riêng, mỗi dòng một biến `KEY=VAL
 
 Tùy chọn **Dùng chung từ ~/.claude** tạo symlink cho `CLAUDE.md`, `skills`, `commands`, `agents`, `output-styles` vào thư mục của profile. `settings.json` và thông tin đăng nhập vẫn riêng cho từng profile.
 
-Khi xóa profile, app chỉ xóa lệnh và key. Thư mục `homes/<tên>` được giữ lại để không mất lịch sử session.
+Khi xóa profile, app xóa hết: mục key trong Keychain, lệnh `claude-<tên>` và toàn bộ thư mục `homes/<tên>` (session, settings, history). Thao tác này không hoàn tác được, nên app hỏi lại trước khi xóa và liệt kê rõ những gì sẽ mất. Các symlink trỏ về `~/.claude` chỉ bị gỡ khỏi thư mục profile, thư mục gốc không bị đụng tới; nếu file nào không xóa được, app báo đường dẫn để bạn tự xóa.
 
 File `profiles.json` giữ nguyên định dạng của app cũ (Rust), nên profile đã tạo vẫn mở được. Nếu file bị hỏng, app copy nó thành `profiles.json.corrupt-<thời gian>` và hiện cảnh báo thay vì xoá mất dữ liệu.
 
@@ -168,7 +168,7 @@ You can also add your own variables, one `KEY=VALUE` per line (for example `API_
 
 The option **Share from ~/.claude** symlinks `CLAUDE.md`, `skills`, `commands`, `agents` and `output-styles` into the folder of the profile. `settings.json` and the credentials stay private per profile.
 
-When you delete a profile, the app only removes the command and the key. The folder `homes/<name>` is kept so that no session history is lost.
+When you delete a profile, the app removes everything: the key in the Keychain, the command `claude-<name>` and the whole folder `homes/<name>` (sessions, settings, history). This cannot be undone, so the app asks first and lists exactly what goes away. The symlinks into `~/.claude` are only unlinked from the profile folder, the shared configuration itself is never touched. Whatever cannot be removed is reported with its path, so you can delete it by hand.
 
 `profiles.json` keeps the format of the old Rust app, so existing profiles still open. If the file is broken, the app copies it to `profiles.json.corrupt-<timestamp>` and shows a warning instead of throwing the data away.
 

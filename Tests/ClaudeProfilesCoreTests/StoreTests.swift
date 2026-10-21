@@ -189,18 +189,19 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(manager.fileExists(atPath: paths.home(for: "new").path))
     }
 
-    func testRemoveDeletesScriptAndKeyButKeepsTheHome() throws {
+    /// The config folder is deleted with the profile.
+    func testRemoveDeletesScriptKeyAndHome() throws {
         let profile = Profile.sample()
         try keys.set(profile.slug, key: "the-key")
         try store.materialize(profile)
         let manager = FileManager.default
         try manager.createDirectory(at: paths.home(for: profile.slug), withIntermediateDirectories: true)
 
-        try store.remove(profile)
+        _ = try store.remove(profile)
 
         XCTAssertFalse(manager.fileExists(atPath: paths.script(for: profile.slug).path))
         XCTAssertNil(try keys.get(profile.slug))
-        XCTAssertTrue(manager.fileExists(atPath: paths.home(for: profile.slug).path))
+        XCTAssertFalse(manager.fileExists(atPath: paths.home(for: profile.slug).path))
     }
 
     private func manager() -> FileManager { FileManager.default }

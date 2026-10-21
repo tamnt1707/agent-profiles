@@ -63,14 +63,28 @@
 "actions.delete" = "Xóa";
 "actions.cancel" = "Hủy";
 "actions.confirmDelete" = "Xóa profile";
-"actions.deleteMessage" = "Xóa \"%@\"? Lệnh chạy và mục trong Keychain sẽ bị xóa, thư mục cấu hình vẫn được giữ lại.";
 "actions.unsaved" = "Có thay đổi chưa lưu.";
 "actions.reveal" = "Mở thư mục";
+
+/* Xóa */
+"delete.dialog.intro" = "Xóa \"%@\"?";
+"delete.dialog.warning" = "Không thể hoàn tác thao tác này.";
+"delete.button" = "Xóa tất cả";
+"delete.item.key" = "API key trong Keychain";
+"delete.item.command" = "lệnh %@";
+"delete.item.folder" = "thư mục %@ (sessions và history)";
+"delete.item.folderSize" = "thư mục %@ (sessions và history, %@)";
+"delete.failure.key" = "mục Keychain \"%@\"";
+"delete.failure.command" = "file %@";
+"delete.failure.folder" = "thư mục %@";
+"delete.failure.dataFile" = "mục trong profiles.json";
 
 /* Thông báo */
 "status.saved" = "Đã lưu. Chạy trong terminal bằng lệnh: %@";
 "status.launched" = "Đã mở %@ với profile \"%@\"";
-"status.deleted" = "Đã xóa \"%@\". Thư mục cấu hình %@ vẫn được giữ lại.";
+"status.deleted" = "Đã xóa \"%@\".";
+"status.deletedItems" = "Đã xóa: %@.";
+"status.deleteFailed" = "Không xóa được %@. Bạn xóa thủ công giúp nhé.";
 "status.copied" = "Đã sao chép: %@";
 "status.pathHint" = "Thêm %@ vào PATH để gọi claude-<tên> từ mọi terminal.";
 "status.scriptsUpdated" = "Đã cập nhật lệnh chạy của mọi profile theo ngôn ngữ mới.";
@@ -81,6 +95,7 @@
 "error.emptySlug" = "Tên profile cần có ít nhất một chữ cái hoặc số";
 "error.duplicateCommand" = "Lệnh claude-%@ đã được profile \"%@\" dùng.";
 "error.foreignCommand" = "Lệnh claude-%@ bị chiếm bởi file %@, file này không do app này tạo.";
+"error.unsafeDeletePath" = "Từ chối xóa %@: đây không phải thư mục profile an toàn.";
 "error.invalidBaseURL" = "Base URL phải bắt đầu bằng https:// hoặc http://";
 "error.envMissingEquals" = "Dòng %d của biến môi trường thiếu dấu '=': %@";
 "error.invalidEnvName" = "Tên biến không hợp lệ ở dòng %d: %@";

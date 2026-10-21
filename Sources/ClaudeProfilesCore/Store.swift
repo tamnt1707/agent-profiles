@@ -13,6 +13,42 @@ public struct LoadedData: Sendable {
     }
 }
 
+/// Something that could not be removed and has to be cleaned up by hand.
+public enum RemovalFailure: Equatable, Sendable {
+    /// The Keychain entry (the account name).
+    case key(String)
+    /// The launcher script (the path).
+    case script(String)
+    /// The config folder (the path).
+    case home(String)
+    /// The entry in `profiles.json`.
+    case dataFile
+}
+
+/// What the removal of a profile did.
+public struct RemovalReport: Equatable, Sendable {
+    /// The Keychain entry is gone.
+    public var removedKey: Bool
+    /// The launcher is gone.
+    public var removedScript: Bool
+    /// The config folder is gone.
+    public var removedHome: Bool
+    /// What is still on the disk.
+    public var failures: [RemovalFailure]
+
+    public init(
+        removedKey: Bool = false,
+        removedScript: Bool = false,
+        removedHome: Bool = false,
+        failures: [RemovalFailure] = []
+    ) {
+        self.removedKey = removedKey
+        self.removedScript = removedScript
+        self.removedHome = removedHome
+        self.failures = failures
+    }
+}
+
 /// The result of a successful save.
 public struct SaveResult: Equatable, Sendable {
     /// The slug that was saved.
@@ -277,11 +313,76 @@ public struct Store {
 
     // MARK: - Removing
 
-    /// Removes a profile's launcher and key. The config folder (sessions,
-    /// history) is kept on purpose.
-    public func remove(_ profile: Profile) throws {
-        try? FileManager.default.removeItem(at: paths.script(for: profile.slug))
-        try keys.delete(profile.slug)
+    /// The config folder of a profile, when it is safe to remove it.
+    ///
+    /// The slug has to be a single harmless path component and the folder has
+    /// to be a direct child of `<root>/homes/`. A folder that is a symbolic
+    /// link is allowed: only the link itself is removed.
+    private func validatedHomePath(for slug: String) throws -> URL {
+        let home = paths.home(for: slug)
+        guard Slug.isSafe(slug) else {
+            throw ProfileError.unsafeDeletePath(home.path)
+        }
+        let parent = home.deletingLastPathComponent()
+        guard parent.standardizedFileURL == paths.homesDir.standardizedFileURL,
+              home.lastPathComponent == slug,
+              parent.resolvingSymlinksInPath() == paths.homesDir.resolvingSymlinksInPath() else {
+            throw ProfileError.unsafeDeletePath(home.path)
+        }
+        return home
+    }
+
+    /// Removes everything that belongs to a profile: the Keychain entry, the
+    /// launcher and the whole config folder with its sessions and history.
+    ///
+    /// An unsafe slug or path refuses the whole removal and nothing is
+    /// deleted. After that every step is attempted, even when an earlier one
+    /// failed, and the leftovers are reported so the user can remove them by
+    /// hand.
+    public func remove(_ profile: Profile) throws -> RemovalReport {
+        let home = try validatedHomePath(for: profile.slug)
+        var report = RemovalReport()
+
+        // 1. The Keychain entry.
+        do {
+            try keys.delete(profile.slug)
+            report.removedKey = true
+        } catch {
+            report.failures.append(.key(profile.slug))
+        }
+
+        // 2. The launcher. A file of another program is never deleted.
+        let script = paths.script(for: profile.slug)
+        switch SafeFileSystem.kind(of: script) {
+        case .missing:
+            report.removedScript = true
+        default:
+            if ScriptRenderer.isManagedLauncher(at: script) {
+                do {
+                    try SafeFileSystem.remove(at: script)
+                    report.removedScript = true
+                } catch {
+                    report.failures.append(.script(script.path))
+                }
+            } else {
+                report.failures.append(.script(script.path))
+            }
+        }
+
+        // 3. The config folder, even when the profile is not isolated.
+        switch SafeFileSystem.kind(of: home) {
+        case .missing:
+            report.removedHome = true
+        default:
+            do {
+                try SafeFileSystem.remove(at: home)
+                report.removedHome = true
+            } catch {
+                report.failures.append(.home(home.path))
+            }
+        }
+
+        return report
     }
 }
 
