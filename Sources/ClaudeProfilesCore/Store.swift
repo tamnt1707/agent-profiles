@@ -165,16 +165,33 @@ public struct Store {
         guard let bytes = try? Data(contentsOf: file) else {
             return failedLoad(bytes: nil)
         }
-        guard String(data: bytes, encoding: .utf8) != nil,
-              let data = try? JSONDecoder().decode(AppData.self, from: bytes),
-              data.profiles.allSatisfy({ Slug.isSafe($0.slug) })
-        else {
+        guard let data = Store.parse(bytes) else {
             return failedLoad(bytes: bytes)
         }
         loadState.failed = false
         loadState.recovering = false
         loadState.backup = nil
         return LoadedData(data: data)
+    }
+
+    /// `true` when `load()` would read `profiles.json` without a warning. Nothing
+    /// is changed: no copy is made and the failed state stays as it is.
+    public func isReadable() -> Bool {
+        let file = paths.dataFile
+        guard FileManager.default.fileExists(atPath: file.path) else { return true }
+        guard let bytes = try? Data(contentsOf: file) else { return false }
+        return Store.parse(bytes) != nil
+    }
+
+    /// The profiles of a file that is valid, `nil` for a broken one.
+    private static func parse(_ bytes: Data) -> AppData? {
+        guard String(data: bytes, encoding: .utf8) != nil,
+              let data = try? JSONDecoder().decode(AppData.self, from: bytes),
+              data.profiles.allSatisfy({ Slug.isSafe($0.slug) })
+        else {
+            return nil
+        }
+        return data
     }
 
     /// Records the failed load, copies the file aside and names the copy.

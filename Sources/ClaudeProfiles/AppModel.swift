@@ -64,6 +64,8 @@ final class AppModel {
     enum PendingSwitch: Equatable {
         case profile(String)
         case newProfile
+        /// Reading `profiles.json` again, once the file reads.
+        case reload
     }
 
     /// The answers to the question about the unsaved changes.
@@ -96,20 +98,25 @@ final class AppModel {
 
     /// Reads `profiles.json` and shows the first profile.
     func load() {
-        let loaded = store.load()
-        data = loaded.data
-        loc.language = loaded.data.language
-        applyAppearance()
-        loadWarning = loaded.warning
-        if let warning = loaded.warning {
-            status = Status(kind: .failure, text: warning.localizedMessage(loc))
-        }
+        applyLoaded(store.load())
         if let first = data.profiles.first {
             select(first)
         } else {
             draft = nil
             draftIndex = nil
             selectedSlug = nil
+        }
+    }
+
+    /// Shows what was read from `profiles.json`: the settings, the warning and
+    /// the status. The profiles and the editor are not touched here.
+    private func applyLoaded(_ loaded: LoadedData) {
+        data = loaded.data
+        loc.language = loaded.data.language
+        applyAppearance()
+        loadWarning = loaded.warning
+        if let warning = loaded.warning {
+            status = Status(kind: .failure, text: warning.localizedMessage(loc))
         }
     }
 
@@ -130,12 +137,36 @@ final class AppModel {
         return nil
     }
 
-    /// Reads `profiles.json` again. A file that parses now shows the profiles;
-    /// a file that is still broken stays unread.
+    /// Reads `profiles.json` again. The unsaved changes of the editor are asked
+    /// about first, and a file that is still broken leaves the editor alone:
+    /// only the warning is refreshed.
     func reloadData() {
+        switch ReloadPolicy.decide(stillBroken: !store.isReadable(), hasUnsavedChanges: hasUnsavedChanges) {
+        case .keepEditor:
+            refreshDataWarning()
+        case .askFirst:
+            pendingSwitch = .reload
+            isConfirmingSwitch = true
+        case .loadNow:
+            reloadFromDisk()
+        }
+    }
+
+    /// Loads the file and shows its first profile, then says it was read again.
+    private func reloadFromDisk() {
         load()
         if !store.loadFailed, loadWarning == nil {
             status = Status(kind: .success, text: loc.t("status.dataReloaded"))
+        }
+    }
+
+    /// Reads a file that is still broken: the warning and the status are
+    /// refreshed, the profiles, the draft and the typed key are not touched.
+    private func refreshDataWarning() {
+        let loaded = store.load()
+        loadWarning = loaded.warning
+        if let warning = loaded.warning {
+            status = Status(kind: .failure, text: warning.localizedMessage(loc))
         }
     }
 
@@ -207,6 +238,10 @@ final class AppModel {
         case .cancel:
             selectedSlug = currentProfile?.slug
         case .save:
+            if pending == .reload {
+                saveIntoReloadedFile()
+                return
+            }
             guard save() else {
                 // The save failed: stay on the edited profile, the status says why.
                 selectedSlug = currentProfile?.slug
@@ -215,6 +250,19 @@ final class AppModel {
             perform(pending)
         case .discard:
             perform(pending)
+        }
+    }
+
+    /// Saves the draft into the profile list as it reads now, so the fixes made
+    /// in the file are not overwritten by a save of the old in-memory list. The
+    /// saved profile stays open.
+    private func saveIntoReloadedFile() {
+        let edited = currentProfile?.slug
+        applyLoaded(store.load())
+        draftIndex = edited.flatMap { slug in data.profiles.firstIndex { $0.slug == slug } }
+        if !save() {
+            // The save failed: stay on the edited profile, the status says why.
+            selectedSlug = currentProfile?.slug
         }
     }
 
@@ -228,6 +276,8 @@ final class AppModel {
             } else {
                 selectedSlug = currentProfile?.slug
             }
+        case .reload:
+            reloadFromDisk()
         }
     }
 

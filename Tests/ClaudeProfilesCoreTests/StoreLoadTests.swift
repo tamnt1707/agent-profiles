@@ -209,6 +209,24 @@ final class StoreLoadTests: XCTestCase {
         XCTAssertNoThrow(try store.save(third.data))
     }
 
+    /// The readability check changes nothing: a broken file gets no new copy and
+    /// the failed state is not touched, and a valid file is reported as readable.
+    func testIsReadableReportsTheFileWithoutChangingTheState() throws {
+        try write(partlyMalformed)
+        XCTAssertFalse(store.isReadable())
+        XCTAssertFalse(store.loadFailed)
+        XCTAssertEqual(try backups().count, 0, "the check makes no copy")
+
+        _ = store.load()
+        XCTAssertFalse(store.isReadable())
+        XCTAssertTrue(store.loadFailed)
+        XCTAssertEqual(try backups().count, 1)
+
+        try write(#"{"terminal":"Terminal","profiles":[]}"#)
+        XCTAssertTrue(store.isReadable())
+        XCTAssertTrue(store.loadFailed, "the check does not clear the failed state")
+    }
+
     func testTheValidRustFixtureStillLoads() throws {
         let fixture = try Fixtures.text("rust-profiles", extension: "json")
         try write(fixture)
