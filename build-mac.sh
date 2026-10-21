@@ -3,16 +3,20 @@
 #
 #   ./build-mac.sh              build the release and install into ~/Applications
 #   ./build-mac.sh --no-install  build the release only, into ./build
+#   ./build-mac.sh --dmg         build into ./build and also make a disk image
+#                                (build/Claude-Profiles-<version>.dmg)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
 
 INSTALL=1
+MAKE_DMG=0
 for argument in "$@"; do
   case "$argument" in
     --no-install) INSTALL=0 ;;
+    --dmg) INSTALL=0; MAKE_DMG=1 ;;
     -h|--help)
-      echo "usage: $0 [--no-install]"
+      echo "usage: $0 [--no-install | --dmg]"
       exit 0
       ;;
     *)
@@ -133,6 +137,12 @@ else
   echo ""
   echo "Đã build (chưa cài): $APP"
   echo "Chạy thử: open \"$APP\""
+fi
+
+if [[ $MAKE_DMG -eq 1 ]]; then
+  echo ""
+  echo "--- disk image ---"
+  scripts/make-dmg.sh "$APP" "$PWD/build/Claude-Profiles-$VERSION.dmg"
 fi
 
 if [[ ":$PATH:" != *":$HOME/.claude-profiles/bin:"* ]]; then

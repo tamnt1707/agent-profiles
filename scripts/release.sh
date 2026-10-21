@@ -72,6 +72,7 @@ swift test
 
 APP="build/Claude Profiles.app"
 ARCHIVE="build/Claude-Profiles-$VERSION-macos.zip"
+DISK_IMAGE="build/Claude-Profiles-$VERSION.dmg"
 if [[ ! -d "$APP" ]]; then
   echo "the app was not built" >&2
   exit 1
@@ -81,13 +82,17 @@ fi
 rm -f "$ARCHIVE" "$ARCHIVE.sig"
 ditto -c -k --keepParent "$APP" "$ARCHIVE"
 
+# 4b. The disk image for the first install by hand. The in-app updater uses the
+#     signed archive above, not this image.
+scripts/make-dmg.sh "$APP" "$DISK_IMAGE"
+
 # 5. The signature over the exact bytes of the archive.
 swift scripts/release-sign.swift "$RELEASE_KEY_FILE" "$ARCHIVE" "$ARCHIVE.sig"
 
 # 6. The sums, so they can be compared with the ones of GitHub.
 echo ""
 echo "--- SHA-256 ---"
-shasum -a 256 "$ARCHIVE" "$ARCHIVE.sig"
+shasum -a 256 "$ARCHIVE" "$ARCHIVE.sig" "$DISK_IMAGE"
 
 # 7. The release command. It is only run with --create-draft, and then as a
 #    draft: the notes and the assets can be looked at before it is public.
@@ -98,7 +103,7 @@ NOTES="build/release-notes-$VERSION.md"
   git log --pretty=format:'- %s' "$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10)"..HEAD
 } > "$NOTES"
 
-COMMAND=(gh release create "$TAG" "$ARCHIVE" "$ARCHIVE.sig" --repo "$REPO"
+COMMAND=(gh release create "$TAG" "$ARCHIVE" "$ARCHIVE.sig" "$DISK_IMAGE" --repo "$REPO"
          --title "$TAG" --notes-file "$NOTES" --generate-notes)
 
 echo ""

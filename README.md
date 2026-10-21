@@ -27,6 +27,12 @@ Muốn chỉ build mà không cài (app nằm ở `./build`):
 ./build-mac.sh --no-install
 ```
 
+Muốn có file cài đặt `.dmg` (kéo app vào Applications), chạy lệnh dưới đây. File nằm ở `build/Claude-Profiles-<phiên bản>.dmg`. Ảnh đĩa chưa được notarize, nên lần đầu mở có thể cần chuột phải, chọn Mở:
+
+```bash
+./build-mac.sh --dmg
+```
+
 Để gọi lệnh profile từ mọi terminal, thêm thư mục `bin` vào PATH (chỉ cần làm một lần):
 
 ```bash
@@ -118,6 +124,12 @@ To build without installing (the app ends up in `./build`):
 
 ```bash
 ./build-mac.sh --no-install
+```
+
+To get a `.dmg` installer (drag the app into Applications), run the command below. The file is `build/Claude-Profiles-<version>.dmg`. The image is not notarized, so the first time you may need to right-click and choose Open:
+
+```bash
+./build-mac.sh --dmg
 ```
 
 To call a profile command from every terminal, add the `bin` folder to your PATH (once):
