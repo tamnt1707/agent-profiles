@@ -214,3 +214,34 @@
 "script.unset" = "# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn";
 "script.missingKey" = "Chưa có API key cho profile %@ trong Keychain. Mở app Claude Profiles để nhập.";
 "script.accessDenied" = "Không đọc được API key của profile %@ từ Keychain. Keychain có thể đang khóa hoặc quyền truy cập bị từ chối. Hãy mở khóa, cho phép truy cập rồi thử lại.";
+
+/* Connection check and model list in the editor */
+"editor.test.button" = "Kiểm tra kết nối";
+"editor.test.help" = "Gửi một yêu cầu rất nhỏ (khoảng 1 token) tới Base URL bằng key này để kiểm tra kết nối.";
+"editor.test.running" = "Đang kiểm tra…";
+"editor.models.fetch" = "Lấy danh sách model";
+"editor.models.fetching" = "Đang lấy…";
+"editor.models.fetchHelp" = "Hỏi nhà cung cấp danh sách model, rồi cho bạn chọn một model.";
+"editor.models.pickTitle" = "Chọn model";
+"editor.models.search" = "Tìm model";
+"editor.models.noMatch" = "Không có model nào khớp.";
+"probe.ok" = "Đã kết nối, %d ms";
+"probe.ok.model" = "Đã kết nối, %d ms (model %@)";
+"probe.providerSaid" = "Nhà cung cấp báo: %@";
+"probe.missingKey" = "Chưa có API key: hãy nhập hoặc lưu key trước. Chưa gửi gì đi cả.";
+"probe.invalidURL" = "Base URL không phải là địa chỉ http hoặc https hợp lệ.";
+"probe.insecureURL" = "Đã từ chối: key sẽ được gửi qua http không mã hóa tới một máy chủ từ xa. Hãy dùng https, hoặc localhost. Chưa gửi gì đi cả.";
+"probe.unauthorized" = "401: key bị từ chối. Hãy kiểm tra key, hoặc thử kiểu xác thực còn lại.";
+"probe.forbidden" = "403: bị từ chối truy cập. Hãy kiểm tra key và kiểu xác thực.";
+"probe.notFound" = "404: không tìm thấy địa chỉ. Hãy kiểm tra Base URL và đường dẫn của nó.";
+"probe.modelNotFound" = "Nhà cung cấp không nhận ra tên model này. Hãy kiểm tra model chính và các ánh xạ.";
+"probe.rateLimited" = "429: bị giới hạn tần suất. Key vẫn dùng được, nhưng nhà cung cấp đang giới hạn số yêu cầu.";
+"probe.serverError" = "Nhà cung cấp gặp lỗi máy chủ (%d). Hãy thử lại sau.";
+"probe.unexpectedStatus" = "Nhà cung cấp trả về mã %d.";
+"probe.timeout" = "Không nhận được phản hồi sau 20 giây.";
+"probe.network.dns" = "Không tìm thấy địa chỉ của nhà cung cấp (DNS).";
+"probe.network.offline" = "Không có kết nối mạng.";
+"probe.network.tls" = "Kết nối bảo mật (TLS) thất bại. Chứng chỉ có thể không hợp lệ.";
+"probe.network.other" = "Không gửi được yêu cầu tới nhà cung cấp.";
+"probe.crossHostRedirect" = "Đã từ chối: nhà cung cấp chuyển hướng sang một máy chủ khác, máy đó sẽ nhận key. Hãy dùng Base URL cuối cùng.";
+"probe.unsupported" = "Nhà cung cấp này không có danh sách model; hãy gõ tên model bằng tay.";

@@ -214,3 +214,34 @@
 "script.unset" = "# Remove leftover provider settings from the shell so profiles do not get mixed up";
 "script.missingKey" = "No API key for profile %@ in the Keychain. Open the Claude Profiles app to enter it.";
 "script.accessDenied" = "Could not read the API key for profile %@ from the Keychain. The Keychain may be locked or access was denied. Unlock it, allow access and try again.";
+
+/* Connection check and model list in the editor */
+"editor.test.button" = "Test connection";
+"editor.test.help" = "Sends one tiny request (about 1 token) to the Base URL with this key, to check that it works.";
+"editor.test.running" = "Testing…";
+"editor.models.fetch" = "Fetch models";
+"editor.models.fetching" = "Fetching…";
+"editor.models.fetchHelp" = "Asks the provider for its model list, then lets you pick one.";
+"editor.models.pickTitle" = "Pick a model";
+"editor.models.search" = "Search models";
+"editor.models.noMatch" = "No model matches.";
+"probe.ok" = "Connected, %d ms";
+"probe.ok.model" = "Connected, %d ms (model %@)";
+"probe.providerSaid" = "The provider said: %@";
+"probe.missingKey" = "No API key: type one or save it first. Nothing was sent.";
+"probe.invalidURL" = "The Base URL is not a valid http or https address.";
+"probe.insecureURL" = "Refused: the key would go over plain http to a remote host. Use https, or localhost. Nothing was sent.";
+"probe.unauthorized" = "401: the key was refused. Check the key, or try the other authentication type.";
+"probe.forbidden" = "403: access was denied. Check the key and the authentication type.";
+"probe.notFound" = "404: the address was not found. Check the Base URL and its path.";
+"probe.modelNotFound" = "The provider does not know this model name. Check the main model and the mappings.";
+"probe.rateLimited" = "429: rate limited. The key works, but the provider is limiting requests.";
+"probe.serverError" = "The provider had a server error (%d). Try again later.";
+"probe.unexpectedStatus" = "The provider answered with the status %d.";
+"probe.timeout" = "No answer within 20 seconds.";
+"probe.network.dns" = "The provider's address was not found (DNS).";
+"probe.network.offline" = "No network connection.";
+"probe.network.tls" = "The secure connection (TLS) failed. The certificate may be invalid.";
+"probe.network.other" = "The request could not reach the provider.";
+"probe.crossHostRedirect" = "Refused: the provider redirected to another host, which would receive the key. Use the final Base URL.";
+"probe.unsupported" = "This provider does not offer a model list; type the model name by hand.";
