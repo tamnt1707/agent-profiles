@@ -17,8 +17,8 @@ struct ContentView: View {
                     VStack(spacing: 0) {
                         // Shown whether or not a profile is open: an unreadable
                         // profiles.json leaves nothing to edit. It stays until a save succeeds.
-                        if let warning = model.unreadDataWarning {
-                            DataWarningView(text: warning)
+                        if let warning = model.dataWarningText {
+                            DataWarningView(model: model, text: warning)
                             Divider()
                         }
                         if model.updater.state != .idle && model.updater.state != .upToDate {
@@ -122,8 +122,10 @@ struct ContentView: View {
     }
 }
 
-/// The warning about a profiles.json that could not be read.
+/// The warning about a profiles.json that could not be read, or the copy that
+/// was kept after a recovering save.
 private struct DataWarningView: View {
+    let model: AppModel
     let text: String
 
     var body: some View {
@@ -132,7 +134,17 @@ private struct DataWarningView: View {
             Text(text)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                if model.dataFailed {
+                    Button(model.loc.t("banner.reload")) { model.reloadData() }
+                }
+                Button(model.loc.t("banner.showBackup")) { model.revealBackup() }
+                if !model.dataFailed {
+                    Button(model.loc.t("banner.dismiss")) { model.dismissDataWarning() }
+                }
+            }
+            .controlSize(.small)
         }
         .font(.callout)
         .foregroundStyle(Color(nsColor: .systemRed))

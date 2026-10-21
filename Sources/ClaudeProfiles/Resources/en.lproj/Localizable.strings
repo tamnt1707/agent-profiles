@@ -131,11 +131,17 @@
 "error.keychainWrite" = "Could not save the key to the Keychain.";
 "error.keychainDelete" = "Could not delete the key in the Keychain.";
 "error.io" = "Could not write %@.";
-"error.corruptFile" = "profiles.json could not be read. A copy was saved to %@.";
+"error.corruptFile" = "The profile list could not be read. A copy was saved as %@. Saving a profile now starts a NEW list: the other profiles are not deleted and stay in that copy. Use Reload after fixing the file.";
 "error.launcher" = "Could not open %@ (osascript failed).";
-"error.dataNotLoaded" = "profiles.json could not be read earlier, so it is not overwritten. Save a profile to continue.";
+"error.dataNotLoaded" = "The profile list could not be read, so profiles.json was not changed. Saving a profile now starts a NEW list: the other profiles are not deleted and stay in the copy. Use Reload after fixing the file.";
 "error.unsafeSlug" = "The command name contains characters that are not allowed.";
 "error.targetHomeExists" = "The config folder of the new name already exists. Remove it or choose another name.";
+"error.noBackup" = "The profile list could not be read and no copy of it could be saved, so profiles.json is not replaced. Fix the file or its folder, then use Reload.";
+"banner.reload" = "Reload";
+"banner.showBackup" = "Show backup";
+"banner.dismiss" = "Dismiss";
+"banner.recovered" = "The unreadable profile list was kept as a copy at %@. Its profiles are not deleted. Show backup opens it in Finder.";
+"status.dataReloaded" = "profiles.json was read again.";
 "error.generic" = "Something went wrong.";
 
 /* Errors of the updater */

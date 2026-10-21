@@ -104,6 +104,84 @@ final class StoreLoadTests: XCTestCase {
         XCTAssertEqual(try read(), partlyMalformed)
     }
 
+    /// The settings survive a broken profile list and an explicit save of a profile.
+    func testAFailedLoadKeepsTheSettingsThroughAnExplicitSave() throws {
+        try write("""
+        {
+          "terminal": "ITerm",
+          "profiles": [ { "name": "Bad", "slug": "bad", "isolate": "yes" } ],
+          "language": "vi",
+          "appearance": "dark",
+          "auto_check_updates": false
+        }
+        """)
+        var loaded = store.load()
+        XCTAssertTrue(store.loadFailed)
+        XCTAssertTrue(loaded.data.profiles.isEmpty)
+        XCTAssertEqual(loaded.data.language, .vi)
+        XCTAssertEqual(loaded.data.appearance, .dark)
+        XCTAssertEqual(loaded.data.terminal, .iTerm)
+        XCTAssertFalse(loaded.data.autoCheckUpdates)
+
+        let profile = Profile.sample(name: "New", slug: "new")
+        try store.saveProfile(profile, others: [], key: "the-key")
+        loaded.data.profiles.append(profile)
+        try store.save(loaded.data)
+
+        let reloaded = store.load()
+        XCTAssertNil(reloaded.warning)
+        XCTAssertEqual(reloaded.data.language, .vi)
+        XCTAssertEqual(reloaded.data.appearance, .dark)
+        XCTAssertEqual(reloaded.data.terminal, .iTerm)
+        XCTAssertFalse(reloaded.data.autoCheckUpdates)
+        XCTAssertEqual(reloaded.data.profiles, [profile])
+        XCTAssertEqual(try backups().count, 1, "the copy of the original file is kept")
+    }
+
+    /// No copy of the unreadable file means no explicit save either: the list is never replaced.
+    func testAnExplicitSaveIsRefusedWhenTheCopyCannotBeMade() throws {
+        try write(partlyMalformed)
+        let failing = Store(paths: paths, keys: keys, writeBackup: { _, _ in
+            throw CocoaError(.fileWriteNoPermission)
+        })
+        let loaded = failing.load()
+        guard case .ioFailed? = loaded.warning else {
+            return XCTFail("expected an I/O warning, got \(String(describing: loaded.warning))")
+        }
+        XCTAssertTrue(failing.loadFailed)
+
+        XCTAssertThrowsError(
+            try failing.saveProfile(Profile.sample(name: "New", slug: "new"), others: [], key: "the-key")
+        ) { error in
+            XCTAssertEqual(error as? StoreError, .noBackup(self.paths.dataFile.path))
+        }
+        XCTAssertTrue(failing.loadFailed)
+        XCTAssertEqual(try read(), partlyMalformed)
+        XCTAssertNil(try keys.get("new"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.script(for: "new").path))
+    }
+
+    /// Reload: a file that is still broken stays failed without a second copy;
+    /// a fixed file clears the failed state and the save works again.
+    func testReloadStaysFailedWhileBrokenAndClearsWhenFixed() throws {
+        try write("{ broken")
+        let first = store.load()
+        XCTAssertTrue(store.loadFailed)
+        XCTAssertEqual(try backups().count, 1)
+
+        let second = store.load()
+        XCTAssertTrue(store.loadFailed)
+        XCTAssertEqual(second.warning, first.warning)
+        XCTAssertEqual(try backups().count, 1, "identical content is not copied twice")
+
+        try write(#"{"terminal":"Terminal","profiles":[{"name":"Test","slug":"test"}]}"#)
+        let third = store.load()
+        XCTAssertNil(third.warning)
+        XCTAssertFalse(store.loadFailed)
+        XCTAssertEqual(third.data.profiles.map(\.slug), ["test"])
+        XCTAssertNoThrow(try store.save(third.data))
+    }
+
     func testTheValidRustFixtureStillLoads() throws {
         let fixture = try Fixtures.text("rust-profiles", extension: "json")
         try write(fixture)

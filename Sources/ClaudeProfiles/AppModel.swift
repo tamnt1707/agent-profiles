@@ -113,12 +113,46 @@ final class AppModel {
         }
     }
 
-    /// The warning about `profiles.json` while it is still unread. Automatic
-    /// saves are refused in this state, so the warning stays until a profile
-    /// is saved explicitly.
-    var unreadDataWarning: String? {
-        guard store.loadFailed, let loadWarning else { return nil }
-        return loadWarning.localizedMessage(loc)
+    /// `true` while `profiles.json` is unread. Automatic saves are refused then.
+    var dataFailed: Bool { store.loadFailed }
+
+    /// The text of the warning about `profiles.json`, `nil` when there is none.
+    /// While the file is unread it names the problem; after a recovering save it
+    /// names the copy. It stays until the user dismisses it.
+    var dataWarningText: String? {
+        guard let loadWarning else { return nil }
+        if store.loadFailed {
+            return loadWarning.localizedMessage(loc)
+        }
+        if case .corruptFileBackedUp(let path) = loadWarning {
+            return loc.t("banner.recovered", path)
+        }
+        return nil
+    }
+
+    /// Reads `profiles.json` again. A file that parses now shows the profiles;
+    /// a file that is still broken stays unread.
+    func reloadData() {
+        load()
+        if !store.loadFailed, loadWarning == nil {
+            status = Status(kind: .success, text: loc.t("status.dataReloaded"))
+        }
+    }
+
+    /// Hides the warning about `profiles.json`.
+    func dismissDataWarning() {
+        loadWarning = nil
+    }
+
+    /// Shows the copy of the unreadable file in Finder, or the profiles folder
+    /// when no copy exists.
+    func revealBackup() {
+        if case .corruptFileBackedUp(let path)? = loadWarning,
+           FileManager.default.fileExists(atPath: path) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        } else {
+            revealFolder()
+        }
     }
 
     // MARK: - Selection and editing
@@ -327,8 +361,7 @@ final class AppModel {
                 return false
             }
 
-            // An explicit save is the user's answer to the unreadable file.
-            loadWarning = nil
+            // The warning stays: after a recovering save it names the copy until dismissed.
             status = Status(kind: .success, text: loc.t("status.saved", store.paths.command(for: draft.slug)))
             return true
         } catch {
@@ -765,7 +798,7 @@ extension ProfileError {
         case .ioFailed(let path):
             return loc.t("error.io", path)
         case .corruptFileBackedUp(let path):
-            return loc.t("error.corruptFile", path)
+            return loc.t("error.corruptFile", URL(fileURLWithPath: path).lastPathComponent)
         case .launcherFailed(let message):
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
@@ -785,6 +818,8 @@ extension StoreError {
             return loc.t("error.unsafeSlug")
         case .targetHomeExists:
             return loc.t("error.targetHomeExists")
+        case .noBackup:
+            return loc.t("error.noBackup")
         }
     }
 }

@@ -131,11 +131,17 @@
 "error.keychainWrite" = "Không lưu được key vào Keychain";
 "error.keychainDelete" = "Không xóa được key trong Keychain";
 "error.io" = "Không ghi được %@";
-"error.corruptFile" = "Không đọc được profiles.json. Một bản sao đã được lưu ở %@.";
+"error.corruptFile" = "Không đọc được danh sách profile. Một bản sao đã được lưu với tên %@. Lưu một profile bây giờ sẽ tạo danh sách MỚI: các profile khác không bị xóa và vẫn nằm trong bản sao. Sau khi sửa file, hãy bấm Tải lại.";
 "error.launcher" = "Không mở được %@ (osascript lỗi)";
-"error.dataNotLoaded" = "Không đọc được profiles.json trước đó nên file không bị ghi đè. Hãy lưu một profile để tiếp tục.";
+"error.dataNotLoaded" = "Không đọc được danh sách profile, nên profiles.json không bị thay đổi. Lưu một profile bây giờ sẽ tạo danh sách MỚI: các profile khác không bị xóa và vẫn nằm trong bản sao. Sau khi sửa file, hãy bấm Tải lại.";
 "error.unsafeSlug" = "Tên lệnh chứa ký tự không được phép.";
 "error.targetHomeExists" = "Thư mục cấu hình của tên mới đã tồn tại. Hãy xóa thư mục đó hoặc chọn tên khác.";
+"error.noBackup" = "Không đọc được danh sách profile và cũng không lưu được bản sao của nó, nên profiles.json không bị thay thế. Hãy sửa file hoặc thư mục của nó, rồi bấm Tải lại.";
+"banner.reload" = "Tải lại";
+"banner.showBackup" = "Hiện bản sao";
+"banner.dismiss" = "Đóng";
+"banner.recovered" = "Danh sách profile không đọc được đã được giữ lại thành bản sao ở %@. Các profile trong bản sao không bị xóa. Hiện bản sao sẽ mở nó trong Finder.";
+"status.dataReloaded" = "Đã đọc lại profiles.json.";
 "error.generic" = "Đã xảy ra lỗi.";
 
 /* Lỗi của trình cập nhật */

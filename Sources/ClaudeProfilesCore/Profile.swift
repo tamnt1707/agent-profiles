@@ -178,16 +178,42 @@ public struct AppData: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        terminal = (try? c.decode(TerminalApp.self, forKey: .terminal)) ?? .terminal
         // Strict: one malformed profile fails the whole file (it is backed up
         // and not overwritten) instead of silently dropping every profile.
-        profiles = try c.decodeIfPresent([Profile].self, forKey: .profiles) ?? []
+        let profiles = try c.decodeIfPresent([Profile].self, forKey: .profiles) ?? []
+        self.init(settings: c, profiles: profiles)
+    }
+
+    /// The settings, read leniently: a malformed setting falls back to its default.
+    private init(settings c: KeyedDecodingContainer<CodingKeys>, profiles: [Profile]) {
+        terminal = (try? c.decode(TerminalApp.self, forKey: .terminal)) ?? .terminal
+        self.profiles = profiles
         language = (try? c.decode(AppLanguage.self, forKey: .language)) ?? .system
         appearance = (try? c.decode(AppearanceMode.self, forKey: .appearance)) ?? .system
         // Both are new: a file without them still loads, and the automatic
         // check is on when the file says nothing about it.
         autoCheckUpdates = (try? c.decode(Bool.self, forKey: .autoCheckUpdates)) ?? true
         lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
+    }
+
+    /// The settings of a file whose profile list cannot be read. The profile
+    /// list is left empty; the defaults are returned when not even the
+    /// settings can be read.
+    public static func settingsOnly(from bytes: Data) -> AppData {
+        guard let reader = try? JSONDecoder().decode(SettingsReader.self, from: bytes) else {
+            return AppData()
+        }
+        return reader.settings
+    }
+
+    /// Reads the settings of a whole file and ignores its profiles.
+    private struct SettingsReader: Decodable {
+        let settings: AppData
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            settings = AppData(settings: c, profiles: [])
+        }
     }
 
     public func encode(to encoder: Encoder) throws {

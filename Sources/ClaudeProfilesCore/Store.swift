@@ -66,12 +66,15 @@ public enum StoreError: LocalizedError, Equatable, Sendable {
     case unsafeSlug(String)
     /// The config folder of the new slug already exists. It is never adopted.
     case targetHomeExists(String)
+    /// The file could not be read and no copy of it exists, so an explicit save is refused too.
+    case noBackup(String)
 
     public var errorDescription: String? {
         switch self {
         case .dataFileNotLoaded(let path): return "profiles.json was not loaded and is not overwritten: \(path)"
         case .unsafeSlug(let slug): return "unsafe profile slug: \(slug)"
         case .targetHomeExists(let path): return "config folder already exists: \(path)"
+        case .noBackup(let path): return "no copy of the unreadable file could be made: \(path)"
         }
     }
 }
@@ -80,6 +83,8 @@ public enum StoreError: LocalizedError, Equatable, Sendable {
 /// `Store`, because `Store` is a value type.
 private final class LoadState {
     var failed = false
+    /// The copy of the unreadable file, when one was made.
+    var backup: URL?
 }
 
 /// What a rename changed, so that a later failure can undo exactly that.
@@ -102,10 +107,19 @@ public struct Store {
     public let paths: Paths
     public let keys: KeyStore
     private let loadState = LoadState()
+    /// Writes the copy of an unreadable file. Injected by tests to make the copy fail.
+    private let writeBackup: (Data, URL) throws -> Void
 
     public init(paths: Paths = Paths(), keys: KeyStore = KeychainStore()) {
+        self.init(paths: paths, keys: keys, writeBackup: { bytes, target in
+            try bytes.write(to: target, options: .withoutOverwriting)
+        })
+    }
+
+    init(paths: Paths, keys: KeyStore, writeBackup: @escaping (Data, URL) throws -> Void) {
         self.paths = paths
         self.keys = keys
+        self.writeBackup = writeBackup
     }
 
     /// `true` when the last `load()` could not read `profiles.json`. Automatic
@@ -121,11 +135,17 @@ public struct Store {
 
     /// Reads `profiles.json`. A file that cannot be read or parsed, or that holds
     /// a profile with an unsafe slug, is copied to `profiles.json.corrupt-<unix
-    /// time>` instead of being silently replaced, and `loadFailed` is set.
+    /// time>` instead of being silently replaced, and `loadFailed` is set. The
+    /// settings of such a file are still read and kept; the profile list is empty.
+    ///
+    /// Calling `load()` again is the reload: a file that parses now clears the
+    /// failed state, and a file that is still broken stays failed without a
+    /// second copy of the same content.
     public func load() -> LoadedData {
         let file = paths.dataFile
         guard FileManager.default.fileExists(atPath: file.path) else {
             loadState.failed = false
+            loadState.backup = nil
             return LoadedData(data: AppData())
         }
         guard let bytes = try? Data(contentsOf: file) else {
@@ -138,16 +158,19 @@ public struct Store {
             return failedLoad(bytes: bytes)
         }
         loadState.failed = false
+        loadState.backup = nil
         return LoadedData(data: data)
     }
 
     /// Records the failed load, copies the file aside and names the copy.
     private func failedLoad(bytes: Data?) -> LoadedData {
         loadState.failed = true
-        if let backup = backUpDataFile(bytes) {
-            return LoadedData(data: AppData(), warning: .corruptFileBackedUp(path: backup.path))
+        let settings = bytes.map(AppData.settingsOnly(from:)) ?? AppData()
+        loadState.backup = backUpDataFile(bytes)
+        guard let backup = loadState.backup else {
+            return LoadedData(data: settings, warning: .ioFailed(paths.dataFile.path))
         }
-        return LoadedData(data: AppData(), warning: .ioFailed(paths.dataFile.path))
+        return LoadedData(data: settings, warning: .corruptFileBackedUp(path: backup.path))
     }
 
     /// Writes `profiles.json` atomically: a temporary file then a rename.
@@ -203,7 +226,7 @@ public struct Store {
         do {
             try manager.createDirectory(at: paths.root, withIntermediateDirectories: true)
             if let bytes {
-                try bytes.write(to: target, options: .withoutOverwriting)
+                try writeBackup(bytes, target)
             } else {
                 try manager.copyItem(at: paths.dataFile, to: target)
             }
@@ -429,6 +452,13 @@ public struct Store {
         // 1. The checks, before anything is changed.
         try validate(profile, others: others)
         try validateCommandFile(profile.slug, ownedBy: previous?.slug)
+        // After a failed load the first explicit save needs the copy of the
+        // original file. Without it the unreadable list is never replaced.
+        if loadState.failed {
+            guard let backup = loadState.backup, FileManager.default.fileExists(atPath: backup.path) else {
+                throw StoreError.noBackup(paths.dataFile.path)
+            }
+        }
 
         let renamedFrom = previous.flatMap { $0.slug == profile.slug ? nil : $0.slug }
         let secret = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
