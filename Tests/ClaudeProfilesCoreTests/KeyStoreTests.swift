@@ -37,6 +37,16 @@ final class KeyStoreTests: XCTestCase {
         XCTAssertEqual(try store.get("two"), "b")
     }
 
+    /// `hasKey` answers without the value; it agrees with `get`.
+    func testHasKeyTracksTheStoredKey() throws {
+        let store = InMemoryKeyStore()
+        XCTAssertFalse(try store.hasKey("slug"))
+        try store.set("slug", key: "secret")
+        XCTAssertTrue(try store.hasKey("slug"))
+        try store.delete("slug")
+        XCTAssertFalse(try store.hasKey("slug"))
+    }
+
     func testTheKeychainServiceIsTheOneOfTheOldApp() {
         XCTAssertEqual(KeychainStore.service, "claude-profiles")
         XCTAssertEqual(ScriptRenderer.keychainService, "claude-profiles")

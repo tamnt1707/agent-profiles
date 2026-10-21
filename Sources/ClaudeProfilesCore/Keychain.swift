@@ -6,6 +6,8 @@ import Security
 public protocol KeyStore: AnyObject {
     /// Returns the stored key, or `nil` when there is none.
     func get(_ account: String) throws -> String?
+    /// Tells whether a key is stored, without reading the secret itself.
+    func hasKey(_ account: String) throws -> Bool
     /// Stores the key, replacing an existing one (never creates duplicates).
     func set(_ account: String, key: String) throws
     /// Removes the key. Removing a key that does not exist is not an error.
@@ -49,6 +51,21 @@ public final class KeychainStore: KeyStore {
         }
     }
 
+    /// Asks the Keychain for the item without asking for its data.
+    public func hasKey(_ account: String) throws -> Bool {
+        var query = query(for: account)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess: return true
+        case errSecItemNotFound: return false
+        default: throw ProfileError.keychainReadFailed
+        }
+    }
+
     public func set(_ account: String, key: String) throws {
         let data = Data(key.utf8)
         let status = SecItemUpdate(
@@ -81,6 +98,10 @@ public final class InMemoryKeyStore: KeyStore {
 
     public func get(_ account: String) throws -> String? {
         lock.withLock { storage[account] }
+    }
+
+    public func hasKey(_ account: String) throws -> Bool {
+        lock.withLock { storage[account] != nil }
     }
 
     public func set(_ account: String, key: String) throws {
