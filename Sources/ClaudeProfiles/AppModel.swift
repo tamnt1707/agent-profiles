@@ -677,16 +677,15 @@ final class AppModel {
         isShowingModelPicker = false
     }
 
-    /// The key of a request: the one typed in the field, otherwise the one in the
-    /// Keychain. The Keychain is read only now, at the click, and the key is kept
-    /// only for the request. Without auth no key is needed and none is read.
+    /// The key of a request. The Keychain is read only now, at the click, and the
+    /// key is kept only for the request.
     private func probeKey(for draft: Profile) throws -> String {
-        guard draft.auth != .none else { return "" }
-        let typed = keyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !typed.isEmpty { return typed }
-        let account = currentProfile?.slug ?? draft.slug
-        guard !account.isEmpty else { return "" }
-        return try store.keys.get(account) ?? ""
+        try ConnectionProbe.key(
+            typed: keyInput,
+            auth: draft.auth,
+            account: currentProfile?.slug ?? draft.slug,
+            keys: store.keys
+        )
     }
 
     // MARK: - Updates

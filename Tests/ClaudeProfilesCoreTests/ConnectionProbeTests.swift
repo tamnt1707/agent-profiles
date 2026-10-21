@@ -302,6 +302,28 @@ final class ConnectionProbeTests: XCTestCase {
         XCTAssertEqual(ProviderMessage.snippet(from: Data(#"{"message":"plain"}"#.utf8), key: ""), "plain")
     }
 
+    // MARK: - Key choice
+
+    func testTypedKeyWinsOverTheStoredOne() throws {
+        let keys = InMemoryKeyStore()
+        try keys.set("test", key: "sk-STORED")
+        XCTAssertEqual(try ConnectionProbe.key(typed: " sk-TYPED ", auth: .bearer, account: "test", keys: keys), "sk-TYPED")
+    }
+
+    func testStoredKeyIsUsedWhenNothingIsTyped() throws {
+        let keys = InMemoryKeyStore()
+        try keys.set("test", key: "sk-STORED")
+        XCTAssertEqual(try ConnectionProbe.key(typed: "  ", auth: .apiKey, account: "test", keys: keys), "sk-STORED")
+        XCTAssertEqual(try ConnectionProbe.key(typed: "", auth: .apiKey, account: "other", keys: keys), "")
+        XCTAssertEqual(try ConnectionProbe.key(typed: "", auth: .apiKey, account: "", keys: keys), "")
+    }
+
+    func testNoAuthNeverReadsTheStore() throws {
+        let keys = InMemoryKeyStore()
+        try keys.set("test", key: "sk-STORED")
+        XCTAssertEqual(try ConnectionProbe.key(typed: "sk-TYPED", auth: .none, account: "test", keys: keys), "")
+    }
+
     // MARK: - Classification helpers
 
     func testRateLimitedIsAWarningAndOKIsSuccess() {

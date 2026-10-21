@@ -247,6 +247,18 @@ public struct ConnectionProbe: Sendable {
         }
     }
 
+    /// The key of a request: the typed one when there is one, otherwise the stored one.
+    ///
+    /// The store is read only when asked, and never when the auth kind needs no
+    /// key. An empty result means no key: the probe then refuses to send.
+    public static func key(typed: String, auth: AuthKind, account: String, keys: KeyStore) throws -> String {
+        guard auth != .none else { return "" }
+        let typedKey = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typedKey.isEmpty { return typedKey }
+        guard !account.isEmpty else { return "" }
+        return try keys.get(account) ?? ""
+    }
+
     // MARK: - Classification (pure, tested directly)
 
     /// Turns the status and body of an answer into a report. A success body
