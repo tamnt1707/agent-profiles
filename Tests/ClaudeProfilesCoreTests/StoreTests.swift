@@ -180,13 +180,77 @@ final class StoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.home(for: "old").path))
     }
 
-    func testMigrateSlugKeepsAnExistingNewHome() throws {
+    /// An existing `homes/<new>` is never adopted: the rename is refused before
+    /// anything changes, the Keychain included.
+    func testMigrateSlugRefusesAnExistingNewHomeBeforeAnyChange() throws {
         let manager = FileManager()
+        try keys.set("old", key: "the-key")
         try manager.createDirectory(at: paths.home(for: "old"), withIntermediateDirectories: true)
+        try Data("mine".utf8).write(to: paths.home(for: "old").appendingPathComponent("a.json"))
         try manager.createDirectory(at: paths.home(for: "new"), withIntermediateDirectories: true)
+        try Data("stale".utf8).write(to: paths.home(for: "new").appendingPathComponent("b.json"))
+
+        XCTAssertThrowsError(try store.migrateSlug(from: "old", to: "new")) { error in
+            XCTAssertEqual(error as? StoreError, .targetHomeExists(paths.home(for: "new").path))
+        }
+
+        XCTAssertEqual(try keys.get("old"), "the-key")
+        XCTAssertNil(try keys.get("new"))
+        XCTAssertTrue(manager.fileExists(atPath: paths.home(for: "old").appendingPathComponent("a.json").path))
+        XCTAssertTrue(manager.fileExists(atPath: paths.home(for: "new").appendingPathComponent("b.json").path))
+    }
+
+    /// The old launcher is removed only when it is ours (or the profile's own).
+    func testMigrateSlugKeepsAForeignOldLauncher() throws {
+        try manager().createDirectory(at: paths.binDir, withIntermediateDirectories: true)
+        let foreign = paths.script(for: "old")
+        try Data("#!/bin/sh\necho mine\n".utf8).write(to: foreign)
+
         try store.migrateSlug(from: "old", to: "new")
-        XCTAssertTrue(manager.fileExists(atPath: paths.home(for: "old").path))
-        XCTAssertTrue(manager.fileExists(atPath: paths.home(for: "new").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: foreign.path))
+
+        try store.migrateSlug(from: "old", to: "newer", ownsOldLauncher: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: foreign.path))
+    }
+
+    /// A launcher written by this app is removed by a rename.
+    func testMigrateSlugRemovesAManagedOldLauncher() throws {
+        try store.materialize(Profile.sample(slug: "old"))
+        try store.migrateSlug(from: "old", to: "new")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.script(for: "old").path))
+    }
+
+    /// A symbolic link at the launcher is replaced; the file it points to is not written.
+    func testLauncherSymlinkIsReplacedNotFollowed() throws {
+        let manager = FileManager.default
+        try manager.createDirectory(at: paths.binDir, withIntermediateDirectories: true)
+        let victim = temp.url.appendingPathComponent("victim.txt")
+        try Data("untouched".utf8).write(to: victim)
+        let script = paths.script(for: "test")
+        try manager.createSymbolicLink(at: script, withDestinationURL: victim)
+
+        try store.materialize(Profile.sample())
+
+        XCTAssertEqual(try String(contentsOf: victim, encoding: .utf8), "untouched")
+        XCTAssertEqual(SafeFileSystem.kind(of: script), .file)
+        XCTAssertTrue(ScriptRenderer.isManagedLauncher(at: script))
+    }
+
+    /// A symbolic link to a managed launcher is not itself a managed launcher.
+    func testSymlinkToAManagedLauncherIsNotManaged() throws {
+        let manager = FileManager.default
+        try store.materialize(Profile.sample(slug: "real"))
+        let link = paths.binDir.appendingPathComponent("claude-link")
+        try manager.createSymbolicLink(at: link, withDestinationURL: paths.script(for: "real"))
+        XCTAssertFalse(ScriptRenderer.isManagedLauncher(at: link))
+    }
+
+    /// A write leaves no temporary file behind in `bin/`.
+    func testLauncherWriteLeavesNoTemporaryFile() throws {
+        try store.materialize(Profile.sample())
+        try store.materialize(Profile.sample())
+        let entries = try manager().contentsOfDirectory(atPath: paths.binDir.path)
+        XCTAssertEqual(entries, ["claude-test"])
     }
 
     /// The config folder is deleted with the profile.

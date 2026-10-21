@@ -4,7 +4,7 @@ import Foundation
 public struct LoadedData: Sendable {
     /// The profiles that could be read (empty when the file is missing or broken).
     public var data: AppData
-    /// Set when the file existed but could not be parsed.
+    /// Set when the file existed but could not be read or parsed.
     public var warning: ProfileError?
 
     public init(data: AppData, warning: ProfileError? = nil) {
@@ -57,6 +57,41 @@ public struct SaveResult: Equatable, Sendable {
     public var renamedFrom: String?
 }
 
+/// Store failures that have no case in `ProfileError`.
+public enum StoreError: LocalizedError, Equatable, Sendable {
+    /// `profiles.json` could not be read, so it is not overwritten by an
+    /// automatic save. An explicit profile save clears this state.
+    case dataFileNotLoaded(String)
+    /// A slug that is not safe to use as a file name.
+    case unsafeSlug(String)
+    /// The config folder of the new slug already exists. It is never adopted.
+    case targetHomeExists(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .dataFileNotLoaded(let path): return "profiles.json was not loaded and is not overwritten: \(path)"
+        case .unsafeSlug(let slug): return "unsafe profile slug: \(slug)"
+        case .targetHomeExists(let path): return "config folder already exists: \(path)"
+        }
+    }
+}
+
+/// Whether the last read of `profiles.json` failed. Shared by every copy of a
+/// `Store`, because `Store` is a value type.
+private final class LoadState {
+    var failed = false
+}
+
+/// What a rename changed, so that a later failure can undo exactly that.
+private struct RenameRecord {
+    /// The key that was moved from the old slug to the new one.
+    var movedKey: String?
+    /// The value the new slug had before the move (a stale entry, if any).
+    var newKeyBefore: String?
+    /// The config folder was moved from the old slug to the new one.
+    var homeMoved = false
+}
+
 /// Profiles on disk, launcher scripts and per-profile Claude config folders.
 ///
 /// Layout (everything under `~/.claude-profiles`, nothing touches `~/.claude`):
@@ -66,11 +101,16 @@ public struct SaveResult: Equatable, Sendable {
 public struct Store {
     public let paths: Paths
     public let keys: KeyStore
+    private let loadState = LoadState()
 
     public init(paths: Paths = Paths(), keys: KeyStore = KeychainStore()) {
         self.paths = paths
         self.keys = keys
     }
+
+    /// `true` when the last `load()` could not read `profiles.json`. Automatic
+    /// saves are refused until a profile is saved explicitly.
+    public var loadFailed: Bool { loadState.failed }
 
     /// Items shared read-through from `~/.claude`. `settings.json` and the
     /// credentials are deliberately NOT shared, so every profile keeps its own
@@ -79,52 +119,98 @@ public struct Store {
 
     // MARK: - Data file
 
-    /// Reads `profiles.json`. A file that cannot be parsed is copied to
-    /// `profiles.json.corrupt-<unix time>` instead of being silently replaced.
+    /// Reads `profiles.json`. A file that cannot be read or parsed, or that holds
+    /// a profile with an unsafe slug, is copied to `profiles.json.corrupt-<unix
+    /// time>` instead of being silently replaced, and `loadFailed` is set.
     public func load() -> LoadedData {
-        guard FileManager.default.fileExists(atPath: paths.dataFile.path) else {
+        let file = paths.dataFile
+        guard FileManager.default.fileExists(atPath: file.path) else {
+            loadState.failed = false
             return LoadedData(data: AppData())
         }
-        guard let raw = try? String(contentsOf: paths.dataFile, encoding: .utf8) else {
-            return LoadedData(data: AppData(), warning: .ioFailed(paths.dataFile.path))
+        guard let bytes = try? Data(contentsOf: file) else {
+            return failedLoad(bytes: nil)
         }
-        if let data = try? JSONDecoder().decode(AppData.self, from: Data(raw.utf8)) {
-            return LoadedData(data: data)
+        guard String(data: bytes, encoding: .utf8) != nil,
+              let data = try? JSONDecoder().decode(AppData.self, from: bytes),
+              data.profiles.allSatisfy({ Slug.isSafe($0.slug) })
+        else {
+            return failedLoad(bytes: bytes)
         }
-        let backup = backUpCorruptFile(raw)
-        return LoadedData(data: AppData(), warning: .corruptFileBackedUp(path: backup.path))
+        loadState.failed = false
+        return LoadedData(data: data)
     }
 
-    /// Writes `profiles.json` atomically: `profiles.json.tmp` then a rename.
+    /// Records the failed load, copies the file aside and names the copy.
+    private func failedLoad(bytes: Data?) -> LoadedData {
+        loadState.failed = true
+        if let backup = backUpDataFile(bytes) {
+            return LoadedData(data: AppData(), warning: .corruptFileBackedUp(path: backup.path))
+        }
+        return LoadedData(data: AppData(), warning: .ioFailed(paths.dataFile.path))
+    }
+
+    /// Writes `profiles.json` atomically: a temporary file then a rename.
+    ///
+    /// Refused while the last load failed, so that a file which could not be
+    /// read is never overwritten by a save of the (empty) in-memory list.
     public func save(_ data: AppData) throws {
+        guard !loadState.failed else {
+            throw StoreError.dataFileNotLoaded(paths.dataFile.path)
+        }
         try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
-        let temporary = paths.root.appendingPathComponent("profiles.json.tmp")
+        // The name carries the pid, so two running instances never share one file.
+        let temporary = paths.root.appendingPathComponent(
+            "profiles.json.\(ProcessInfo.processInfo.processIdentifier).tmp"
+        )
         let text = JSONText.encode(data)
         do {
-            try Data(text.utf8).write(to: temporary)
+            try Data(text.utf8).write(to: temporary, options: .withoutOverwriting)
         } catch {
+            try? FileManager.default.removeItem(at: temporary)
             throw ProfileError.ioFailed(temporary.path)
         }
         guard rename(temporary.path, paths.dataFile.path) == 0 else {
+            try? FileManager.default.removeItem(at: temporary)
             throw ProfileError.ioFailed(paths.dataFile.path)
         }
     }
 
-    /// Copies a broken `profiles.json` aside, at most once per content.
-    private func backUpCorruptFile(_ raw: String) -> URL {
+    /// Copies `profiles.json` aside as `profiles.json.corrupt-<unix time>`.
+    ///
+    /// Content that was already copied is not copied again. A different copy in
+    /// the same second gets a counter, so an earlier copy is never overwritten.
+    /// Returns `nil` when no copy could be made.
+    private func backUpDataFile(_ bytes: Data?) -> URL? {
         let manager = FileManager.default
         let prefix = "profiles.json.corrupt-"
-        let existing = (try? manager.contentsOfDirectory(atPath: paths.root.path)) ?? []
-        for name in existing where name.hasPrefix(prefix) {
-            let candidate = paths.root.appendingPathComponent(name)
-            if let copy = try? String(contentsOf: candidate, encoding: .utf8), copy == raw {
-                return candidate
+        if let bytes {
+            let existing = (try? manager.contentsOfDirectory(atPath: paths.root.path)) ?? []
+            for name in existing where name.hasPrefix(prefix) {
+                let candidate = paths.root.appendingPathComponent(name)
+                if let copy = try? Data(contentsOf: candidate), copy == bytes {
+                    return candidate
+                }
             }
         }
         let stamp = Int(Date().timeIntervalSince1970)
-        let target = paths.root.appendingPathComponent("\(prefix)\(stamp)")
-        try? raw.write(to: target, atomically: true, encoding: .utf8)
-        return target
+        var target = paths.root.appendingPathComponent("\(prefix)\(stamp)")
+        var counter = 1
+        while manager.fileExists(atPath: target.path) {
+            target = paths.root.appendingPathComponent("\(prefix)\(stamp)-\(counter)")
+            counter += 1
+        }
+        do {
+            try manager.createDirectory(at: paths.root, withIntermediateDirectories: true)
+            if let bytes {
+                try bytes.write(to: target, options: .withoutOverwriting)
+            } else {
+                try manager.copyItem(at: paths.dataFile, to: target)
+            }
+            return target
+        } catch {
+            return nil
+        }
     }
 
     // MARK: - Validation
@@ -136,6 +222,10 @@ public struct Store {
         }
         if profile.slug.isEmpty {
             throw ProfileError.emptySlug
+        }
+        // The slug becomes a file name and a Keychain account: nothing else may reach them.
+        guard Slug.isSafe(profile.slug) else {
+            throw StoreError.unsafeSlug(profile.slug)
         }
         if let other = others.first(where: { $0.slug == profile.slug }) {
             throw ProfileError.duplicateCommand(profile.slug, other.name)
@@ -177,18 +267,36 @@ public struct Store {
         try manager.createDirectory(at: paths.binDir, withIntermediateDirectories: true)
         let scriptURL = paths.script(for: profile.slug)
         let script = try ScriptRenderer.render(profile: profile, paths: paths, strings: strings)
-        do {
-            try Data(script.utf8).write(to: scriptURL)
-            try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-        } catch {
-            throw ProfileError.ioFailed(scriptURL.path)
-        }
+        try writeLauncher(script, to: scriptURL)
         if profile.isolate {
             let home = paths.home(for: profile.slug)
             try manager.createDirectory(at: home, withIntermediateDirectories: true)
             if profile.shareFromDefault {
                 try linkShared(home)
             }
+        }
+    }
+
+    /// Writes an executable launcher atomically: the text goes to a new file
+    /// next to the target, which is made executable and renamed over the target.
+    ///
+    /// A symbolic link at the target is replaced, never written through, and a
+    /// reader never sees a half written script.
+    private func writeLauncher(_ script: String, to target: URL) throws {
+        let manager = FileManager.default
+        let temporary = target.deletingLastPathComponent().appendingPathComponent(
+            ".\(target.lastPathComponent).\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString).tmp"
+        )
+        do {
+            try Data(script.utf8).write(to: temporary, options: .withoutOverwriting)
+            try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
+        } catch {
+            try? manager.removeItem(at: temporary)
+            throw ProfileError.ioFailed(target.path)
+        }
+        guard rename(temporary.path, target.path) == 0 else {
+            try? manager.removeItem(at: temporary)
+            throw ProfileError.ioFailed(target.path)
         }
     }
 
@@ -206,61 +314,96 @@ public struct Store {
         }
     }
 
-    /// Handles a rename: moves the Keychain entry, the launcher and the config folder.
-    public func migrateSlug(from old: String, to new: String) throws {
+    /// Handles a rename: moves the Keychain entry and the config folder and
+    /// removes the old launcher.
+    ///
+    /// Nothing changes when `homes/<new>` already exists: such a folder is never
+    /// adopted. A failure undoes the moves that already happened.
+    /// `ownsOldLauncher` says that the old launcher belongs to this profile even
+    /// without the marker (an older version wrote it that way).
+    public func migrateSlug(from old: String, to new: String, ownsOldLauncher: Bool = false) throws {
         guard old != new, !old.isEmpty else { return }
+        _ = try performRename(from: old, to: new, ownsOldLauncher: ownsOldLauncher)
+    }
 
-        // The Keychain entry moves first: when it fails, nothing else changed.
-        if let key = try keys.get(old) {
-            try keys.set(new, key: key)
-            do {
-                try keys.delete(old)
-            } catch {
-                // The key would be stored twice: undo the move.
-                try? keys.delete(new)
-                throw error
-            }
-        }
+    /// The moves of a rename. On failure the moves that were made are undone
+    /// before the error is thrown; on success the record is returned.
+    private func performRename(from old: String, to new: String, ownsOldLauncher: Bool) throws -> RenameRecord {
+        guard Slug.isSafe(old) else { throw StoreError.unsafeSlug(old) }
+        guard Slug.isSafe(new) else { throw StoreError.unsafeSlug(new) }
 
-        // The old launcher is replaced by the new one when the profile is written.
-        try? SafeFileSystem.remove(at: paths.script(for: old))
-
-        // The config folder moves with the profile.
         let oldHome = paths.home(for: old)
         let newHome = paths.home(for: new)
-        if SafeFileSystem.kind(of: oldHome) != .missing, SafeFileSystem.kind(of: newHome) == .missing {
-            do {
-                try FileManager.default.moveItem(at: oldHome, to: newHome)
-            } catch {
-                throw ProfileError.ioFailed(oldHome.path)
+        // Checked before anything changes. A folder of the new name is never adopted.
+        guard SafeFileSystem.kind(of: newHome) == .missing else {
+            throw StoreError.targetHomeExists(newHome.path)
+        }
+
+        var record = RenameRecord()
+        do {
+            // The Keychain entry moves first.
+            if let key = try keys.get(old) {
+                record.newKeyBefore = try keys.get(new)
+                record.movedKey = key
+                try keys.set(new, key: key)
+                try keys.delete(old)
+            }
+
+            // The config folder moves with the profile.
+            if SafeFileSystem.kind(of: oldHome) != .missing {
+                do {
+                    try FileManager.default.moveItem(at: oldHome, to: newHome)
+                } catch {
+                    throw ProfileError.ioFailed(oldHome.path)
+                }
+                record.homeMoved = true
+            }
+        } catch {
+            undoMoves(record, from: old, to: new)
+            throw error
+        }
+
+        // The old launcher goes last. A file that is not ours is kept.
+        let oldScript = paths.script(for: old)
+        if ownsOldLauncher || ScriptRenderer.isManagedLauncher(at: oldScript) {
+            try? SafeFileSystem.remove(at: oldScript)
+        }
+        return record
+    }
+
+    /// Moves the Keychain entry and the config folder back as far as they moved.
+    /// Only what the record names is touched.
+    private func undoMoves(_ record: RenameRecord, from old: String, to new: String) {
+        if record.homeMoved {
+            try? FileManager.default.moveItem(at: paths.home(for: new), to: paths.home(for: old))
+        }
+        if let moved = record.movedKey {
+            try? keys.set(old, key: moved)
+            if let before = record.newKeyBefore {
+                try? keys.set(new, key: before)
+            } else {
+                try? keys.delete(new)
             }
         }
     }
 
-    /// Undoes a rename as far as possible: the Keychain entry and the config
-    /// folder move back and the old launcher is written again.
-    public func rollbackSlug(from new: String, to old: String, restoring previous: Profile?, strings: ScriptStrings = .english) {
-        // The Keychain entry moves back.
-        if let key = try? keys.get(new) {
-            try? keys.set(old, key: key)
-            try? keys.delete(new)
-        }
+    /// Undoes a whole rename after a later step failed: the moves are undone, the
+    /// launcher of the new name is taken away when it is ours, and the launcher
+    /// of the old name is written again.
+    private func undoRename(
+        _ record: RenameRecord,
+        from old: String,
+        to new: String,
+        previous: Profile?,
+        strings: ScriptStrings
+    ) {
+        undoMoves(record, from: old, to: new)
 
-        // The config folder moves back.
-        let newHome = paths.home(for: new)
-        let oldHome = paths.home(for: old)
-        if SafeFileSystem.kind(of: newHome) != .missing, SafeFileSystem.kind(of: oldHome) == .missing {
-            try? FileManager.default.moveItem(at: newHome, to: oldHome)
-        }
-
-        // The launcher of the new name is taken away again, but only when it is
-        // one of ours.
         let newScript = paths.script(for: new)
         if ScriptRenderer.isManagedLauncher(at: newScript) {
             try? SafeFileSystem.remove(at: newScript)
         }
 
-        // The old launcher is written again.
         if let previous {
             try? materialize(previous, strings: strings)
         }
@@ -270,9 +413,11 @@ public struct Store {
 
     /// Saves a profile: the launcher, the Keychain entry and the config folder.
     ///
-    /// Everything that can be checked without a side effect is checked first,
-    /// so a rejected profile does not change the Keychain or the disk. When a
-    /// step after the rename fails, the rename is rolled back.
+    /// Everything that can be checked without a side effect is checked first.
+    /// A rename happens before the launcher is written, and the typed key is
+    /// written last: a failure at any earlier step leaves the old key and the
+    /// old files as they were. A successful explicit save clears the state set
+    /// by a failed load.
     @discardableResult
     public func saveProfile(
         _ profile: Profile,
@@ -285,29 +430,33 @@ public struct Store {
         try validate(profile, others: others)
         try validateCommandFile(profile.slug, ownedBy: previous?.slug)
 
-        // 2. The rename and everything that follows it.
         let renamedFrom = previous.flatMap { $0.slug == profile.slug ? nil : $0.slug }
+        let secret = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 2. The rename, the launcher and the key.
+        var record: RenameRecord?
         do {
             if let renamedFrom {
-                try migrateSlug(from: renamedFrom, to: profile.slug)
+                record = try performRename(from: renamedFrom, to: profile.slug, ownsOldLauncher: previous != nil)
             }
-
-            let secret = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !secret.isEmpty {
-                try keys.set(profile.slug, key: secret)
-            }
-            if profile.auth != .none, (try keys.get(profile.slug)) == nil {
+            if profile.auth != .none, secret.isEmpty, !(try keys.hasKey(profile.slug)) {
                 throw ProfileError.missingAPIKey
             }
             try materialize(profile, strings: strings)
+            if profile.auth == .none {
+                // No credential is used, so a stored one is removed and a typed one is never stored.
+                try keys.delete(profile.slug)
+            } else if !secret.isEmpty {
+                try keys.set(profile.slug, key: secret)
+            }
         } catch {
-            // The rename is undone as far as possible.
-            if let renamedFrom {
-                rollbackSlug(from: profile.slug, to: renamedFrom, restoring: previous, strings: strings)
+            if let renamedFrom, let record {
+                undoRename(record, from: renamedFrom, to: profile.slug, previous: previous, strings: strings)
             }
             throw error
         }
 
+        loadState.failed = false
         return SaveResult(slug: profile.slug, renamedFrom: renamedFrom)
     }
 
