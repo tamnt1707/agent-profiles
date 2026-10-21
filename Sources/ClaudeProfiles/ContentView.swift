@@ -13,6 +13,7 @@ struct ContentView: View {
             }
             NavigationSplitView {
                 sidebar
+                    .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 360)
             } detail: {
                 detail
             }
@@ -60,14 +61,26 @@ struct ContentView: View {
         }
         .overlay {
             if model.data.profiles.isEmpty {
-                ContentUnavailableView {
-                    Label(model.loc.t("sidebar.empty.title"), systemImage: "square.stack.3d.up.slash")
-                } description: {
+                // A compact empty state: the sidebar is narrow, so the
+                // title and the text use smaller styles than the default.
+                VStack(spacing: 8) {
+                    Image(systemName: "square.stack.3d.up.slash")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Text(model.loc.t("sidebar.empty.title"))
+                        .font(.headline)
                     Text(model.loc.t("sidebar.empty.description"))
-                } actions: {
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                     Button(model.loc.t("sidebar.add")) { model.newProfile() }
                         .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .padding(.top, 4)
                 }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 240)
+                .padding(16)
             }
         }
     }

@@ -36,7 +36,7 @@ struct ClaudeProfilesApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
-                .frame(minWidth: 720, minHeight: 480)
+                .frame(minWidth: 800, minHeight: 480)
                 .preferredColorScheme(model.colorScheme)
                 .onAppear { model.applyAppearance() }
                 .task { await model.checkForUpdatesAutomatically() }
