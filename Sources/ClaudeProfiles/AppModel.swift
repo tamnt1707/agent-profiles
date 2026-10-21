@@ -715,7 +715,8 @@ final class AppModel {
     func cancelUpdate() {
         updateTask?.cancel()
         updateTask = nil
-        updater.state = .idle
+        // The run stops reporting at once, so a late progress report cannot show it again.
+        updater.cancelRun()
         status = Status(kind: .hint, text: loc.t("error.update.cancelled"))
     }
 

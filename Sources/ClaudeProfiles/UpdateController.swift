@@ -60,13 +60,13 @@ final class UpdateController {
     /// Why the updater is turned off, when it is.
     var disabledReason: UpdateConfiguration.DisabledReason? { configuration.disabledReason }
 
-    /// One update run at a time. Closed by `beginInstall()`, opened when the run ends.
-    private var runGate = UpdateRunGate()
+    /// One update run at a time. Begun by `beginInstall()`, ended when the run ends.
+    private var busy = UpdateBusyState()
 
     /// `true` while the updater is busy. A run counts as busy from the moment
     /// `beginInstall()` returns, before the first byte of the download arrives.
     var isBusy: Bool {
-        if runGate.isRunning { return true }
+        if busy.isBusy { return true }
         switch state {
         case .checking, .downloading, .verifying, .installing: return true
         default: return false
@@ -123,15 +123,15 @@ final class UpdateController {
         guard installer != nil, case .available(let info) = state else {
             throw UpdateError.notConfigured
         }
-        guard runGate.begin() else { throw UpdateError.cancelled }
+        guard busy.begin() else { throw UpdateError.cancelled }
         state = .downloading(received: 0, expected: nil)
         return info
     }
 
     /// Downloads the new version, checks it and hands it to the helper. The
-    /// gate opens again when this returns, with or without an error.
+    /// run ends when this returns, with or without an error.
     func runInstall(_ info: UpdateInfo) async throws {
-        defer { runGate.end() }
+        defer { busy.end() }
         guard let installer else { throw UpdateError.notConfigured }
         do {
             try await installer.install(info) { [weak self] progress in
@@ -152,6 +152,13 @@ final class UpdateController {
         try await runInstall(try beginInstall())
     }
 
+    /// Stops the run that is going on. Its late progress reports are ignored;
+    /// the updater stays busy until the run has unwound.
+    func cancelRun() {
+        busy.cancel()
+        state = .idle
+    }
+
     /// Remembers the version that is waiting, so the banner can show it again.
     func showAgain() {
         if case .available = state { return }
@@ -166,17 +173,18 @@ final class UpdateController {
     }
 
     private func apply(_ progress: UpdateInstaller.Progress) {
-        // A late report of a run that has ended (cancelled or failed) is ignored.
-        guard runGate.isRunning else { return }
-        switch progress {
-        case .downloading(let received, let expected):
+        busy.report(progress)
+        // Nothing is shown for a report that the busy state ignored: a late
+        // report of a cancelled or ended run leaves the state as it is.
+        switch busy.progress {
+        case .downloading(let received, let expected)?:
             state = .downloading(received: received, expected: expected)
-        case .verifying:
+        case .verifying?, .extracting?:
             state = .verifying
-        case .extracting:
-            state = .verifying
-        case .installing:
+        case .installing?:
             state = .installing
+        case nil:
+            break
         }
     }
 }
