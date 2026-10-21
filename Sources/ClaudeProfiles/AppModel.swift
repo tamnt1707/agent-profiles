@@ -87,6 +87,27 @@ final class AppModel {
     /// The task of the running update, so it can be stopped.
     private var updateTask: Task<Void, Never>?
 
+    /// The request of "Test connection" that runs, if any.
+    private var connectionTask: Task<Void, Never>?
+    /// The request of "Fetch models" that runs, if any.
+    private var modelListTask: Task<Void, Never>?
+    /// Tells the finished check from the one that replaced it or was stopped.
+    private var connectionToken = UUID()
+    private var modelListToken = UUID()
+    /// Makes the connection and model list requests of the editor.
+    private let probe = ConnectionProbe()
+
+    /// The result of "Test connection", shown under the button.
+    private(set) var connectionReport: ProbeReport?
+    /// `true` while the test request is on its way: the button is disabled.
+    private(set) var isTestingConnection = false
+    /// The result of "Fetch models". Its models fill the picker when it worked.
+    private(set) var modelListReport: ModelListReport?
+    /// `true` while the model list is being fetched.
+    private(set) var isFetchingModels = false
+    /// Set while the list of fetched models is open.
+    var isShowingModelPicker = false
+
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
         self.loc = loc ?? Loc()
@@ -191,6 +212,7 @@ final class AppModel {
     /// Shows a profile in the editor.
     func select(_ profile: Profile) {
         guard let index = data.profiles.firstIndex(where: { $0.slug == profile.slug }) else { return }
+        cancelConnectionChecks()
         selectedSlug = profile.slug
         draft = profile
         draftIndex = index
@@ -283,6 +305,7 @@ final class AppModel {
 
     /// Starts a new, empty profile.
     func newProfile() {
+        cancelConnectionChecks()
         draft = DraftChanges.blankProfile
         draftIndex = nil
         command = CommandNameDraft()
@@ -580,6 +603,90 @@ final class AppModel {
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting([home])
+    }
+
+    // MARK: - Connection checks
+
+    /// Sends one tiny request with the edited settings and shows the result.
+    /// A second tap while the request runs does nothing.
+    func testConnection() {
+        guard let draft, !isTestingConnection else { return }
+        let key: String
+        do {
+            key = try probeKey(for: draft)
+        } catch {
+            report(error)
+            return
+        }
+        isTestingConnection = true
+        connectionReport = nil
+        let token = UUID()
+        connectionToken = token
+        connectionTask = Task { [weak self, probe] in
+            let result = try? await probe.testConnection(profile: draft, key: key)
+            guard let self, !Task.isCancelled, self.connectionToken == token else { return }
+            self.isTestingConnection = false
+            self.connectionReport = result
+        }
+    }
+
+    /// Reads the model list of the provider. The picker opens when it worked.
+    func fetchModels() {
+        guard let draft, !isFetchingModels else { return }
+        let key: String
+        do {
+            key = try probeKey(for: draft)
+        } catch {
+            report(error)
+            return
+        }
+        isFetchingModels = true
+        modelListReport = nil
+        isShowingModelPicker = false
+        let token = UUID()
+        modelListToken = token
+        modelListTask = Task { [weak self, probe] in
+            let result = try? await probe.fetchModels(profile: draft, key: key)
+            guard let self, !Task.isCancelled, self.modelListToken == token else { return }
+            self.isFetchingModels = false
+            self.modelListReport = result
+            if let result, case .ok = result.outcome {
+                self.isShowingModelPicker = true
+            }
+        }
+    }
+
+    /// Puts a model of the fetched list into the main model field.
+    func useFetchedModel(_ id: String) {
+        draft?.model = id
+        isShowingModelPicker = false
+    }
+
+    /// Stops the requests that run and forgets their results. Called when another profile opens.
+    func cancelConnectionChecks() {
+        connectionTask?.cancel()
+        connectionTask = nil
+        modelListTask?.cancel()
+        modelListTask = nil
+        connectionToken = UUID()
+        modelListToken = UUID()
+        isTestingConnection = false
+        isFetchingModels = false
+        connectionReport = nil
+        modelListReport = nil
+        isShowingModelPicker = false
+    }
+
+    /// The key of a request: the one typed in the field, otherwise the one in the
+    /// Keychain. The Keychain is read only now, at the click, and the key is kept
+    /// only for the request. Without auth no key is needed and none is read.
+    private func probeKey(for draft: Profile) throws -> String {
+        guard draft.auth != .none else { return "" }
+        let typed = keyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        let account = currentProfile?.slug ?? draft.slug
+        guard !account.isEmpty else { return "" }
+        return try store.keys.get(account) ?? ""
     }
 
     // MARK: - Updates

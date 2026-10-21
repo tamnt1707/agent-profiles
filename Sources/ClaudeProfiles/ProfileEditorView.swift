@@ -113,6 +113,23 @@ struct ProfileEditorView: View {
                     }
                 }
             }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {
+                        model.testConnection()
+                    }
+                    .disabled(model.isTestingConnection)
+                    .help(model.loc.t("editor.test.help"))
+                    if model.isTestingConnection {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                if let report = model.connectionReport {
+                    ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
+                }
+            }
         }
     }
 
@@ -182,8 +199,23 @@ struct ProfileEditorView: View {
     private var modelsSection: some View {
         Section(model.loc.t("editor.models.section")) {
             VStack(alignment: .leading, spacing: 4) {
-                TextField(model.loc.t("editor.model.label"), text: text(\.model), prompt: Text(model.loc.t("editor.model.hint")))
-                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 8) {
+                    TextField(model.loc.t("editor.model.label"), text: text(\.model), prompt: Text(model.loc.t("editor.model.hint")))
+                        .textFieldStyle(.roundedBorder)
+                    Button(model.isFetchingModels ? model.loc.t("editor.models.fetching") : model.loc.t("editor.models.fetch")) {
+                        model.fetchModels()
+                    }
+                    .disabled(model.isFetchingModels)
+                    .help(model.loc.t("editor.models.fetchHelp"))
+                    .popover(isPresented: $model.isShowingModelPicker, arrowEdge: .trailing) {
+                        ModelPickerView(loc: model.loc, models: model.modelListReport?.models ?? []) { id in
+                            model.useFetchedModel(id)
+                        }
+                    }
+                }
+                if let report = model.modelListReport, !isOK(report.outcome) {
+                    ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
+                }
             }
 
             DisclosureGroup(model.loc.t("editor.models.disclosure")) {
@@ -310,6 +342,11 @@ struct ProfileEditorView: View {
     private var isolationPath: String {
         let slug = model.command.slug.isEmpty ? (model.draft?.slug ?? "") : model.command.slug
         return model.store.paths.home(for: slug).path
+    }
+
+    private func isOK(_ outcome: ProbeOutcome) -> Bool {
+        if case .ok = outcome { return true }
+        return false
     }
 
     private func authLabel(_ kind: AuthKind) -> String {
