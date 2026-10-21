@@ -108,7 +108,9 @@ public struct Profile: Codable, Equatable, Sendable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         slug = try c.decodeIfPresent(String.self, forKey: .slug) ?? ""
         baseURL = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
-        auth = (try? c.decode(AuthKind.self, forKey: .auth)) ?? .bearer
+        // A malformed value is an error, never a silent default: the file is
+        // saved again later, so a silent default would change the user's data.
+        auth = try c.decodeIfPresent(AuthKind.self, forKey: .auth) ?? .bearer
         model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
         opusModel = try c.decodeIfPresent(String.self, forKey: .opusModel) ?? ""
         sonnetModel = try c.decodeIfPresent(String.self, forKey: .sonnetModel) ?? ""
@@ -177,7 +179,9 @@ public struct AppData: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         terminal = (try? c.decode(TerminalApp.self, forKey: .terminal)) ?? .terminal
-        profiles = (try? c.decode([Profile].self, forKey: .profiles)) ?? []
+        // Strict: one malformed profile fails the whole file (it is backed up
+        // and not overwritten) instead of silently dropping every profile.
+        profiles = try c.decodeIfPresent([Profile].self, forKey: .profiles) ?? []
         language = (try? c.decode(AppLanguage.self, forKey: .language)) ?? .system
         appearance = (try? c.decode(AppearanceMode.self, forKey: .appearance)) ?? .system
         // Both are new: a file without them still loads, and the automatic
