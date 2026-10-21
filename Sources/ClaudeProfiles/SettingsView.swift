@@ -12,7 +12,9 @@ struct SettingsView: View {
                     Label(model.loc.t("settings.general"), systemImage: "gearshape")
                 }
         }
-        .frame(width: 420, height: 240)
+        // The window is tall enough for every section, the updates one
+        // included.
+        .frame(width: 420, height: 560)
     }
 
     private var general: some View {
