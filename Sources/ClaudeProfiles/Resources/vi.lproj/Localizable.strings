@@ -19,7 +19,12 @@
 "editor.preset.hint" = "URL mẫu có thể thay đổi theo thời gian — kiểm tra lại trang docs của nhà cung cấp.";
 "editor.name.label" = "Tên profile";
 "editor.name.hint" = "vd: GLM";
-"editor.slug.hint" = "→ lệnh claude-%@";
+"editor.command.label" = "Tên lệnh";
+"editor.command.hint" = "phần sau claude-";
+"editor.command.reset" = "Đưa về tự động";
+"editor.command.normalized" = "Sẽ được lưu thành claude-%@";
+"editor.command.auto" = "Tên lệnh đi theo tên profile.";
+"editor.command.custom" = "Tên lệnh là do bạn tự đặt.";
 "editor.baseURL.label" = "Base URL";
 "editor.baseURL.hint" = "để trống = API gốc của Anthropic";
 "editor.auth.label" = "Xác thực";
@@ -74,7 +79,8 @@
 /* Lỗi */
 "error.emptyName" = "Profile cần có tên";
 "error.emptySlug" = "Tên profile cần có ít nhất một chữ cái hoặc số";
-"error.duplicateSlug" = "Đã có profile khác dùng lệnh claude-%@";
+"error.duplicateCommand" = "Lệnh claude-%@ đã được profile \"%@\" dùng.";
+"error.foreignCommand" = "Lệnh claude-%@ bị chiếm bởi file %@, file này không do app này tạo.";
 "error.invalidBaseURL" = "Base URL phải bắt đầu bằng https:// hoặc http://";
 "error.envMissingEquals" = "Dòng %d của biến môi trường thiếu dấu '=': %@";
 "error.invalidEnvName" = "Tên biến không hợp lệ ở dòng %d: %@";

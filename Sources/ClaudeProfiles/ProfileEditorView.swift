@@ -53,16 +53,11 @@ struct ProfileEditorView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                TextField(model.loc.t("editor.name.label"), text: text(\.name), prompt: Text(model.loc.t("editor.name.hint")))
+                TextField(model.loc.t("editor.name.label"), text: nameBinding(), prompt: Text(model.loc.t("editor.name.hint")))
                     .textFieldStyle(.roundedBorder)
-                let slug = Slug.slugify(model.draft?.name ?? "")
-                if !slug.isEmpty {
-                    Text(model.loc.t("editor.slug.hint", slug))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
             }
+
+            commandSection
 
             VStack(alignment: .leading, spacing: 4) {
                 TextField(model.loc.t("editor.baseURL.label"), text: text(\.baseURL), prompt: Text(model.loc.t("editor.baseURL.hint")))
@@ -107,6 +102,65 @@ struct ProfileEditorView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Command name
+
+    /// The editable command name: the fixed `claude-` prefix and the slug.
+    @ViewBuilder
+    private var commandSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent(model.loc.t("editor.command.label")) {
+                HStack(spacing: 8) {
+                    HStack(spacing: 0) {
+                        Text("claude-")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 6)
+                        TextField(model.loc.t("editor.command.label"), text: commandBinding(), prompt: Text(model.loc.t("editor.command.hint")))
+                            .textFieldStyle(.plain)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(.trailing, 6)
+                    }
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(nsColor: .textBackgroundColor))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                    )
+
+                    if model.command.mode == .custom {
+                        Button(model.loc.t("editor.command.reset")) {
+                            model.resetCommandToAuto()
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+            }
+
+            Text(model.command.mode == .auto
+                 ? model.loc.t("editor.command.auto")
+                 : model.loc.t("editor.command.custom"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            if model.command.hasNormalizedPreview {
+                Text(model.loc.t("editor.command.normalized", model.command.normalizedInput))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            if let issue = model.commandIssue {
+                Label(issue.localizedMessage(model.loc), systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(Color(nsColor: .systemRed))
+                    .textSelection(.enabled)
             }
         }
     }
@@ -194,9 +248,11 @@ struct ProfileEditorView: View {
             Button(model.loc.t("actions.save")) { model.save() }
                 .keyboardShortcut("s", modifiers: .command)
                 .buttonStyle(.borderedProminent)
+                .disabled(model.commandIssue != nil)
 
             Button(model.loc.t("actions.openTerminal")) { model.openTerminal() }
                 .keyboardShortcut("r", modifiers: .command)
+                .disabled(model.commandIssue != nil)
 
             Button(model.loc.t("actions.copyCommand")) { model.copyCommand() }
                 .disabled(model.draft == nil)
@@ -226,8 +282,9 @@ struct ProfileEditorView: View {
 
     // MARK: - Helpers
 
+    /// The folder of the profile, using the command name that is edited.
     private var isolationPath: String {
-        let slug = Slug.slugify(model.draft?.name ?? "")
+        let slug = model.command.slug.isEmpty ? (model.draft?.slug ?? "") : model.command.slug
         return model.store.paths.home(for: slug).path
     }
 
@@ -237,6 +294,22 @@ struct ProfileEditorView: View {
         case .apiKey: return model.loc.t("editor.auth.apiKey")
         case .none: return model.loc.t("editor.auth.none")
         }
+    }
+
+    /// The name of the profile: in auto mode the command follows it.
+    private func nameBinding() -> Binding<String> {
+        Binding(
+            get: { model.draft?.name ?? "" },
+            set: { model.setName($0) }
+        )
+    }
+
+    /// The slug of the command name.
+    private func commandBinding() -> Binding<String> {
+        Binding(
+            get: { model.command.input },
+            set: { model.setCommandInput($0) }
+        )
     }
 
     private func text(_ keyPath: WritableKeyPath<Profile, String>) -> Binding<String> {

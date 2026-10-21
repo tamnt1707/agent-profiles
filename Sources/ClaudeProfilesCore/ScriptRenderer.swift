@@ -38,6 +38,13 @@ public enum ScriptRenderer {
     /// Keychain service used for every profile.
     public static let keychainService = "claude-profiles"
 
+    /// The comment that marks a launcher as written by this app.
+    ///
+    /// It never changes and it always sits on the second line of the script,
+    /// so a file in `bin/` that does not carry it was written by something
+    /// else. Such a file is never overwritten and never deleted.
+    public static let marker = "# Managed by Claude Profiles. Rewritten on every save."
+
     /// Renders the launcher script.
     public static func render(
         profile: Profile,
@@ -45,6 +52,7 @@ public enum ScriptRenderer {
         strings: ScriptStrings = .english
     ) throws -> String {
         var script = "#!/bin/zsh\n"
+        script += marker + "\n"
         script += substitute(strings.headerTemplate, commentSafe(profile.name)) + "\n\n"
 
         script += strings.unsetComment + "\n"
@@ -90,6 +98,21 @@ public enum ScriptRenderer {
     /// Replaces the single `%@` placeholder of a template.
     static func substitute(_ template: String, _ value: String) -> String {
         template.replacingOccurrences(of: "%@", with: value)
+    }
+
+    /// `true` when the file at the path is a launcher written by this app.
+    public static func isManagedLauncher(at url: URL) -> Bool {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return false }
+        return isManagedLauncher(text)
+    }
+
+    /// `true` when the script text carries the marker of this app.
+    public static func isManagedLauncher(_ script: String) -> Bool {
+        let head = script
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .prefix(3)
+            .joined(separator: "\n")
+        return head.contains(marker)
     }
 
     /// The name as it may appear inside a `#` comment: line breaks would end

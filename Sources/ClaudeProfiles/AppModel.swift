@@ -35,6 +35,9 @@ final class AppModel {
     /// Index of the edited profile in `data.profiles`, `nil` for a new profile.
     private(set) var draftIndex: Int?
 
+    /// The editable command name of the edited profile.
+    var command = CommandNameDraft()
+
     /// The key the user typed. Empty means "keep the stored key".
     var keyInput: String = ""
 
@@ -84,6 +87,7 @@ final class AppModel {
         selectedSlug = profile.slug
         draft = profile
         draftIndex = index
+        command = CommandNameDraft(profile: profile)
         keyInput = ""
         revealKey = false
         hasStoredKey = (try? store.keys.get(profile.slug)) != nil
@@ -94,6 +98,7 @@ final class AppModel {
     func newProfile() {
         draft = Profile(isolate: true, shareFromDefault: true)
         draftIndex = nil
+        command = CommandNameDraft()
         keyInput = ""
         revealKey = false
         hasStoredKey = false
@@ -104,10 +109,34 @@ final class AppModel {
     func apply(preset: ProviderPreset) {
         guard draft != nil else { return }
         if draft!.name.isEmpty, preset.fillsName {
-            draft!.name = preset.name
+            setName(preset.name)
         }
         draft!.baseURL = preset.baseURL
         draft!.auth = preset.auth
+    }
+
+    /// The name of the profile changed. In auto mode the command follows it.
+    func setName(_ name: String) {
+        draft?.name = name
+        command.setName(name)
+        syncSlug()
+    }
+
+    /// The user typed in the command field: the command becomes custom.
+    func setCommandInput(_ input: String) {
+        command.setInput(input)
+        syncSlug()
+    }
+
+    /// "Reset to auto": the command follows the profile name again.
+    func resetCommandToAuto() {
+        command.resetToAuto()
+        syncSlug()
+    }
+
+    /// Keeps the slug of the draft in sync with the command name.
+    private func syncSlug() {
+        draft?.slug = command.slug
     }
 
     /// `true` when the editor holds changes that are not saved yet.
@@ -118,6 +147,37 @@ final class AppModel {
         return data.profiles[index] != draft
     }
 
+    // MARK: - The command name
+
+    /// The profile as it is stored right now.
+    var currentProfile: Profile? {
+        guard let index = draftIndex, data.profiles.indices.contains(index) else { return nil }
+        return data.profiles[index]
+    }
+
+    /// The other profiles, the ones the edited one is compared with.
+    var otherProfiles: [Profile] {
+        data.profiles.enumerated()
+            .filter { $0.offset != draftIndex }
+            .map(\.element)
+    }
+
+    /// The problem with the current command name, if there is one.
+    ///
+    /// The check runs while the user types, so the editor can show the
+    /// problem right away and block the save.
+    var commandIssue: ProfileError? {
+        let slug = command.slug
+        guard !slug.isEmpty else { return nil }
+        if let owner = command.duplicateOwner(among: otherProfiles) {
+            return .duplicateCommand(slug, owner.name)
+        }
+        if let path = store.foreignCommandPath(for: slug, ownedBy: currentProfile?.slug) {
+            return .foreignCommandExists(slug, path)
+        }
+        return nil
+    }
+
     // MARK: - Saving
 
     /// Saves the profile. Returns `true` when everything worked.
@@ -125,70 +185,47 @@ final class AppModel {
     func save() -> Bool {
         guard var draft else { return false }
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.slug = Slug.slugify(draft.name)
-
-        let others = data.profiles.enumerated()
-            .filter { $0.offset != draftIndex }
-            .map(\.element)
+        command.name = draft.name
+        if command.mode == .auto {
+            command.input = Slug.slugify(draft.name)
+        }
+        draft.slug = command.slug
 
         do {
-            try store.validate(draft, others: others)
-        } catch {
-            report(error)
-            return false
-        }
+            let result = try store.saveProfile(
+                draft,
+                others: otherProfiles,
+                previous: currentProfile,
+                key: keyInput,
+                strings: loc.scriptStrings
+            )
+            draft.slug = result.slug
 
-        if let index = draftIndex {
-            do {
-                try store.migrateSlug(from: data.profiles[index].slug, to: draft.slug)
-            } catch {
-                report(error)
-                return false
+            if let index = draftIndex {
+                data.profiles[index] = draft
+            } else {
+                data.profiles.append(draft)
+                draftIndex = data.profiles.count - 1
             }
-        }
-
-        let key = keyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !key.isEmpty {
-            do {
-                try store.keys.set(draft.slug, key: key)
-            } catch {
-                report(error)
-                return false
-            }
-            hasStoredKey = true
+            selectedSlug = draft.slug
+            self.draft = draft
+            command = CommandNameDraft(profile: draft)
             keyInput = ""
-        }
+            hasStoredKey = (try? store.keys.get(draft.slug)) != nil
 
-        if draft.auth != .none, !hasStoredKey {
-            status = Status(kind: .failure, text: ProfileError.missingAPIKey.localizedMessage(loc))
-            return false
-        }
+            do {
+                try store.save(data)
+            } catch {
+                report(error)
+                return false
+            }
 
-        do {
-            try store.materialize(draft, strings: loc.scriptStrings)
+            status = Status(kind: .success, text: loc.t("status.saved", store.paths.command(for: draft.slug)))
+            return true
         } catch {
             report(error)
             return false
         }
-
-        if let index = draftIndex {
-            data.profiles[index] = draft
-        } else {
-            data.profiles.append(draft)
-            draftIndex = data.profiles.count - 1
-        }
-        selectedSlug = draft.slug
-        self.draft = draft
-
-        do {
-            try store.save(data)
-        } catch {
-            report(error)
-            return false
-        }
-
-        status = Status(kind: .success, text: loc.t("status.saved", store.paths.command(for: draft.slug)))
-        return true
     }
 
     // MARK: - Actions
@@ -205,13 +242,15 @@ final class AppModel {
         }
     }
 
-    /// Copies `claude-<slug>` to the clipboard.
+    /// Copies `claude-<slug>` to the clipboard. The command that is being
+    /// edited is used, not the one of the saved profile.
     func copyCommand() {
         guard let draft else { return }
-        let command = store.paths.command(for: draft.slug)
+        let slug = command.slug.isEmpty ? draft.slug : command.slug
+        let text = store.paths.command(for: slug)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(command, forType: .string)
-        status = Status(kind: .success, text: loc.t("status.copied", command))
+        NSPasteboard.general.setString(text, forType: .string)
+        status = Status(kind: .success, text: loc.t("status.copied", text))
     }
 
     /// Shows the delete confirmation.
@@ -234,6 +273,7 @@ final class AppModel {
         }
         draft = nil
         draftIndex = nil
+        command = CommandNameDraft()
         keyInput = ""
         hasStoredKey = false
         if let first = data.profiles.first {
@@ -339,8 +379,10 @@ extension ProfileError {
             return loc.t("error.emptyName")
         case .emptySlug:
             return loc.t("error.emptySlug")
-        case .duplicateSlug(let slug):
-            return loc.t("error.duplicateSlug", slug)
+        case .duplicateCommand(let slug, let name):
+            return loc.t("error.duplicateCommand", slug, name)
+        case .foreignCommandExists(let slug, let path):
+            return loc.t("error.foreignCommand", slug, path)
         case .invalidBaseURL:
             return loc.t("error.invalidBaseURL")
         case .envMissingEquals(let line, let text):

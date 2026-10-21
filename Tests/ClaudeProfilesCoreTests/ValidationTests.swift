@@ -38,8 +38,33 @@ final class ValidationTests: XCTestCase {
     func testSlugMustBeUnique() {
         let other = Profile.sample(slug: "test")
         XCTAssertThrowsError(try store.validate(Profile.sample(), others: [other])) { error in
-            XCTAssertEqual(error as? ProfileError, .duplicateSlug("test"))
+            XCTAssertEqual(error as? ProfileError, .duplicateCommand("test", "Test"))
         }
+    }
+
+    /// The error names the profile that already uses the command.
+    func testTheDuplicateErrorNamesTheOtherProfile() {
+        let other = Profile.sample(name: "GLM", slug: "glm")
+        let profile = Profile.sample(name: "GLM 4", slug: "glm")
+        XCTAssertThrowsError(try store.validate(profile, others: [other])) { error in
+            XCTAssertEqual(error as? ProfileError, .duplicateCommand("glm", "GLM"))
+        }
+    }
+
+    /// Two names that slugify to the same value collide.
+    func testTwoNamesWithTheSameSlugCollide() throws {
+        XCTAssertEqual(Slug.slugify("GLM"), Slug.slugify("glm "))
+        let other = Profile.sample(name: "GLM", slug: "glm")
+        let profile = Profile.sample(name: "glm ", slug: "glm")
+        XCTAssertThrowsError(try store.validate(profile, others: [other])) { error in
+            XCTAssertEqual(error as? ProfileError, .duplicateCommand("glm", "GLM"))
+        }
+    }
+
+    /// A profile is never a duplicate of itself.
+    func testEditingAProfileWithoutChangingItsSlugIsNoDuplicate() throws {
+        let profile = Profile.sample(name: "Test", slug: "test")
+        XCTAssertNoThrow(try store.validate(profile, others: []))
     }
 
     func testBaseUrlMustBeHttp() {

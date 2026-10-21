@@ -19,7 +19,12 @@
 "editor.preset.hint" = "Provider URLs change over time — check the provider's documentation.";
 "editor.name.label" = "Profile name";
 "editor.name.hint" = "e.g. GLM";
-"editor.slug.hint" = "→ command claude-%@";
+"editor.command.label" = "Command name";
+"editor.command.hint" = "the part after claude-";
+"editor.command.reset" = "Reset to auto";
+"editor.command.normalized" = "Will be saved as claude-%@";
+"editor.command.auto" = "The command follows the profile name.";
+"editor.command.custom" = "The command is a name of your own.";
 "editor.baseURL.label" = "Base URL";
 "editor.baseURL.hint" = "empty = the original Anthropic API";
 "editor.auth.label" = "Authentication";
@@ -74,7 +79,8 @@
 /* Errors */
 "error.emptyName" = "The profile needs a name.";
 "error.emptySlug" = "The profile name needs at least one letter or digit.";
-"error.duplicateSlug" = "Another profile already uses the command claude-%@.";
+"error.duplicateCommand" = "The command claude-%@ is already used by the profile \"%@\".";
+"error.foreignCommand" = "The command claude-%@ is taken by the file %@, which was not created by this app.";
 "error.invalidBaseURL" = "The base URL must start with https:// or http://";
 "error.envMissingEquals" = "Line %d of the environment variables is missing the '=': %@";
 "error.invalidEnvName" = "Invalid variable name on line %d: %@";

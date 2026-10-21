@@ -31,7 +31,7 @@ final class ScriptRendererTests: XCTestCase {
     func testScriptMatchesTheRustGoldenFile() throws {
         let profile = Profile.sample()
         let script = try ScriptRenderer.render(profile: profile, paths: paths, strings: .vietnamese)
-        let golden = try Fixtures.script("rust-script_bearer_isolated", root: paths.root)
+        let golden = try Fixtures.script("script_bearer_isolated", root: paths.root)
         XCTAssertEqual(script, golden)
     }
 
@@ -45,7 +45,7 @@ final class ScriptRendererTests: XCTestCase {
         profile.haikuModel = "h-1"
         profile.workdir = "/tmp/work"
         let script = try ScriptRenderer.render(profile: profile, paths: paths, strings: .vietnamese)
-        let golden = try Fixtures.script("rust-script_apikey_no_isolate", root: paths.root)
+        let golden = try Fixtures.script("script_apikey_no_isolate", root: paths.root)
         XCTAssertEqual(script, golden)
     }
 
@@ -55,11 +55,25 @@ final class ScriptRendererTests: XCTestCase {
         profile.name = "No Key"
         profile.slug = "nokey"
         let script = try ScriptRenderer.render(profile: profile, paths: paths, strings: .vietnamese)
-        let golden = try Fixtures.script("rust-script_auth_none", root: paths.root)
+        let golden = try Fixtures.script("script_auth_none", root: paths.root)
         XCTAssertEqual(script, golden)
         XCTAssertFalse(script.contains("find-generic-password"))
         XCTAssertFalse(script.contains("ANTHROPIC_AUTH_TOKEN=\"$__k\""))
         XCTAssertFalse(script.contains("ANTHROPIC_API_KEY=\"$__k\""))
+    }
+
+    /// The marker tells a launcher of this app apart from a foreign file.
+    func testTheMarkerSitsInTheFirstThreeLines() throws {
+        let script = try ScriptRenderer.render(profile: Profile.sample(), paths: paths)
+        let lines = script.split(separator: "\n", omittingEmptySubsequences: false)
+        XCTAssertTrue(lines.prefix(3).contains(where: { $0.contains(ScriptRenderer.marker) }))
+        XCTAssertTrue(ScriptRenderer.isManagedLauncher(script))
+    }
+
+    /// A file of another program does not carry the marker.
+    func testAForeignScriptIsNotAManagedLauncher() {
+        XCTAssertFalse(ScriptRenderer.isManagedLauncher("#!/bin/sh\necho mine\n"))
+        XCTAssertFalse(ScriptRenderer.isManagedLauncher(""))
     }
 
     func testIsolateOffOmitsConfigDir() throws {

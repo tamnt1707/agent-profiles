@@ -1,4 +1,5 @@
 #!/bin/zsh
+# Managed by Claude Profiles. Rewritten on every save.
 # Tạo bởi Claude Profiles cho profile "No Key". File này được ghi đè mỗi lần lưu.
 
 # Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn

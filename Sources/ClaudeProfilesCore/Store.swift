@@ -13,6 +13,14 @@ public struct LoadedData: Sendable {
     }
 }
 
+/// The result of a successful save.
+public struct SaveResult: Equatable, Sendable {
+    /// The slug that was saved.
+    public var slug: String
+    /// The slug the profile had before, when it was renamed.
+    public var renamedFrom: String?
+}
+
 /// Profiles on disk, launcher scripts and per-profile Claude config folders.
 ///
 /// Layout (everything under `~/.claude-profiles`, nothing touches `~/.claude`):
@@ -93,14 +101,36 @@ public struct Store {
         if profile.slug.isEmpty {
             throw ProfileError.emptySlug
         }
-        if others.contains(where: { $0.slug == profile.slug }) {
-            throw ProfileError.duplicateSlug(profile.slug)
+        if let other = others.first(where: { $0.slug == profile.slug }) {
+            throw ProfileError.duplicateCommand(profile.slug, other.name)
         }
         let url = profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if !url.isEmpty && !url.hasPrefix("https://") && !url.hasPrefix("http://") {
             throw ProfileError.invalidBaseURL
         }
         _ = try ShellQuote.parseExtraEnv(profile.extraEnv)
+    }
+
+    // MARK: - Command name
+
+    /// The path of a file in `bin/` that this app did not write, if there is one.
+    ///
+    /// The launcher of the profile that is edited belongs to the app, even when
+    /// an older version wrote it without the marker. Every other file is
+    /// foreign: it is never overwritten and never deleted.
+    public func foreignCommandPath(for slug: String, ownedBy owner: String?) -> String? {
+        guard slug != owner else { return nil }
+        let url = paths.script(for: slug)
+        guard SafeFileSystem.kind(of: url) != .missing else { return nil }
+        guard ScriptRenderer.isManagedLauncher(at: url) else { return url.path }
+        return nil
+    }
+
+    /// Throws when the command name is taken by a file this app did not write.
+    public func validateCommandFile(_ slug: String, ownedBy owner: String?) throws {
+        if let path = foreignCommandPath(for: slug, ownedBy: owner) {
+            throw ProfileError.foreignCommandExists(slug, path)
+        }
     }
 
     // MARK: - Files
@@ -143,18 +173,109 @@ public struct Store {
     /// Handles a rename: moves the Keychain entry, the launcher and the config folder.
     public func migrateSlug(from old: String, to new: String) throws {
         guard old != new, !old.isEmpty else { return }
+
+        // The Keychain entry moves first: when it fails, nothing else changed.
         if let key = try keys.get(old) {
             try keys.set(new, key: key)
-            try keys.delete(old)
+            do {
+                try keys.delete(old)
+            } catch {
+                // The key would be stored twice: undo the move.
+                try? keys.delete(new)
+                throw error
+            }
         }
-        try? FileManager.default.removeItem(at: paths.script(for: old))
+
+        // The old launcher is replaced by the new one when the profile is written.
+        try? SafeFileSystem.remove(at: paths.script(for: old))
+
+        // The config folder moves with the profile.
         let oldHome = paths.home(for: old)
         let newHome = paths.home(for: new)
-        let manager = FileManager.default
-        if manager.fileExists(atPath: oldHome.path), !manager.fileExists(atPath: newHome.path) {
-            try manager.moveItem(at: oldHome, to: newHome)
+        if SafeFileSystem.kind(of: oldHome) != .missing, SafeFileSystem.kind(of: newHome) == .missing {
+            do {
+                try FileManager.default.moveItem(at: oldHome, to: newHome)
+            } catch {
+                throw ProfileError.ioFailed(oldHome.path)
+            }
         }
     }
+
+    /// Undoes a rename as far as possible: the Keychain entry and the config
+    /// folder move back and the old launcher is written again.
+    public func rollbackSlug(from new: String, to old: String, restoring previous: Profile?, strings: ScriptStrings = .english) {
+        // The Keychain entry moves back.
+        if let key = try? keys.get(new) {
+            try? keys.set(old, key: key)
+            try? keys.delete(new)
+        }
+
+        // The config folder moves back.
+        let newHome = paths.home(for: new)
+        let oldHome = paths.home(for: old)
+        if SafeFileSystem.kind(of: newHome) != .missing, SafeFileSystem.kind(of: oldHome) == .missing {
+            try? FileManager.default.moveItem(at: newHome, to: oldHome)
+        }
+
+        // The launcher of the new name is taken away again, but only when it is
+        // one of ours.
+        let newScript = paths.script(for: new)
+        if ScriptRenderer.isManagedLauncher(at: newScript) {
+            try? SafeFileSystem.remove(at: newScript)
+        }
+
+        // The old launcher is written again.
+        if let previous {
+            try? materialize(previous, strings: strings)
+        }
+    }
+
+    // MARK: - Saving
+
+    /// Saves a profile: the launcher, the Keychain entry and the config folder.
+    ///
+    /// Everything that can be checked without a side effect is checked first,
+    /// so a rejected profile does not change the Keychain or the disk. When a
+    /// step after the rename fails, the rename is rolled back.
+    @discardableResult
+    public func saveProfile(
+        _ profile: Profile,
+        others: [Profile],
+        previous: Profile? = nil,
+        key: String? = nil,
+        strings: ScriptStrings = .english
+    ) throws -> SaveResult {
+        // 1. The checks, before anything is changed.
+        try validate(profile, others: others)
+        try validateCommandFile(profile.slug, ownedBy: previous?.slug)
+
+        // 2. The rename and everything that follows it.
+        let renamedFrom = previous.flatMap { $0.slug == profile.slug ? nil : $0.slug }
+        do {
+            if let renamedFrom {
+                try migrateSlug(from: renamedFrom, to: profile.slug)
+            }
+
+            let secret = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !secret.isEmpty {
+                try keys.set(profile.slug, key: secret)
+            }
+            if profile.auth != .none, (try keys.get(profile.slug)) == nil {
+                throw ProfileError.missingAPIKey
+            }
+            try materialize(profile, strings: strings)
+        } catch {
+            // The rename is undone as far as possible.
+            if let renamedFrom {
+                rollbackSlug(from: profile.slug, to: renamedFrom, restoring: previous, strings: strings)
+            }
+            throw error
+        }
+
+        return SaveResult(slug: profile.slug, renamedFrom: renamedFrom)
+    }
+
+    // MARK: - Removing
 
     /// Removes a profile's launcher and key. The config folder (sessions,
     /// history) is kept on purpose.

@@ -8,7 +8,9 @@ public enum ProfileError: LocalizedError, Equatable {
     /// The profile name does not contain a single letter or digit.
     case emptySlug
     /// Another profile already uses this command name.
-    case duplicateSlug(String)
+    case duplicateCommand(String, String)
+    /// A file with that command name exists and was not written by this app.
+    case foreignCommandExists(String, String)
     /// The base URL does not start with `http://` or `https://`.
     case invalidBaseURL
     /// An environment line is missing the `=`.
@@ -34,7 +36,8 @@ public enum ProfileError: LocalizedError, Equatable {
         switch self {
         case .emptyName: return "profile name is empty"
         case .emptySlug: return "profile slug is empty"
-        case .duplicateSlug(let slug): return "duplicate slug: \(slug)"
+        case .duplicateCommand(let slug, let name): return "duplicate command: \(slug) is used by \(name)"
+        case .foreignCommandExists(let slug, let path): return "foreign command file: \(path) uses \(slug)"
         case .invalidBaseURL: return "base url is not http(s)"
         case .envMissingEquals(let line, let text): return "line \(line) has no '=': \(text)"
         case .invalidEnvName(let line, let name): return "invalid variable name on line \(line): \(name)"
