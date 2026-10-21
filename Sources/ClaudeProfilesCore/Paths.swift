@@ -10,9 +10,14 @@ public struct Paths: Sendable {
 
     public init(root: URL? = nil, home: URL? = nil) {
         // CLAUDE_PROFILES_HOME lets a developer run the app against a
-        // throwaway home directory (the system home ignores $HOME).
+        // throwaway home directory (the system home ignores $HOME). Release
+        // builds ignore it, so a stray variable cannot move the real data.
+        #if DEBUG
         let override = ProcessInfo.processInfo.environment["CLAUDE_PROFILES_HOME"]
             .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
+        #else
+        let override: URL? = nil
+        #endif
         let homeURL = home ?? override ?? FileManager.default.homeDirectoryForCurrentUser
         self.home = homeURL
         self.root = root ?? homeURL.appendingPathComponent(".claude-profiles", isDirectory: true)
