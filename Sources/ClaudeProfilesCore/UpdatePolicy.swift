@@ -10,6 +10,8 @@ public enum UpdatePolicy {
         "api.github.com",
         "github.com",
         "objects.githubusercontent.com",
+        // GitHub sends release assets here after the redirect of github.com.
+        "release-assets.githubusercontent.com",
     ]
 
     /// Checks a URL before anything is fetched from it.
