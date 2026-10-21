@@ -65,6 +65,7 @@
 "actions.confirmDelete" = "Xóa profile";
 "actions.unsaved" = "Có thay đổi chưa lưu.";
 "actions.reveal" = "Mở thư mục";
+"actions.close" = "Đóng";
 
 /* Xóa */
 "delete.dialog.intro" = "Xóa \"%@\"?";
@@ -90,6 +91,27 @@
 "status.scriptsUpdated" = "Đã cập nhật lệnh chạy của mọi profile theo ngôn ngữ mới.";
 "status.scriptsFailed" = "Không cập nhật được lệnh chạy của: %@";
 
+/* Cập nhật */
+"update.available" = "Đã có phiên bản %@.";
+"update.updateNow" = "Cập nhật ngay";
+"update.releaseNotes" = "Ghi chú phát hành";
+"update.later" = "Để sau";
+"update.cancel" = "Huỷ";
+"update.downloading" = "Đang tải…";
+"update.verifying" = "Đang kiểm tra chữ ký…";
+"update.installing" = "Đang cài đặt…";
+"update.disabled.version" = "Bản dựng này không biết phiên bản của chính nó nên không thể tìm bản mới.";
+"update.disabled.repo" = "Bản dựng này không biết kho lưu trữ nào để kiểm tra nên tính năng cập nhật đã tắt.";
+"update.disabled.key" = "Bản dựng này không có khoá công khai nên không thể xác minh bản mới.";
+"update.unsaved.title" = "Lưu thay đổi trước?";
+"update.unsaved.message" = "Trình chỉnh sửa profile đang có thay đổi chưa lưu. Chúng sẽ mất khi ứng dụng được thay thế.";
+"update.unsaved.save" = "Lưu và cập nhật";
+"update.unsaved.discard" = "Bỏ qua và cập nhật";
+"status.updateChecking" = "Đang kiểm tra cập nhật…";
+"status.updateUpToDate" = "Bạn đang dùng phiên bản mới nhất (%@).";
+"status.updateAvailable" = "Đã có phiên bản %@.";
+"status.updateInstalling" = "Đang cài phiên bản mới…";
+
 /* Lỗi */
 "error.emptyName" = "Profile cần có tên";
 "error.emptySlug" = "Tên profile cần có ít nhất một chữ cái hoặc số";
@@ -108,6 +130,31 @@
 "error.launcher" = "Không mở được %@ (osascript lỗi)";
 "error.generic" = "Đã xảy ra lỗi.";
 
+/* Lỗi của trình cập nhật */
+"error.update.notConfigured" = "Bản dựng này không thể tìm phiên bản mới.";
+"error.update.networkUnavailable" = "Không có kết nối Internet.";
+"error.update.timedOut" = "Yêu cầu mất quá nhiều thời gian.";
+"error.update.rateLimited" = "GitHub đang giới hạn số yêu cầu. Hãy thử lại sau.";
+"error.update.noReleases" = "Chưa có bản phát hành nào để cài.";
+"error.update.invalidResponse" = "Không đọc được câu trả lời từ máy chủ phát hành.";
+"error.update.httpError" = "Máy chủ phát hành trả về mã %d.";
+"error.update.downloadFailed" = "Tải xuống thất bại.";
+"error.update.fileTooLarge" = "Tệp tải xuống lớn hơn 200 MB nên đã bị từ chối.";
+"error.update.cancelled" = "Đã huỷ cập nhật.";
+"error.update.disallowedHost" = "Địa chỉ tải xuống %@ không được phép.";
+"error.update.insecureURL" = "Địa chỉ tải xuống không an toàn (cần https).";
+"error.update.missingSignature" = "Bản phát hành không có chữ ký nên bản cập nhật bị từ chối.";
+"error.update.invalidSignature" = "Chữ ký của bản phát hành không khớp nên bản cập nhật bị từ chối.";
+"error.update.invalidPublicKey" = "Khoá công khai của bản dựng này thiếu hoặc hỏng nên bản cập nhật bị từ chối.";
+"error.update.extractionFailed" = "Không mở được tệp nén của bản cập nhật.";
+"error.update.unexpectedBundle" = "Tệp nén không chứa đúng một “Claude Profiles.app”.";
+"error.update.bundleMismatch" = "Tệp tải xuống không phải bản sao của Claude Profiles.";
+"error.update.notNewer" = "Bản tải xuống không mới hơn phiên bản đang cài.";
+"error.update.keyMismatch" = "Bản tải xuống được ký bằng khoá khác nên bản cập nhật bị từ chối.";
+"error.update.codesignFailed" = "Không xác minh được chữ ký của ứng dụng mới.";
+"error.update.bundleNotWritable" = "Ứng dụng nằm trong thư mục không ghi được. Hãy chuyển ứng dụng sang thư mục khác hoặc tự cài phiên bản mới.";
+"error.update.installFailed" = "Không đưa được phiên bản mới vào vị trí.";
+
 /* Cài đặt */
 "settings.general" = "Chung";
 "settings.language.section" = "Ngôn ngữ";
@@ -124,9 +171,17 @@
 "settings.terminal" = "Mở bằng";
 "settings.terminal.terminal" = "Terminal";
 "settings.terminal.iterm" = "iTerm2";
+"settings.updates.section" = "Cập nhật";
+"settings.updates.currentVersion" = "Phiên bản hiện tại";
+"settings.updates.lastChecked" = "Kiểm tra lúc";
+"settings.updates.never" = "Chưa bao giờ";
+"settings.updates.checkNow" = "Kiểm tra ngay";
+"settings.updates.autoCheck" = "Tự kiểm tra mỗi ngày một lần";
 
 /* Menu */
 "menu.profile" = "Profile";
+"menu.checkForUpdates" = "Kiểm tra cập nhật…";
+"menu.about" = "Giới thiệu Claude Profiles";
 
 /* Mẫu nhà cung cấp */
 "preset.custom" = "Tùy chỉnh";

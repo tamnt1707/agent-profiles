@@ -42,8 +42,39 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.radioGroup)
             }
+
+            Section(model.loc.t("settings.updates.section")) {
+                LabeledContent(model.loc.t("settings.updates.currentVersion")) {
+                    Text(model.currentVersionText)
+                        .monospacedDigit()
+                }
+                LabeledContent(model.loc.t("settings.updates.lastChecked")) {
+                    Text(model.lastCheckedText)
+                }
+                Toggle(model.loc.t("settings.updates.autoCheck"), isOn: autoCheckBinding)
+                Button(model.loc.t("settings.updates.checkNow")) {
+                    Task { await model.checkForUpdates(manual: true) }
+                }
+                .disabled(!model.updater.isEnabled || model.updater.isBusy)
+
+                if let reason = model.updater.disabledReason {
+                    Text(model.loc.t(disabledKey(for: reason)))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+
+    /// The sentence that explains why the updater is turned off.
+    private func disabledKey(for reason: UpdateConfiguration.DisabledReason) -> String {
+        switch reason {
+        case .noVersion: return "update.disabled.version"
+        case .noRepo: return "update.disabled.repo"
+        case .noPublicKey: return "update.disabled.key"
+        }
     }
 
     private var languageBinding: Binding<AppLanguage> {
@@ -56,5 +87,9 @@ struct SettingsView: View {
 
     private var terminalBinding: Binding<TerminalApp> {
         Binding(get: { model.data.terminal }, set: { model.setTerminal($0) })
+    }
+
+    private var autoCheckBinding: Binding<Bool> {
+        Binding(get: { model.data.autoCheckUpdates }, set: { model.setAutoCheckUpdates($0) })
     }
 }

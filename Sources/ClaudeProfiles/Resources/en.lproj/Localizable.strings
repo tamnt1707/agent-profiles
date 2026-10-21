@@ -65,6 +65,7 @@
 "actions.confirmDelete" = "Delete profile";
 "actions.unsaved" = "Unsaved changes";
 "actions.reveal" = "Open folder";
+"actions.close" = "Close";
 
 /* Delete */
 "delete.dialog.intro" = "Delete \"%@\"?";
@@ -90,6 +91,27 @@
 "status.scriptsUpdated" = "Updated the launcher of every profile for the new language.";
 "status.scriptsFailed" = "Could not update the launcher of: %@";
 
+/* Updates */
+"update.available" = "Version %@ is available.";
+"update.updateNow" = "Update now";
+"update.releaseNotes" = "Release notes";
+"update.later" = "Later";
+"update.cancel" = "Cancel";
+"update.downloading" = "Downloading…";
+"update.verifying" = "Checking the signature…";
+"update.installing" = "Installing…";
+"update.disabled.version" = "This build does not know its own version, so it cannot look for a new one.";
+"update.disabled.repo" = "This build does not know which repository to look at, so the update is turned off.";
+"update.disabled.key" = "This build has no public key, so a new version could not be checked.";
+"update.unsaved.title" = "Save the changes first?";
+"update.unsaved.message" = "The profile editor holds changes that are not saved. They would be lost when the app is replaced.";
+"update.unsaved.save" = "Save and update";
+"update.unsaved.discard" = "Discard and update";
+"status.updateChecking" = "Checking for updates…";
+"status.updateUpToDate" = "You are using the latest version (%@).";
+"status.updateAvailable" = "Version %@ is available.";
+"status.updateInstalling" = "The new version is being installed…";
+
 /* Errors */
 "error.emptyName" = "The profile needs a name.";
 "error.emptySlug" = "The profile name needs at least one letter or digit.";
@@ -108,6 +130,31 @@
 "error.launcher" = "Could not open %@ (osascript failed).";
 "error.generic" = "Something went wrong.";
 
+/* Errors of the updater */
+"error.update.notConfigured" = "This build cannot look for a new version.";
+"error.update.networkUnavailable" = "There is no connection to the internet.";
+"error.update.timedOut" = "The request took too long.";
+"error.update.rateLimited" = "GitHub is rate limiting the requests. Try again later.";
+"error.update.noReleases" = "There is no release to install yet.";
+"error.update.invalidResponse" = "The answer of the release server could not be read.";
+"error.update.httpError" = "The release server answered with the status %d.";
+"error.update.downloadFailed" = "The download failed.";
+"error.update.fileTooLarge" = "The download is bigger than 200 MB and was refused.";
+"error.update.cancelled" = "The update was cancelled.";
+"error.update.disallowedHost" = "The download address %@ is not allowed.";
+"error.update.insecureURL" = "The download address is not secure (https is required).";
+"error.update.missingSignature" = "The release has no signature. The update was refused.";
+"error.update.invalidSignature" = "The signature of the release does not match. The update was refused.";
+"error.update.invalidPublicKey" = "The public key of this build is missing or broken. The update was refused.";
+"error.update.extractionFailed" = "The archive of the update could not be opened.";
+"error.update.unexpectedBundle" = "The archive does not contain exactly one “Claude Profiles.app”.";
+"error.update.bundleMismatch" = "The download is not a copy of Claude Profiles.";
+"error.update.notNewer" = "The download is not newer than the installed version.";
+"error.update.keyMismatch" = "The download was signed with another key. The update was refused.";
+"error.update.codesignFailed" = "The signature of the new app could not be verified.";
+"error.update.bundleNotWritable" = "The app is in a folder that cannot be written. Move the app to a writable folder or install the new version by hand.";
+"error.update.installFailed" = "The new version could not be put in place.";
+
 /* Settings */
 "settings.general" = "General";
 "settings.language.section" = "Language";
@@ -124,9 +171,17 @@
 "settings.terminal" = "Open with";
 "settings.terminal.terminal" = "Terminal";
 "settings.terminal.iterm" = "iTerm2";
+"settings.updates.section" = "Updates";
+"settings.updates.currentVersion" = "Current version";
+"settings.updates.lastChecked" = "Last checked";
+"settings.updates.never" = "Never";
+"settings.updates.checkNow" = "Check now";
+"settings.updates.autoCheck" = "Check automatically once a day";
 
 /* Menu */
 "menu.profile" = "Profile";
+"menu.checkForUpdates" = "Check for Updates…";
+"menu.about" = "About Claude Profiles";
 
 /* Provider templates */
 "preset.custom" = "Custom";

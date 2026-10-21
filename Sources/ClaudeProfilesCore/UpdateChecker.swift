@@ -145,7 +145,7 @@ public struct UpdateChecker {
     }
 
     /// Turns a transport error into a case of the update error.
-    static func map(_ error: URLError) -> UpdateError {
+    public static func map(_ error: URLError) -> UpdateError {
         switch error.code {
         case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
              .cannotFindHost, .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff:

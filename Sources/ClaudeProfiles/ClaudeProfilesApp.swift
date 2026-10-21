@@ -22,6 +22,14 @@ struct ClaudeProfilesApp: App {
         print("en.lproj: \(english.t("actions.save"))")
         print("vi.lproj: \(vietnamese.t("actions.save"))")
         print("script header: \(english.scriptStrings.headerTemplate)")
+        // What the updater knows about this build.
+        let update = UpdateConfiguration.current()
+        print("update repo: \(update.repo)")
+        print("update version: \(update.versionText)")
+        print("update enabled: \(update.isEnabled)")
+        if let reason = update.disabledReason {
+            print("update disabled: \(reason.rawValue)")
+        }
         exit(0)
     }
 
@@ -31,6 +39,7 @@ struct ClaudeProfilesApp: App {
                 .frame(minWidth: 720, minHeight: 480)
                 .preferredColorScheme(model.colorScheme)
                 .onAppear { model.applyAppearance() }
+                .task { await model.checkForUpdatesAutomatically() }
         }
         .defaultSize(width: 920, height: 640)
         .commands { AppCommands(model: model) }
@@ -57,6 +66,19 @@ struct AppCommands: Commands {
             Button(model.loc.t("actions.save")) { model.save() }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(model.draft == nil)
+        }
+
+        // The menu of the app itself: "Claude Profiles > Check for Updates…".
+        CommandGroup(replacing: .appInfo) {
+            Button(model.loc.t("menu.checkForUpdates")) {
+                Task { await model.checkForUpdates(manual: true) }
+            }
+            .keyboardShortcut("u", modifiers: .command)
+            .disabled(!model.updater.isEnabled || model.updater.isBusy)
+
+            Divider()
+
+            Button(model.loc.t("menu.about")) { NSApp.orderFrontStandardAboutPanel(nil) }
         }
 
         CommandMenu(model.loc.t("menu.profile")) {

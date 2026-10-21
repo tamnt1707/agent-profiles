@@ -6,10 +6,16 @@ struct ContentView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            detail
+        VStack(spacing: 0) {
+            if model.updater.state != .idle && model.updater.state != .upToDate {
+                UpdateBannerView(model: model)
+                Divider()
+            }
+            NavigationSplitView {
+                sidebar
+            } detail: {
+                detail
+            }
         }
         .navigationTitle(model.loc.t("app.title"))
         .onChange(of: model.selectedSlug) { _, slug in
@@ -18,6 +24,13 @@ struct ContentView: View {
                   model.draft?.slug != profile.slug
             else { return }
             model.select(profile)
+        }
+        .alert(model.loc.t("update.unsaved.title"), isPresented: $model.isConfirmingUpdate) {
+            Button(model.loc.t("update.unsaved.save")) { model.saveAndUpdate() }
+            Button(model.loc.t("update.unsaved.discard")) { model.discardAndUpdate() }
+            Button(model.loc.t("actions.cancel"), role: .cancel) { model.isConfirmingUpdate = false }
+        } message: {
+            Text(model.loc.t("update.unsaved.message"))
         }
     }
 

@@ -53,9 +53,19 @@ final class AppModel {
     /// Set while the delete confirmation is open.
     var isConfirmingDelete: Bool = false
 
-    init(store: Store = Store(), loc: Loc? = nil) {
+    /// The updater of the app: it checks the releases and installs them.
+    let updater: UpdateController
+
+    /// Set while the question about the unsaved changes is open.
+    var isConfirmingUpdate: Bool = false
+
+    /// The task of the running update, so it can be stopped.
+    private var updateTask: Task<Void, Never>?
+
+    init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
         self.loc = loc ?? Loc()
+        self.updater = updater ?? UpdateController()
         load()
     }
 
@@ -367,6 +377,131 @@ final class AppModel {
         NSWorkspace.shared.activateFileViewerSelecting([store.paths.root])
     }
 
+    // MARK: - Updates
+
+    /// The version of the app as it is shown to the user.
+    var currentVersionText: String {
+        let version = updater.configuration.versionText
+        return version.isEmpty ? "—" : version
+    }
+
+    /// When the last search for a new version was.
+    var lastCheckedText: String {
+        guard let last = data.lastUpdateCheck else { return loc.t("settings.updates.never") }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: last)
+    }
+
+    /// The automatic check of the launch: once a day, and never with an error.
+    func checkForUpdatesAutomatically() async {
+        guard data.autoCheckUpdates, updater.isEnabled else { return }
+        if let last = data.lastUpdateCheck, Date().timeIntervalSince(last) < 24 * 60 * 60 {
+            return
+        }
+        await checkForUpdates(manual: false)
+    }
+
+    /// Looks for a new version.
+    ///
+    /// The automatic check never shows an error: it would only disturb the
+    /// user without being able to do anything about it.
+    func checkForUpdates(manual: Bool) async {
+        guard updater.isEnabled else {
+            if manual {
+                status = Status(kind: .failure, text: loc.t("error.update.notConfigured"))
+            }
+            return
+        }
+        if manual {
+            status = Status(kind: .hint, text: loc.t("status.updateChecking"))
+        }
+        do {
+            let result = try await updater.check(silent: !manual)
+            data.lastUpdateCheck = Date()
+            persistSettings()
+            switch result {
+            case .upToDate:
+                if manual {
+                    status = Status(kind: .success, text: loc.t("status.updateUpToDate", currentVersionText))
+                }
+            case .available(let info):
+                if manual {
+                    status = Status(kind: .success, text: loc.t("status.updateAvailable", info.version.description))
+                }
+            }
+        } catch {
+            if manual {
+                report(error)
+            } else {
+                // The automatic check never shows an error.
+                updater.state = .idle
+            }
+        }
+    }
+
+    /// Starts the update. Unsaved changes are asked about first.
+    func updateNow() {
+        guard updater.isEnabled else { return }
+        if hasUnsavedChanges {
+            isConfirmingUpdate = true
+            return
+        }
+        startUpdate()
+    }
+
+    /// Saves the changes and starts the update.
+    func saveAndUpdate() {
+        isConfirmingUpdate = false
+        guard save() else { return }
+        startUpdate()
+    }
+
+    /// Throws the changes away and starts the update.
+    func discardAndUpdate() {
+        isConfirmingUpdate = false
+        startUpdate()
+    }
+
+    /// The update itself: download, check, replace and quit.
+    private func startUpdate() {
+        updateTask?.cancel()
+        updateTask = Task { [weak self] in
+            await self?.runUpdate()
+        }
+    }
+
+    private func runUpdate() async {
+        do {
+            try await updater.install()
+            // The helper replaces the bundle as soon as this app has quit.
+            status = Status(kind: .success, text: loc.t("status.updateInstalling"))
+            NSApp.terminate(nil)
+        } catch is CancellationError {
+            updater.state = .idle
+        } catch {
+            if Task.isCancelled {
+                updater.state = .idle
+                return
+            }
+            report(error)
+        }
+    }
+
+    /// Stops the download.
+    func cancelUpdate() {
+        updateTask?.cancel()
+        updateTask = nil
+        updater.state = .idle
+        status = Status(kind: .hint, text: loc.t("error.update.cancelled"))
+    }
+
+    /// Hides the banner without touching anything else.
+    func dismissUpdateBanner() {
+        updater.state = .idle
+    }
+
     // MARK: - Settings
 
     /// Switches the language and rewrites every launcher script.
@@ -387,6 +522,12 @@ final class AppModel {
     /// Switches the terminal application.
     func setTerminal(_ terminal: TerminalApp) {
         data.terminal = terminal
+        persistSettings()
+    }
+
+    /// Switches the automatic check of a new version on or off.
+    func setAutoCheckUpdates(_ enabled: Bool) {
+        data.autoCheckUpdates = enabled
         persistSettings()
     }
 
@@ -441,6 +582,8 @@ final class AppModel {
     private func report(_ error: Error) {
         if let profileError = error as? ProfileError {
             status = Status(kind: .failure, text: profileError.localizedMessage(loc))
+        } else if let updateError = error as? UpdateError {
+            status = Status(kind: .failure, text: updateError.localizedMessage(loc))
         } else {
             status = Status(kind: .failure, text: loc.t("error.generic"))
         }
@@ -482,6 +625,61 @@ extension ProfileError {
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
             return loc.t("error.unsafeDeletePath", path)
+        }
+    }
+}
+
+/// Turns an update error into a sentence in the language of the user.
+@MainActor
+extension UpdateError {
+    func localizedMessage(_ loc: Loc) -> String {
+        switch self {
+        case .notConfigured:
+            return loc.t("error.update.notConfigured")
+        case .networkUnavailable:
+            return loc.t("error.update.networkUnavailable")
+        case .timedOut:
+            return loc.t("error.update.timedOut")
+        case .rateLimited:
+            return loc.t("error.update.rateLimited")
+        case .noReleases:
+            return loc.t("error.update.noReleases")
+        case .invalidResponse:
+            return loc.t("error.update.invalidResponse")
+        case .httpError(let code):
+            return loc.t("error.update.httpError", code)
+        case .downloadFailed:
+            return loc.t("error.update.downloadFailed")
+        case .fileTooLarge:
+            return loc.t("error.update.fileTooLarge")
+        case .cancelled:
+            return loc.t("error.update.cancelled")
+        case .disallowedHost(let host):
+            return loc.t("error.update.disallowedHost", host)
+        case .insecureURL:
+            return loc.t("error.update.insecureURL")
+        case .missingSignature:
+            return loc.t("error.update.missingSignature")
+        case .invalidSignature:
+            return loc.t("error.update.invalidSignature")
+        case .invalidPublicKey:
+            return loc.t("error.update.invalidPublicKey")
+        case .extractionFailed:
+            return loc.t("error.update.extractionFailed")
+        case .unexpectedBundle:
+            return loc.t("error.update.unexpectedBundle")
+        case .bundleMismatch:
+            return loc.t("error.update.bundleMismatch")
+        case .notNewer:
+            return loc.t("error.update.notNewer")
+        case .keyMismatch:
+            return loc.t("error.update.keyMismatch")
+        case .codesignFailed:
+            return loc.t("error.update.codesignFailed")
+        case .bundleNotWritable:
+            return loc.t("error.update.bundleNotWritable")
+        case .installFailed:
+            return loc.t("error.update.installFailed")
         }
     }
 }
