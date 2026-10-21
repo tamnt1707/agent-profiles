@@ -595,17 +595,25 @@ final class AppModel {
 
     /// The update itself: download, check, replace and quit.
     private func startUpdate() {
-        // A second tap while a download runs must not cancel the first one.
+        // A second tap while the update is starting or running is refused here:
+        // it neither cancels the first run nor starts another one.
         guard !updater.isBusy else { return }
-        updateTask?.cancel()
+        let info: UpdateInfo
+        do {
+            // Marks the updater busy before the task exists, so no second tap can pass.
+            info = try updater.beginInstall()
+        } catch {
+            report(error)
+            return
+        }
         updateTask = Task { [weak self] in
-            await self?.runUpdate()
+            await self?.runUpdate(info)
         }
     }
 
-    private func runUpdate() async {
+    private func runUpdate(_ info: UpdateInfo) async {
         do {
-            try await updater.install()
+            try await updater.runInstall(info)
             // The helper replaces the bundle as soon as this app has quit.
             status = Status(kind: .success, text: loc.t("status.updateInstalling"))
             NSApp.terminate(nil)

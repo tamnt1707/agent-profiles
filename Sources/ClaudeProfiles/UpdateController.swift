@@ -60,8 +60,13 @@ final class UpdateController {
     /// Why the updater is turned off, when it is.
     var disabledReason: UpdateConfiguration.DisabledReason? { configuration.disabledReason }
 
-    /// `true` while the updater is busy.
+    /// One update run at a time. Closed by `beginInstall()`, opened when the run ends.
+    private var runGate = UpdateRunGate()
+
+    /// `true` while the updater is busy. A run counts as busy from the moment
+    /// `beginInstall()` returns, before the first byte of the download arrives.
     var isBusy: Bool {
+        if runGate.isRunning { return true }
         switch state {
         case .checking, .downloading, .verifying, .installing: return true
         default: return false
@@ -109,19 +114,25 @@ final class UpdateController {
         }
     }
 
-    /// Downloads the new version, checks it and hands it to the helper.
-    func install() async throws {
-        // A second call while the update is running must not start another
-        // download; it is refused and the running update keeps its state.
-        switch state {
-        case .downloading, .verifying, .installing:
-            throw UpdateError.cancelled
-        default:
-            break
-        }
-        guard let installer, case .available(let info) = state else {
+    /// Starts the update that is waiting.
+    ///
+    /// The state changes synchronously, before the caller awaits anything, so a
+    /// second start made while the first is still getting ready is refused.
+    /// Every successful call must be followed by `runInstall(_:)`.
+    func beginInstall() throws -> UpdateInfo {
+        guard installer != nil, case .available(let info) = state else {
             throw UpdateError.notConfigured
         }
+        guard runGate.begin() else { throw UpdateError.cancelled }
+        state = .downloading(received: 0, expected: nil)
+        return info
+    }
+
+    /// Downloads the new version, checks it and hands it to the helper. The
+    /// gate opens again when this returns, with or without an error.
+    func runInstall(_ info: UpdateInfo) async throws {
+        defer { runGate.end() }
+        guard let installer else { throw UpdateError.notConfigured }
         do {
             try await installer.install(info) { [weak self] progress in
                 // The progress comes from a background queue.
@@ -134,6 +145,11 @@ final class UpdateController {
             state = .failed(UpdateController.asUpdateError(error))
             throw error
         }
+    }
+
+    /// Starts and runs the update in one call.
+    func install() async throws {
+        try await runInstall(try beginInstall())
     }
 
     /// Remembers the version that is waiting, so the banner can show it again.
@@ -150,6 +166,8 @@ final class UpdateController {
     }
 
     private func apply(_ progress: UpdateInstaller.Progress) {
+        // A late report of a run that has ended (cancelled or failed) is ignored.
+        guard runGate.isRunning else { return }
         switch progress {
         case .downloading(let received, let expected):
             state = .downloading(received: received, expected: expected)
