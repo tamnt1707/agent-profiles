@@ -3,14 +3,28 @@ import Foundation
 /// Opens a terminal window that runs the launcher script of a profile.
 public enum Launcher {
     /// The shell command of a profile: `cd '<workdir>' && '<script>'`.
+    ///
+    /// A working directory that starts with `~` is expanded to the home
+    /// directory first, because a quoted `'~/x'` would not be expanded by the shell.
     public static func command(for profile: Profile, paths: Paths) -> String {
         var command = ""
         let directory = profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
         if !directory.isEmpty {
-            command += "cd \(ShellQuote.quote(directory)) && "
+            command += "cd \(ShellQuote.quote(expandHome(directory, home: paths.home))) && "
         }
         command += ShellQuote.quote(paths.script(for: profile.slug).path)
         return command
+    }
+
+    /// Replaces a leading `~` or `~/` with the home directory. `~user` is left as it is.
+    static func expandHome(_ directory: String, home: URL) -> String {
+        if directory == "~" {
+            return home.path
+        }
+        if directory.hasPrefix("~/") {
+            return home.path + String(directory.dropFirst(1))
+        }
+        return directory
     }
 
     /// The AppleScript that opens the terminal and types the command.
@@ -37,22 +51,46 @@ public enum Launcher {
         }
     }
 
-    /// Opens the terminal. Returns the exit status of `osascript`.
+    /// Opens the terminal and waits for `osascript`. Returns the exit status.
+    ///
+    /// This blocks the calling thread while `osascript` runs. The user interface
+    /// should use `launchInBackground`. The runner is injectable for the tests.
+    /// When `osascript` fails, its output is part of the thrown error.
     @discardableResult
-    public static func launch(profile: Profile, terminal: TerminalApp, paths: Paths) throws -> Int32 {
+    public static func launch(
+        profile: Profile,
+        terminal: TerminalApp,
+        paths: Paths,
+        runner: ProcessRunner = SystemProcessRunner()
+    ) throws -> Int32 {
         let script = appleScript(command: command(for: profile, paths: paths), terminal: terminal)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
+        let result: ProcessResult
         do {
-            try process.run()
+            result = try runner.run("/usr/bin/osascript", ["-e", script])
         } catch {
             throw ProfileError.launcherFailed("osascript could not be started")
         }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw ProfileError.launcherFailed("osascript failed for \(terminal.rawValue)")
+        guard result.isSuccess else {
+            let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = detail.isEmpty
+                ? "osascript failed for \(terminal.rawValue)"
+                : "osascript failed for \(terminal.rawValue): \(detail)"
+            throw ProfileError.launcherFailed(message)
         }
-        return process.terminationStatus
+        return result.status
+    }
+
+    /// The same as `launch`, run off the calling thread, so that the user
+    /// interface stays responsive while the terminal opens.
+    @discardableResult
+    public static func launchInBackground(
+        profile: Profile,
+        terminal: TerminalApp,
+        paths: Paths,
+        runner: ProcessRunner = SystemProcessRunner()
+    ) async throws -> Int32 {
+        try await Task.detached(priority: .userInitiated) {
+            try launch(profile: profile, terminal: terminal, paths: paths, runner: runner)
+        }.value
     }
 }
