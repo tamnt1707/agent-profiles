@@ -1,0 +1,9 @@
+"API_TIMEOUT_MS=600000" => OK [("API_TIMEOUT_MS", "600000")]
+"# comment\nexport FOO=bar\n\nBAR=baz" => OK [("FOO", "bar"), ("BAR", "baz")]
+"1BAD=x" => ERR "Tên biến không hợp lệ ở dòng 1: 1BAD"
+"NOEQUALS" => ERR "Dòng 1 của biến môi trường thiếu dấu '=': NOEQUALS"
+"A = ' spaced '" => OK [("A", " spaced ")]
+"B=\"quoted\"" => OK [("B", "quoted")]
+"C=\"mix'" => OK [("C", "mix")]
+"=novalue" => ERR "Tên biến không hợp lệ ở dòng 1: "
+"D=" => OK [("D", "")]

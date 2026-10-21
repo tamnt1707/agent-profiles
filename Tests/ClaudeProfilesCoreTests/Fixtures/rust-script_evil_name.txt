@@ -1,0 +1,23 @@
+#!/bin/zsh
+# Tạo bởi Claude Profiles cho profile "it's "quoted" $(whoami) `id` second line". File này được ghi đè mỗi lần lưu.
+
+# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn
+unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL \
+  ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
+  ANTHROPIC_SMALL_FAST_MODEL
+
+__k="$(/usr/bin/security find-generic-password -s 'claude-profiles' -a 'evil' -w 2>/dev/null)"
+if [[ -z "$__k" ]]; then
+  echo "Chưa có API key cho profile 'it'\''s "quoted" $(whoami) `id`
+second line' trong Keychain. Mở app Claude Profiles để nhập." >&2
+  exit 1
+fi
+export ANTHROPIC_AUTH_TOKEN="$__k"
+unset __k
+
+export ANTHROPIC_BASE_URL='https://x.example/$(id)'
+export ANTHROPIC_MODEL='m '\'' $(x)'
+export CLAUDE_CONFIG_DIR='%ROOT%/homes/evil'
+export EVIL='v'\'' "w'
+
+exec claude "$@"

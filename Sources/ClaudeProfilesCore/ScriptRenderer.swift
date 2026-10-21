@@ -1,0 +1,121 @@
+import Foundation
+
+/// The human readable sentences that end up inside the launcher script.
+/// The app fills them from the localized string table so the script always
+/// speaks the language that is currently selected in the UI.
+public struct ScriptStrings: Equatable, Sendable {
+    /// Header comment of the script. Contains one `%@` placeholder for the profile name.
+    public var headerTemplate: String
+    /// Comment above the `unset` block.
+    public var unsetComment: String
+    /// Error printed when the Keychain holds no key. Contains one `%@` placeholder.
+    public var missingKeyTemplate: String
+
+    public init(headerTemplate: String, unsetComment: String, missingKeyTemplate: String) {
+        self.headerTemplate = headerTemplate
+        self.unsetComment = unsetComment
+        self.missingKeyTemplate = missingKeyTemplate
+    }
+
+    public static let english = ScriptStrings(
+        headerTemplate: "# Created by Claude Profiles for profile \"%@\". This file is overwritten every time you save.",
+        unsetComment: "# Remove leftover provider settings from the shell so profiles do not get mixed up",
+        missingKeyTemplate: "No API key for profile %@ in the Keychain. Open the Claude Profiles app to enter it."
+    )
+
+    public static let vietnamese = ScriptStrings(
+        headerTemplate: "# Tạo bởi Claude Profiles cho profile \"%@\". File này được ghi đè mỗi lần lưu.",
+        unsetComment: "# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn",
+        missingKeyTemplate: "Chưa có API key cho profile %@ trong Keychain. Mở app Claude Profiles để nhập."
+    )
+}
+
+/// Renders the launcher script of a profile.
+///
+/// The script never contains a secret: the API key is read from the Keychain
+/// when the script runs.
+public enum ScriptRenderer {
+    /// Keychain service used for every profile.
+    public static let keychainService = "claude-profiles"
+
+    /// Renders the launcher script.
+    public static func render(
+        profile: Profile,
+        paths: Paths,
+        strings: ScriptStrings = .english
+    ) throws -> String {
+        var script = "#!/bin/zsh\n"
+        script += substitute(strings.headerTemplate, commentSafe(profile.name)) + "\n\n"
+
+        script += strings.unsetComment + "\n"
+        script += "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL \\\n"
+        script += "  ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \\\n"
+        script += "  ANTHROPIC_SMALL_FAST_MODEL\n\n"
+
+        if let variable = profile.auth.envVarName {
+            script += "__k=\"$(/usr/bin/security find-generic-password -s "
+            script += ShellQuote.quote(keychainService)
+            script += " -a " + ShellQuote.quote(profile.slug) + " -w 2>/dev/null)\"\n"
+            script += "if [[ -z \"$__k\" ]]; then\n"
+            script += "  echo \"" + substitute(strings.missingKeyTemplate, quotedForMessage(profile.name)) + "\" >&2\n"
+            script += "  exit 1\n"
+            script += "fi\n"
+            script += "export \(variable)=\"$__k\"\n"
+            script += "unset __k\n\n"
+        }
+
+        func export(_ key: String, _ value: String) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                script += "export \(key)=\(ShellQuote.quote(trimmed))\n"
+            }
+        }
+
+        export("ANTHROPIC_BASE_URL", profile.baseURL)
+        export("ANTHROPIC_MODEL", profile.model)
+        export("ANTHROPIC_DEFAULT_OPUS_MODEL", profile.opusModel)
+        export("ANTHROPIC_DEFAULT_SONNET_MODEL", profile.sonnetModel)
+        export("ANTHROPIC_DEFAULT_HAIKU_MODEL", profile.haikuModel)
+        if profile.isolate {
+            export("CLAUDE_CONFIG_DIR", paths.home(for: profile.slug).path)
+        }
+        for entry in try ShellQuote.parseExtraEnv(profile.extraEnv) {
+            export(entry.key, entry.value)
+        }
+
+        script += "\nexec claude \"$@\"\n"
+        return script
+    }
+
+    /// Replaces the single `%@` placeholder of a template.
+    static func substitute(_ template: String, _ value: String) -> String {
+        template.replacingOccurrences(of: "%@", with: value)
+    }
+
+    /// The name as it may appear inside a `#` comment: line breaks would end
+    /// the comment, so they become spaces.
+    static func commentSafe(_ name: String) -> String {
+        name
+            .replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+    }
+
+    /// The name as it may appear inside the double quoted `echo` message:
+    /// backslashes, quotes, `$` and backticks are escaped so that a profile
+    /// name can never run a command.
+    static func quotedForMessage(_ name: String) -> String {
+        var out = "'"
+        for character in commentSafe(name) {
+            switch character {
+            case "\\": out += "\\\\"
+            case "\"": out += "\\\""
+            case "$": out += "\\$"
+            case "`": out += "\\`"
+            default: out.append(character)
+            }
+        }
+        out += "'"
+        return out
+    }
+}

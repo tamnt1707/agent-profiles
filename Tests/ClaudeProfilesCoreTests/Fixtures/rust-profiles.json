@@ -1,0 +1,33 @@
+{
+  "terminal": "ITerm",
+  "profiles": [
+    {
+      "name": "Test",
+      "slug": "test",
+      "base_url": "https://example.com/anthropic",
+      "auth": "Bearer",
+      "model": "m-1",
+      "opus_model": "o",
+      "sonnet_model": "s",
+      "haiku_model": "h",
+      "extra_env": "A=1",
+      "workdir": "/tmp",
+      "isolate": true,
+      "share_from_default": true
+    },
+    {
+      "name": "Second \"quoted\" / ünïcode",
+      "slug": "second",
+      "base_url": "",
+      "auth": "Bearer",
+      "model": "",
+      "opus_model": "",
+      "sonnet_model": "",
+      "haiku_model": "",
+      "extra_env": "",
+      "workdir": "",
+      "isolate": false,
+      "share_from_default": false
+    }
+  ]
+}

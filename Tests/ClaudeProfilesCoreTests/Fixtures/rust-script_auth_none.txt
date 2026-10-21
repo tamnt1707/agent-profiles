@@ -1,0 +1,14 @@
+#!/bin/zsh
+# Tạo bởi Claude Profiles cho profile "No Key". File này được ghi đè mỗi lần lưu.
+
+# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn
+unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL \
+  ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
+  ANTHROPIC_SMALL_FAST_MODEL
+
+export ANTHROPIC_BASE_URL='https://example.com/anthropic'
+export ANTHROPIC_MODEL='m-1'
+export CLAUDE_CONFIG_DIR='%ROOT%/homes/nokey'
+export API_TIMEOUT_MS='600000'
+
+exec claude "$@"

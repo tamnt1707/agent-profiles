@@ -1,0 +1,5 @@
+"it's" => "'it'\\''s'"
+"a b" => "'a b'"
+"$HOME" => "'$HOME'"
+"back\\slash" => "'back\\slash'"
+"new\nline" => "'new\nline'"
