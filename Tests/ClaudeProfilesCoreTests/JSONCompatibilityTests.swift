@@ -138,10 +138,10 @@ final class JSONCompatibilityTests: XCTestCase {
         let written = try String(contentsOf: store.paths.dataFile, encoding: .utf8)
 
         // The Rust file ends with the closing brace of the object, without a
-        // trailing newline. The two new keys are appended before it.
+        // trailing newline. The new keys are appended before it.
         let expected = fixtureText.replacingOccurrences(
             of: "  ]\n}",
-            with: "  ],\n  \"language\": \"system\",\n  \"appearance\": \"system\"\n}"
+            with: "  ],\n  \"language\": \"system\",\n  \"appearance\": \"system\",\n  \"auto_check_updates\": true\n}"
         )
         XCTAssertEqual(written, expected)
 
@@ -166,8 +166,38 @@ final class JSONCompatibilityTests: XCTestCase {
           "terminal": "Terminal",
           "profiles": [],
           "language": "system",
-          "appearance": "system"
+          "appearance": "system",
+          "auto_check_updates": true
         }
         """)
+    }
+
+    /// The two update settings are new: an old file has to load without them.
+    func testTheUpdateSettingsAreOptional() throws {
+        let json = #"{ "profiles": [] }"#
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertTrue(data.autoCheckUpdates)
+        XCTAssertNil(data.lastUpdateCheck)
+    }
+
+    func testTheUpdateSettingsAreReadAndWritten() throws {
+        let when = Date(timeIntervalSince1970: 1_762_000_000)
+        let data = AppData(autoCheckUpdates: false, lastUpdateCheck: when)
+        try store.save(data)
+
+        let written = try String(contentsOf: store.paths.dataFile, encoding: .utf8)
+        XCTAssertTrue(written.contains("\"auto_check_updates\": false"))
+        XCTAssertTrue(written.contains("\"last_update_check\": \"\(Timestamp.string(from: when))\""))
+
+        let loaded = try JSONDecoder().decode(AppData.self, from: Data(written.utf8))
+        XCTAssertFalse(loaded.autoCheckUpdates)
+        XCTAssertEqual(loaded.lastUpdateCheck?.timeIntervalSince1970 ?? 0, when.timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testABrokenTimestampIsIgnored() throws {
+        let json = #"{ "profiles": [], "last_update_check": "yesterday" }"#
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertNil(data.lastUpdateCheck)
+        XCTAssertTrue(data.autoCheckUpdates)
     }
 }

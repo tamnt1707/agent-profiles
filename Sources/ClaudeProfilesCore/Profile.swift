@@ -144,17 +144,25 @@ public struct AppData: Codable, Equatable, Sendable {
     public var language: AppLanguage
     /// Added by the Swift app; unknown to the Rust app, which ignores it.
     public var appearance: AppearanceMode
+    /// Look for a new version once a day, without asking. On by default.
+    public var autoCheckUpdates: Bool
+    /// When the last search for a new version was.
+    public var lastUpdateCheck: Date?
 
     public init(
         terminal: TerminalApp = .terminal,
         profiles: [Profile] = [],
         language: AppLanguage = .system,
-        appearance: AppearanceMode = .system
+        appearance: AppearanceMode = .system,
+        autoCheckUpdates: Bool = true,
+        lastUpdateCheck: Date? = nil
     ) {
         self.terminal = terminal
         self.profiles = profiles
         self.language = language
         self.appearance = appearance
+        self.autoCheckUpdates = autoCheckUpdates
+        self.lastUpdateCheck = lastUpdateCheck
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -162,6 +170,8 @@ public struct AppData: Codable, Equatable, Sendable {
         case profiles
         case language
         case appearance
+        case autoCheckUpdates = "auto_check_updates"
+        case lastUpdateCheck = "last_update_check"
     }
 
     public init(from decoder: Decoder) throws {
@@ -170,6 +180,10 @@ public struct AppData: Codable, Equatable, Sendable {
         profiles = (try? c.decode([Profile].self, forKey: .profiles)) ?? []
         language = (try? c.decode(AppLanguage.self, forKey: .language)) ?? .system
         appearance = (try? c.decode(AppearanceMode.self, forKey: .appearance)) ?? .system
+        // Both are new: a file without them still loads, and the automatic
+        // check is on when the file says nothing about it.
+        autoCheckUpdates = (try? c.decode(Bool.self, forKey: .autoCheckUpdates)) ?? true
+        lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -178,6 +192,10 @@ public struct AppData: Codable, Equatable, Sendable {
         try c.encode(profiles, forKey: .profiles)
         try c.encode(language, forKey: .language)
         try c.encode(appearance, forKey: .appearance)
+        try c.encode(autoCheckUpdates, forKey: .autoCheckUpdates)
+        if let lastUpdateCheck {
+            try c.encode(Timestamp.string(from: lastUpdateCheck), forKey: .lastUpdateCheck)
+        }
     }
 }
 

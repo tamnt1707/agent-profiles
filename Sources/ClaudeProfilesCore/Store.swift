@@ -405,8 +405,12 @@ enum JSONText {
             out += "  ],\n"
         }
         out += "  \"language\": \(escape(data.language.rawValue)),\n"
-        out += "  \"appearance\": \(escape(data.appearance.rawValue))\n"
-        out += "}"
+        out += "  \"appearance\": \(escape(data.appearance.rawValue)),\n"
+        out += "  \"auto_check_updates\": \(data.autoCheckUpdates)"
+        if let lastUpdateCheck = data.lastUpdateCheck {
+            out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"
+        }
+        out += "\n}"
         return out
     }
 
