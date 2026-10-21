@@ -134,12 +134,16 @@ public struct UpdateInstaller {
         guard ReleaseSigning.verify(archiveData, signature: signatureData, publicKeyBase64: configuration.publicKey) else {
             throw UpdateError.invalidSignature
         }
+        // The bytes that were verified are written to a new file and only that
+        // file is unpacked, so nothing can change the archive in between.
+        let verified = work.appendingPathComponent("verified.zip")
+        try archiveData.write(to: verified)
 
         // 5. Unpack and look at the app inside.
         progress(.extracting)
         let extracted = work.appendingPathComponent("extracted", isDirectory: true)
         try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: true)
-        let unpacked = try processes.run("/usr/bin/ditto", ["-x", "-k", archive.path, extracted.path])
+        let unpacked = try processes.run("/usr/bin/ditto", ["-x", "-k", verified.path, extracted.path])
         guard unpacked.isSuccess else {
             throw UpdateError.extractionFailed
         }
@@ -198,12 +202,14 @@ public struct UpdateInstaller {
         while let current = stack.popLast() {
             let children = (try? FileManager.default.contentsOfDirectory(at: current, includingPropertiesForKeys: nil)) ?? []
             for child in children {
+                // Only a real folder counts: a link or a file with the name is never opened.
+                guard SafeFileSystem.kind(of: child) == .directory else { continue }
                 if child.lastPathComponent == "Claude Profiles.app" {
                     found.append(child)
                     continue
                 }
-                // Another bundle is never opened and a link is never followed.
-                guard child.pathExtension != "app", SafeFileSystem.kind(of: child) == .directory else { continue }
+                // Another bundle is never opened.
+                guard child.pathExtension != "app" else { continue }
                 stack.append(child)
             }
         }
@@ -225,7 +231,7 @@ public struct UpdateInstaller {
     }
 
     /// Downloads a file and writes it to the disk.
-    private func download(
+    func download(
         _ url: URL,
         to destination: URL,
         limit: Int,
@@ -244,6 +250,8 @@ public struct UpdateInstaller {
         let configuration = session.configuration
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         let downloadSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        // The session is released on every path, also when the download fails.
+        defer { downloadSession.finishTasksAndInvalidate() }
         let task = downloadSession.dataTask(with: request)
 
         try await withTaskCancellationHandler {
@@ -254,7 +262,6 @@ public struct UpdateInstaller {
         } onCancel: {
             task.cancel()
         }
-        downloadSession.finishTasksAndInvalidate()
     }
 }
 
@@ -300,11 +307,12 @@ private final class DownloadDelegate: NSObject, URLSessionDataDelegate {
                 return
             }
             if (300...399).contains(http.statusCode) {
-                // The redirect was refused, so the answer of the redirect
-                // itself arrived here. The host of the target is the one that
-                // was not allowed.
-                let target = http.value(forHTTPHeaderField: "Location").flatMap(URL.init(string:))
-                failure = .disallowedHost(target?.host ?? response.url?.host ?? "")
+                // The redirect was refused; its answer arrives here. The reason
+                // was already set by the redirect check.
+                if failure == nil {
+                    let target = http.value(forHTTPHeaderField: "Location").flatMap(URL.init(string:))
+                    failure = .disallowedHost(target?.host ?? response.url?.host ?? "")
+                }
                 completionHandler(.cancel)
                 return
             }
@@ -373,11 +381,15 @@ private final class DownloadDelegate: NSObject, URLSessionDataDelegate {
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        guard let url = request.url, UpdatePolicy.isAllowed(url) else {
-            // A redirect to another host is refused.
+        do {
+            guard let url = request.url else { throw UpdateError.invalidResponse }
+            try UpdatePolicy.validate(url)
+            completionHandler(request)
+        } catch {
+            // A redirect to another host, or to an address that is not secure,
+            // is refused and nothing is written.
+            failure = (error as? UpdateError) ?? .downloadFailed
             completionHandler(nil)
-            return
         }
-        completionHandler(request)
     }
 }
