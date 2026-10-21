@@ -155,6 +155,27 @@ final class SaveProfileTests: XCTestCase {
         XCTAssertTrue(manager().fileExists(atPath: paths.home(for: "old").path))
     }
 
+    /// A rename without a key that is neither typed nor stored is refused
+    /// before anything moves: no key, launcher or folder changes.
+    func testARenameWithoutAKeyChangesNothingBeforehand() throws {
+        let profile = Profile.sample(slug: "old")
+        try store.materialize(profile)
+        let home = paths.home(for: "old")
+        try manager().createDirectory(at: home, withIntermediateDirectories: true)
+        try Data("history".utf8).write(to: home.appendingPathComponent("session.json"))
+
+        let renamed = Profile.sample(name: "New", slug: "new")
+        XCTAssertThrowsError(try store.saveProfile(renamed, others: [], previous: profile)) { error in
+            XCTAssertEqual(error as? ProfileError, .missingAPIKey)
+        }
+
+        XCTAssertTrue(manager().fileExists(atPath: paths.script(for: "old").path))
+        XCTAssertFalse(manager().fileExists(atPath: paths.script(for: "new").path))
+        XCTAssertTrue(manager().fileExists(atPath: paths.home(for: "old").path))
+        XCTAssertFalse(manager().fileExists(atPath: paths.home(for: "new").path))
+        XCTAssertNil(try keys.get("new"))
+    }
+
     /// When a step after the rename fails, the rename is rolled back.
     func testAFailedSaveRollsTheRenameBack() throws {
         // No key in the store: the save fails after the rename.

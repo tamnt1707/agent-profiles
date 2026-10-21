@@ -433,14 +433,22 @@ public struct Store {
         let renamedFrom = previous.flatMap { $0.slug == profile.slug ? nil : $0.slug }
         let secret = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // A key that is needed but neither typed nor stored is refused before the
+        // rename, so a rejected save moves nothing. After a rename the key sits
+        // under the new name, which holds whatever the old name held.
+        if profile.auth != .none, secret.isEmpty {
+            var hasKey = try keys.hasKey(profile.slug)
+            if let renamedFrom, !hasKey {
+                hasKey = try keys.hasKey(renamedFrom)
+            }
+            guard hasKey else { throw ProfileError.missingAPIKey }
+        }
+
         // 2. The rename, the launcher and the key.
         var record: RenameRecord?
         do {
             if let renamedFrom {
                 record = try performRename(from: renamedFrom, to: profile.slug, ownsOldLauncher: previous != nil)
-            }
-            if profile.auth != .none, secret.isEmpty, !(try keys.hasKey(profile.slug)) {
-                throw ProfileError.missingAPIKey
             }
             try materialize(profile, strings: strings)
             if profile.auth == .none {
