@@ -595,6 +595,8 @@ final class AppModel {
 
     /// The update itself: download, check, replace and quit.
     private func startUpdate() {
+        // A second tap while a download runs must not cancel the first one.
+        guard !updater.isBusy else { return }
         updateTask?.cancel()
         updateTask = Task { [weak self] in
             await self?.runUpdate()

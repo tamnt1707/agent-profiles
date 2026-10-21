@@ -4,3 +4,4 @@ build/
 .omc/
 .superpowers/
 /target
+.claude/
