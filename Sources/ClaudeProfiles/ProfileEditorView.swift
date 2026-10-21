@@ -279,13 +279,21 @@ struct ProfileEditorView: View {
 
             Spacer()
 
-            Button(model.loc.t("actions.reveal")) { model.revealFolder() }
+            Button {
+                model.revealFolder()
+            } label: {
+                Label(model.loc.t("actions.reveal"), systemImage: "folder")
+                    .labelStyle(.iconOnly)
+            }
+            .help(model.loc.t("actions.reveal"))
 
             Button(role: .destructive) {
                 model.requestDelete()
             } label: {
                 Label(model.loc.t("actions.delete"), systemImage: "trash")
+                    .labelStyle(.iconOnly)
             }
+            .help(model.loc.t("actions.delete"))
             .disabled(model.draftIndex == nil)
         }
         .padding(.horizontal, 12)
