@@ -306,6 +306,7 @@ final class ConnectionProbeTests: XCTestCase {
 
     func testRateLimitedIsAWarningAndOKIsSuccess() {
         XCTAssertEqual(ProbeOutcome.rateLimited.severity, .warning)
+        XCTAssertEqual(ProbeOutcome.unsupported.severity, .warning)
         XCTAssertEqual(ProbeOutcome.ok(latencyMs: 1, model: nil).severity, .success)
         XCTAssertEqual(ProbeOutcome.insecureURL.severity, .error)
     }

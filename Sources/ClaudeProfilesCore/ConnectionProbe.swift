@@ -51,7 +51,7 @@ public enum ProbeOutcome: Equatable, Sendable {
     public var severity: ProbeSeverity {
         switch self {
         case .ok: return .success
-        case .rateLimited: return .warning
+        case .rateLimited, .unsupported: return .warning
         default: return .error
         }
     }
