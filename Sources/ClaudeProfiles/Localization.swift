@@ -106,7 +106,8 @@ final class Loc {
         ScriptStrings(
             headerTemplate: t("script.header"),
             unsetComment: t("script.unset"),
-            missingKeyTemplate: t("script.missingKey")
+            missingKeyTemplate: t("script.missingKey"),
+            accessDeniedTemplate: t("script.accessDenied")
         )
     }
 }

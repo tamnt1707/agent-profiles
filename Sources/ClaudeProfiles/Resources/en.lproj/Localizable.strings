@@ -108,6 +108,10 @@
 "update.unsaved.message" = "The profile editor holds changes that are not saved. They would be lost when the app is replaced.";
 "update.unsaved.save" = "Save and update";
 "update.unsaved.discard" = "Discard and update";
+"unsaved.switch.title" = "Save the changes first?";
+"unsaved.switch.message" = "The changes to this profile are not saved yet. Save them, discard them, or stay on this profile.";
+"unsaved.switch.save" = "Save";
+"unsaved.switch.discard" = "Discard";
 "status.updateChecking" = "Checking for updates…";
 "status.updateUpToDate" = "You are using the latest version (%@).";
 "status.updateAvailable" = "Version %@ is available.";

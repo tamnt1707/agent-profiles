@@ -108,6 +108,10 @@
 "update.unsaved.message" = "Trình chỉnh sửa profile đang có thay đổi chưa lưu. Chúng sẽ mất khi ứng dụng được thay thế.";
 "update.unsaved.save" = "Lưu và cập nhật";
 "update.unsaved.discard" = "Bỏ qua và cập nhật";
+"unsaved.switch.title" = "Lưu thay đổi trước?";
+"unsaved.switch.message" = "Các thay đổi của profile này chưa được lưu. Hãy lưu, bỏ đi, hoặc ở lại profile này.";
+"unsaved.switch.save" = "Lưu";
+"unsaved.switch.discard" = "Bỏ thay đổi";
 "status.updateChecking" = "Đang kiểm tra cập nhật…";
 "status.updateUpToDate" = "Bạn đang dùng phiên bản mới nhất (%@).";
 "status.updateAvailable" = "Đã có phiên bản %@.";

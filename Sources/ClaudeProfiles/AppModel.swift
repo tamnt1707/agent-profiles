@@ -59,6 +59,29 @@ final class AppModel {
     /// Set while the question about the unsaved changes is open.
     var isConfirmingUpdate: Bool = false
 
+    /// A switch to another profile (or to a new one) that waits for the
+    /// answer to the question about the unsaved changes.
+    enum PendingSwitch: Equatable {
+        case profile(String)
+        case newProfile
+    }
+
+    /// The answers to the question about the unsaved changes.
+    enum SwitchChoice {
+        case save
+        case discard
+        case cancel
+    }
+
+    /// The switch that waits for the answer, `nil` when nothing is pending.
+    private(set) var pendingSwitch: PendingSwitch?
+
+    /// Set while the question about switching the profile is open.
+    var isConfirmingSwitch: Bool = false
+
+    /// Why `profiles.json` could not be read. Shown until a save succeeds.
+    private(set) var loadWarning: ProfileError?
+
     /// The task of the running update, so it can be stopped.
     private var updateTask: Task<Void, Never>?
 
@@ -77,6 +100,7 @@ final class AppModel {
         data = loaded.data
         loc.language = loaded.data.language
         applyAppearance()
+        loadWarning = loaded.warning
         if let warning = loaded.warning {
             status = Status(kind: .failure, text: warning.localizedMessage(loc))
         }
@@ -87,6 +111,14 @@ final class AppModel {
             draftIndex = nil
             selectedSlug = nil
         }
+    }
+
+    /// The warning about `profiles.json` while it is still unread. Automatic
+    /// saves are refused in this state, so the warning stays until a profile
+    /// is saved explicitly.
+    var unreadDataWarning: String? {
+        guard store.loadFailed, let loadWarning else { return nil }
+        return loadWarning.localizedMessage(loc)
     }
 
     // MARK: - Selection and editing
@@ -100,19 +132,81 @@ final class AppModel {
         command = CommandNameDraft(profile: profile)
         keyInput = ""
         revealKey = false
-        hasStoredKey = (try? store.keys.get(profile.slug)) != nil
+        hasStoredKey = (try? store.keys.hasKey(profile.slug)) ?? false
         isConfirmingDelete = false
+    }
+
+    /// The sidebar selection changed. The user may switch to another profile
+    /// only after the unsaved changes are answered.
+    func sidebarSelectionChanged(to slug: String?) {
+        let editing = currentProfile?.slug
+        guard slug != editing else { return }
+        guard let slug, let profile = data.profiles.first(where: { $0.slug == slug }) else {
+            // Nothing to show: the row of the edited profile is highlighted again.
+            selectedSlug = editing
+            return
+        }
+        guard hasUnsavedChanges else {
+            select(profile)
+            return
+        }
+        pendingSwitch = .profile(profile.slug)
+        isConfirmingSwitch = true
+    }
+
+    /// The "+" button: a new profile, after the unsaved changes are answered.
+    func requestNewProfile() {
+        guard hasUnsavedChanges else {
+            newProfile()
+            return
+        }
+        pendingSwitch = .newProfile
+        isConfirmingSwitch = true
+    }
+
+    /// Carries out the answer to the question about the unsaved changes.
+    func resolveSwitch(_ choice: SwitchChoice) {
+        isConfirmingSwitch = false
+        guard let pending = pendingSwitch else { return }
+        pendingSwitch = nil
+        switch choice {
+        case .cancel:
+            selectedSlug = currentProfile?.slug
+        case .save:
+            guard save() else {
+                // The save failed: stay on the edited profile, the status says why.
+                selectedSlug = currentProfile?.slug
+                return
+            }
+            perform(pending)
+        case .discard:
+            perform(pending)
+        }
+    }
+
+    private func perform(_ pending: PendingSwitch) {
+        switch pending {
+        case .newProfile:
+            newProfile()
+        case .profile(let slug):
+            if let profile = data.profiles.first(where: { $0.slug == slug }) {
+                select(profile)
+            } else {
+                selectedSlug = currentProfile?.slug
+            }
+        }
     }
 
     /// Starts a new, empty profile.
     func newProfile() {
-        draft = Profile(isolate: true, shareFromDefault: true)
+        draft = DraftChanges.blankProfile
         draftIndex = nil
         command = CommandNameDraft()
         keyInput = ""
         revealKey = false
         hasStoredKey = false
         isConfirmingDelete = false
+        selectedSlug = nil
     }
 
     /// Applies a provider template. Only used while creating a profile.
@@ -152,9 +246,12 @@ final class AppModel {
     /// `true` when the editor holds changes that are not saved yet.
     var hasUnsavedChanges: Bool {
         guard let draft else { return false }
-        if !keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
-        guard let index = draftIndex, data.profiles.indices.contains(index) else { return true }
-        return data.profiles[index] != draft
+        return DraftChanges.hasChanges(
+            draft: draft,
+            command: command,
+            saved: currentProfile,
+            typedKey: keyInput
+        )
     }
 
     // MARK: - The command name
@@ -221,7 +318,7 @@ final class AppModel {
             self.draft = draft
             command = CommandNameDraft(profile: draft)
             keyInput = ""
-            hasStoredKey = (try? store.keys.get(draft.slug)) != nil
+            hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
 
             do {
                 try store.save(data)
@@ -230,6 +327,8 @@ final class AppModel {
                 return false
             }
 
+            // An explicit save is the user's answer to the unreadable file.
+            loadWarning = nil
             status = Status(kind: .success, text: loc.t("status.saved", store.paths.command(for: draft.slug)))
             return true
         } catch {
@@ -244,11 +343,16 @@ final class AppModel {
     func openTerminal() {
         guard save() else { return }
         guard let draft else { return }
-        do {
-            try Launcher.launch(profile: draft, terminal: data.terminal, paths: store.paths)
-            status = Status(kind: .success, text: loc.t("status.launched", data.terminal.rawValue, draft.name))
-        } catch {
-            report(error)
+        let terminal = data.terminal
+        let paths = store.paths
+        // The terminal is started off the main thread, so the window keeps responding.
+        Task {
+            do {
+                try await Launcher.launchInBackground(profile: draft, terminal: terminal, paths: paths)
+                status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, draft.name))
+            } catch {
+                report(error)
+            }
         }
     }
 
@@ -256,7 +360,15 @@ final class AppModel {
     /// edited is used, not the one of the saved profile.
     func copyCommand() {
         guard let draft else { return }
-        let slug = command.slug.isEmpty ? draft.slug : command.slug
+        copyToPasteboard(command.slug.isEmpty ? draft.slug : command.slug)
+    }
+
+    /// Copies the command of a profile in the sidebar, the one that was clicked.
+    func copyCommand(for profile: Profile) {
+        copyToPasteboard(profile.slug)
+    }
+
+    private func copyToPasteboard(_ slug: String) {
         let text = store.paths.command(for: slug)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -270,28 +382,27 @@ final class AppModel {
     }
 
     /// The message of the delete confirmation. It names everything that goes
-    /// away, so nothing is deleted by surprise.
+    /// away, taken from the SAVED profile: a command name typed but not saved
+    /// is not what gets deleted.
     var deleteDialogMessage: String {
-        let profile = draft
-        let slug = profile?.slug ?? ""
-        let items = [
-            loc.t("delete.item.key"),
-            loc.t("delete.item.command", store.paths.command(for: slug)),
-            deleteFolderItem(for: slug),
-        ]
-        let list = items.map { "• \($0)" }.joined(separator: "\n")
-        return loc.t("delete.dialog.intro", profile?.name ?? "")
+        guard let target = DeleteTarget(index: draftIndex, in: data, paths: store.paths) else { return "" }
+        let list = target.items.map { "• " + deleteItemText($0) }.joined(separator: "\n")
+        return loc.t("delete.dialog.intro", target.name)
             + "\n\n" + list + "\n\n" + loc.t("delete.dialog.warning")
     }
 
-    /// The folder of a profile with its size, when that is cheap to compute.
-    private func deleteFolderItem(for slug: String) -> String {
-        let path = store.paths.home(for: slug).path
-        guard let bytes = DirectorySize.measure(at: store.paths.home(for: slug)) else {
-            return loc.t("delete.item.folder", path)
+    /// One line of the delete confirmation, in the language of the user.
+    private func deleteItemText(_ item: DeleteTarget.Item) -> String {
+        switch item {
+        case .key:
+            return loc.t("delete.item.key")
+        case .command(let name):
+            return loc.t("delete.item.command", name)
+        case .folder(let path, let bytes):
+            guard let bytes else { return loc.t("delete.item.folder", path) }
+            let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+            return loc.t("delete.item.folderSize", path, size)
         }
-        let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-        return loc.t("delete.item.folderSize", path, size)
     }
 
     /// Removes the profile: the key, the command and the config folder go away.
@@ -377,6 +488,17 @@ final class AppModel {
         NSWorkspace.shared.activateFileViewerSelecting([store.paths.root])
     }
 
+    /// Shows the config folder of a profile in Finder, the one of the clicked
+    /// row. A profile without a folder shows the folder of all profiles.
+    func revealFolder(for profile: Profile) {
+        let home = store.paths.home(for: profile.slug)
+        guard FileManager.default.fileExists(atPath: home.path) else {
+            revealFolder()
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([home])
+    }
+
     // MARK: - Updates
 
     /// The version of the app as it is shown to the user.
@@ -426,7 +548,8 @@ final class AppModel {
         do {
             let result = try await updater.check(silent: !manual)
             data.lastUpdateCheck = Date()
-            persistSettings()
+            // The automatic check does not replace the status with a save error.
+            persistSettings(quietly: !manual)
             switch result {
             case .upToDate:
                 if manual {
@@ -560,11 +683,15 @@ final class AppModel {
         }
     }
 
-    private func persistSettings() {
+    /// Writes `profiles.json`. While the file is unreadable the write is refused
+    /// by the store, and the refusal is shown unless `quietly` is set.
+    private func persistSettings(quietly: Bool = false) {
         do {
             try store.save(data)
         } catch {
-            report(error)
+            if !quietly {
+                report(error)
+            }
         }
     }
 
@@ -588,6 +715,8 @@ final class AppModel {
     private func report(_ error: Error) {
         if let profileError = error as? ProfileError {
             status = Status(kind: .failure, text: profileError.localizedMessage(loc))
+        } else if let storeError = error as? StoreError {
+            status = Status(kind: .failure, text: storeError.localizedMessage(loc))
         } else if let updateError = error as? UpdateError {
             status = Status(kind: .failure, text: updateError.localizedMessage(loc))
         } else {
@@ -631,6 +760,21 @@ extension ProfileError {
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
             return loc.t("error.unsafeDeletePath", path)
+        }
+    }
+}
+
+/// Turns a store error into a sentence in the language of the user.
+@MainActor
+extension StoreError {
+    func localizedMessage(_ loc: Loc) -> String {
+        switch self {
+        case .dataFileNotLoaded:
+            return loc.t("error.dataNotLoaded")
+        case .unsafeSlug:
+            return loc.t("error.unsafeSlug")
+        case .targetHomeExists:
+            return loc.t("error.targetHomeExists")
         }
     }
 }

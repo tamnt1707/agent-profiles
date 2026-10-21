@@ -133,6 +133,9 @@ struct ProfileEditorView: View {
                             .labelsHidden()
                             .textFieldStyle(.plain)
                             .font(.system(.body, design: .monospaced))
+                            // Left aligned, so the text and its placeholder start right after "claude-".
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.trailing, 6)
                     }
                     .padding(.vertical, 5)
