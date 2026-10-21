@@ -219,12 +219,12 @@
 "editor.test.button" = "Kiểm tra kết nối";
 "editor.test.help" = "Gửi một yêu cầu rất nhỏ (khoảng 1 token) tới Base URL bằng key này để kiểm tra kết nối.";
 "editor.test.running" = "Đang kiểm tra…";
-"editor.models.fetch" = "Lấy danh sách model";
 "editor.models.fetching" = "Đang lấy…";
-"editor.models.fetchHelp" = "Hỏi nhà cung cấp danh sách model, rồi cho bạn chọn một model.";
-"editor.models.pickTitle" = "Chọn model";
-"editor.models.search" = "Tìm model";
-"editor.models.noMatch" = "Không có model nào khớp.";
+"editor.models.choose" = "Chọn từ danh sách model của nhà cung cấp";
+"editor.models.refresh" = "Tải lại";
+"editor.models.noList" = "Nhà cung cấp này không có danh sách model; hãy gõ tên model bằng tay.";
+"editor.models.needKey" = "Nhập API key để tải danh sách model.";
+"editor.models.more" = "Còn nhiều model khác khớp. Hãy gõ thêm để thu hẹp danh sách.";
 "probe.ok" = "Đã kết nối, %d ms";
 "probe.ok.model" = "Đã kết nối, %d ms (model %@)";
 "probe.providerSaid" = "Nhà cung cấp báo: %@";

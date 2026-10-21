@@ -219,12 +219,12 @@
 "editor.test.button" = "Test connection";
 "editor.test.help" = "Sends one tiny request (about 1 token) to the Base URL with this key, to check that it works.";
 "editor.test.running" = "Testing…";
-"editor.models.fetch" = "Fetch models";
 "editor.models.fetching" = "Fetching…";
-"editor.models.fetchHelp" = "Asks the provider for its model list, then lets you pick one.";
-"editor.models.pickTitle" = "Pick a model";
-"editor.models.search" = "Search models";
-"editor.models.noMatch" = "No model matches.";
+"editor.models.choose" = "Choose from the provider's models";
+"editor.models.refresh" = "Refresh";
+"editor.models.noList" = "This provider does not offer a model list; type the name by hand.";
+"editor.models.needKey" = "Enter the API key to load the list.";
+"editor.models.more" = "More models match. Type more of the name to narrow the list.";
 "probe.ok" = "Connected, %d ms";
 "probe.ok.model" = "Connected, %d ms (model %@)";
 "probe.providerSaid" = "The provider said: %@";

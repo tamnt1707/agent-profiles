@@ -198,24 +198,13 @@ struct ProfileEditorView: View {
 
     private var modelsSection: some View {
         Section(model.loc.t("editor.models.section")) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    TextField(model.loc.t("editor.model.label"), text: text(\.model), prompt: Text(model.loc.t("editor.model.hint")))
-                        .textFieldStyle(.roundedBorder)
-                    Button(model.isFetchingModels ? model.loc.t("editor.models.fetching") : model.loc.t("editor.models.fetch")) {
-                        model.fetchModels()
-                    }
-                    .disabled(model.isFetchingModels)
-                    .help(model.loc.t("editor.models.fetchHelp"))
-                    .popover(isPresented: $model.isShowingModelPicker, arrowEdge: .trailing) {
-                        ModelPickerView(loc: model.loc, models: model.modelListReport?.models ?? []) { id in
-                            model.useFetchedModel(id)
-                        }
-                    }
-                }
-                if let report = model.modelListReport, !isOK(report.outcome) {
-                    ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
-                }
+            LabeledContent(model.loc.t("editor.model.label")) {
+                ModelComboField(
+                    model: model,
+                    title: model.loc.t("editor.model.label"),
+                    prompt: model.loc.t("editor.model.hint"),
+                    text: text(\.model)
+                )
             }
 
             DisclosureGroup(model.loc.t("editor.models.disclosure")) {
@@ -224,16 +213,13 @@ struct ProfileEditorView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     LabeledContent(model.loc.t("editor.model.opus")) {
-                        TextField("", text: text(\.opusModel))
-                            .textFieldStyle(.roundedBorder)
+                        ModelComboField(model: model, title: model.loc.t("editor.model.opus"), text: text(\.opusModel))
                     }
                     LabeledContent(model.loc.t("editor.model.sonnet")) {
-                        TextField("", text: text(\.sonnetModel))
-                            .textFieldStyle(.roundedBorder)
+                        ModelComboField(model: model, title: model.loc.t("editor.model.sonnet"), text: text(\.sonnetModel))
                     }
                     LabeledContent(model.loc.t("editor.model.haiku")) {
-                        TextField("", text: text(\.haikuModel))
-                            .textFieldStyle(.roundedBorder)
+                        ModelComboField(model: model, title: model.loc.t("editor.model.haiku"), text: text(\.haikuModel))
                     }
                 }
                 .padding(.vertical, 4)
@@ -342,11 +328,6 @@ struct ProfileEditorView: View {
     private var isolationPath: String {
         let slug = model.command.slug.isEmpty ? (model.draft?.slug ?? "") : model.command.slug
         return model.store.paths.home(for: slug).path
-    }
-
-    private func isOK(_ outcome: ProbeOutcome) -> Bool {
-        if case .ok = outcome { return true }
-        return false
     }
 
     private func authLabel(_ kind: AuthKind) -> String {

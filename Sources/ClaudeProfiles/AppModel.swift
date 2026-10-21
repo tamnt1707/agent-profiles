@@ -89,7 +89,7 @@ final class AppModel {
 
     /// The request of "Test connection" that runs, if any.
     private var connectionTask: Task<Void, Never>?
-    /// The request of "Fetch models" that runs, if any.
+    /// The request that loads the model list of the dropdowns, if any.
     private var modelListTask: Task<Void, Never>?
     /// Tells the finished check from the one that replaced it or was stopped.
     private var connectionToken = UUID()
@@ -101,12 +101,10 @@ final class AppModel {
     private(set) var connectionReport: ProbeReport?
     /// `true` while the test request is on its way: the button is disabled.
     private(set) var isTestingConnection = false
-    /// The result of "Fetch models". Its models fill the picker when it worked.
-    private(set) var modelListReport: ModelListReport?
+    /// The last model list request. Shared by every model field of the profile.
+    private(set) var modelListCache: ModelListCache?
     /// `true` while the model list is being fetched.
     private(set) var isFetchingModels = false
-    /// Set while the list of fetched models is open.
-    var isShowingModelPicker = false
 
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
@@ -630,36 +628,40 @@ final class AppModel {
         }
     }
 
-    /// Reads the model list of the provider. The picker opens when it worked.
-    func fetchModels() {
+    /// The model list of the provider of the draft, when one is cached for its
+    /// Base URL and auth kind. A changed Base URL or auth kind finds nothing here.
+    var currentModelList: ModelListReport? {
+        guard let draft, let cache = modelListCache,
+              cache.key == ModelListCacheKey(baseURL: draft.baseURL, auth: draft.auth)
+        else { return nil }
+        return cache.report
+    }
+
+    /// Loads the model list for the dropdowns. A list cached for this provider is
+    /// reused unless `refresh` is set. Only the user's open or refresh calls this:
+    /// never typing, never the launch of the app.
+    func loadModelList(refresh: Bool = false) {
         guard let draft, !isFetchingModels else { return }
-        let key: String
+        let key = ModelListCacheKey(baseURL: draft.baseURL, auth: draft.auth)
+        if !refresh, let cache = modelListCache, cache.isReusable(for: key) { return }
+        let apiKey: String
         do {
-            key = try probeKey(for: draft)
+            apiKey = try probeKey(for: draft)
         } catch {
             report(error)
             return
         }
         isFetchingModels = true
-        modelListReport = nil
-        isShowingModelPicker = false
         let token = UUID()
         modelListToken = token
         modelListTask = Task { [weak self, probe] in
-            let result = try? await probe.fetchModels(profile: draft, key: key)
+            let result = try? await probe.fetchModels(profile: draft, key: apiKey)
             guard let self, !Task.isCancelled, self.modelListToken == token else { return }
             self.isFetchingModels = false
-            self.modelListReport = result
-            if let result, case .ok = result.outcome {
-                self.isShowingModelPicker = true
+            if let result {
+                self.modelListCache = ModelListCache(key: key, report: result)
             }
         }
-    }
-
-    /// Puts a model of the fetched list into the main model field.
-    func useFetchedModel(_ id: String) {
-        draft?.model = id
-        isShowingModelPicker = false
     }
 
     /// Stops the requests that run and forgets their results. Called when another profile opens.
@@ -673,8 +675,7 @@ final class AppModel {
         isTestingConnection = false
         isFetchingModels = false
         connectionReport = nil
-        modelListReport = nil
-        isShowingModelPicker = false
+        modelListCache = nil
     }
 
     /// The key of a request. The Keychain is read only now, at the click, and the
