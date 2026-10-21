@@ -50,6 +50,17 @@ struct SettingsView: View {
                     Text(model.currentVersionText)
                         .monospacedDigit()
                 }
+                // The repository is only known when the updater may run, so the
+                // row appears together with the button that uses it.
+                if model.updater.isEnabled {
+                    LabeledContent(model.loc.t("settings.updates.repository")) {
+                        Text(model.updateRepositoryText)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
                 LabeledContent(model.loc.t("settings.updates.lastChecked")) {
                     Text(model.lastCheckedText)
                 }

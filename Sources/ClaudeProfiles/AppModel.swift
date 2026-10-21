@@ -394,6 +394,12 @@ final class AppModel {
         return formatter.string(from: last)
     }
 
+    /// The repository the new versions are taken from, when the build knows it.
+    var updateRepositoryText: String {
+        let repo = updater.configuration.repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        return repo.isEmpty ? "—" : repo
+    }
+
     /// The automatic check of the launch: once a day, and never with an error.
     func checkForUpdatesAutomatically() async {
         guard data.autoCheckUpdates, updater.isEnabled else { return }
