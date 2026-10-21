@@ -28,6 +28,41 @@ BINARY=".build/release/ClaudeProfiles"
 RESOURCE_BUNDLE=".build/release/ClaudeProfiles_ClaudeProfiles.bundle"
 ICON="Sources/ClaudeProfiles/Resources/AppIcon.icns"
 
+# The version of the app: the VERSION file is the one place where it is
+# written down. The build number is the number of commits.
+VERSION="$(tr -d '[:space:]' < VERSION)"
+BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo "$VERSION")"
+
+# The repository the app looks at for a new version. The environment variable
+# wins, even when it is empty: that is how a build without the updater is
+# made.
+RELEASE_REPO_FILE="RELEASE_REPO"
+if [[ -f "$RELEASE_REPO_FILE" ]]; then
+  UPDATE_REPO_DEFAULT="$(tr -d '[:space:]' < "$RELEASE_REPO_FILE")"
+else
+  UPDATE_REPO_DEFAULT=""
+fi
+if [[ -n "${UPDATE_REPO+x}" ]]; then
+  UPDATE_REPO="$UPDATE_REPO"
+else
+  UPDATE_REPO="$UPDATE_REPO_DEFAULT"
+fi
+
+# The public key that checks the signature of a release.
+UPDATE_PUBLIC_KEY=""
+if [[ -f "scripts/release-public-key.txt" ]]; then
+  UPDATE_PUBLIC_KEY="$(tr -d '[:space:]' < scripts/release-public-key.txt)"
+fi
+
+# The values go into the Info.plist, so they are escaped.
+xml_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
+}
+APP_VERSION="$(xml_escape "$VERSION")"
+APP_BUILD="$(xml_escape "$BUILD_NUMBER")"
+APP_UPDATE_REPO="$(xml_escape "$UPDATE_REPO")"
+APP_UPDATE_KEY="$(xml_escape "$UPDATE_PUBLIC_KEY")"
+
 if [[ $INSTALL -eq 1 ]]; then
   APP="$HOME/Applications/Claude Profiles.app"
 else
@@ -62,9 +97,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>local.claude-profiles</string>
   <key>CFBundleExecutable</key><string>ClaudeProfiles</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
+  <key>CFBundleVersion</key><string>$APP_BUILD</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>UpdateRepo</key><string>$APP_UPDATE_REPO</string>
+  <key>UpdatePublicKey</key><string>$APP_UPDATE_KEY</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key>
   <array>
