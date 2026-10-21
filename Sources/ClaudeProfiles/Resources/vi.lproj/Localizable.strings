@@ -129,6 +129,9 @@
 "error.io" = "Không ghi được %@";
 "error.corruptFile" = "Không đọc được profiles.json. Một bản sao đã được lưu ở %@.";
 "error.launcher" = "Không mở được %@ (osascript lỗi)";
+"error.dataNotLoaded" = "Không đọc được profiles.json trước đó nên file không bị ghi đè. Hãy lưu một profile để tiếp tục.";
+"error.unsafeSlug" = "Tên lệnh chứa ký tự không được phép.";
+"error.targetHomeExists" = "Thư mục cấu hình của tên mới đã tồn tại. Hãy xóa thư mục đó hoặc chọn tên khác.";
 "error.generic" = "Đã xảy ra lỗi.";
 
 /* Lỗi của trình cập nhật */
@@ -198,3 +201,4 @@
 "script.header" = "# Tạo bởi Claude Profiles cho profile \"%@\". File này được ghi đè mỗi lần lưu.";
 "script.unset" = "# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn";
 "script.missingKey" = "Chưa có API key cho profile %@ trong Keychain. Mở app Claude Profiles để nhập.";
+"script.accessDenied" = "Không đọc được API key của profile %@ từ Keychain. Keychain có thể đang khóa hoặc quyền truy cập bị từ chối. Hãy mở khóa, cho phép truy cập rồi thử lại.";

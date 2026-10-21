@@ -7,13 +7,18 @@ unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL 
   ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
   ANTHROPIC_SMALL_FAST_MODEL
 
-__k="$(/usr/bin/security find-generic-password -s 'claude-profiles' -a 'test' -w 2>/dev/null)"
+__k="$(/usr/bin/security find-generic-password -s 'claude-profiles' -a 'test' -w)"
+__s=$?
 if [[ -z "$__k" ]]; then
-  echo "Chưa có API key cho profile 'Test' trong Keychain. Mở app Claude Profiles để nhập." >&2
+  if [[ $__s -eq 44 || $__s -eq 0 ]]; then
+    echo "Chưa có API key cho profile 'Test' trong Keychain. Mở app Claude Profiles để nhập." >&2
+  else
+    echo "Không đọc được API key của profile 'Test' từ Keychain. Keychain có thể đang khóa hoặc quyền truy cập bị từ chối. Hãy mở khóa, cho phép truy cập rồi thử lại." >&2
+  fi
   exit 1
 fi
 export ANTHROPIC_API_KEY="$__k"
-unset __k
+unset __k __s
 
 export ANTHROPIC_BASE_URL='https://example.com/anthropic'
 export ANTHROPIC_MODEL='m-1'

@@ -10,23 +10,34 @@ public struct ScriptStrings: Equatable, Sendable {
     public var unsetComment: String
     /// Error printed when the Keychain holds no key. Contains one `%@` placeholder.
     public var missingKeyTemplate: String
+    /// Error printed when the Keychain could not be read (locked, access denied).
+    /// Contains one `%@` placeholder.
+    public var accessDeniedTemplate: String
 
-    public init(headerTemplate: String, unsetComment: String, missingKeyTemplate: String) {
+    public init(
+        headerTemplate: String,
+        unsetComment: String,
+        missingKeyTemplate: String,
+        accessDeniedTemplate: String = ScriptStrings.english.accessDeniedTemplate
+    ) {
         self.headerTemplate = headerTemplate
         self.unsetComment = unsetComment
         self.missingKeyTemplate = missingKeyTemplate
+        self.accessDeniedTemplate = accessDeniedTemplate
     }
 
     public static let english = ScriptStrings(
         headerTemplate: "# Created by Claude Profiles for profile \"%@\". This file is overwritten every time you save.",
         unsetComment: "# Remove leftover provider settings from the shell so profiles do not get mixed up",
-        missingKeyTemplate: "No API key for profile %@ in the Keychain. Open the Claude Profiles app to enter it."
+        missingKeyTemplate: "No API key for profile %@ in the Keychain. Open the Claude Profiles app to enter it.",
+        accessDeniedTemplate: "Could not read the API key for profile %@ from the Keychain. The Keychain may be locked or access was denied. Unlock it, allow access and try again."
     )
 
     public static let vietnamese = ScriptStrings(
         headerTemplate: "# Tạo bởi Claude Profiles cho profile \"%@\". File này được ghi đè mỗi lần lưu.",
         unsetComment: "# Bỏ cấu hình nhà cung cấp còn sót trong shell để profile không bị lẫn",
-        missingKeyTemplate: "Chưa có API key cho profile %@ trong Keychain. Mở app Claude Profiles để nhập."
+        missingKeyTemplate: "Chưa có API key cho profile %@ trong Keychain. Mở app Claude Profiles để nhập.",
+        accessDeniedTemplate: "Không đọc được API key của profile %@ từ Keychain. Keychain có thể đang khóa hoặc quyền truy cập bị từ chối. Hãy mở khóa, cho phép truy cập rồi thử lại."
     )
 }
 
@@ -61,15 +72,22 @@ public enum ScriptRenderer {
         script += "  ANTHROPIC_SMALL_FAST_MODEL\n\n"
 
         if let variable = profile.auth.envVarName {
+            // security's own error text is left visible. Its exit status tells
+            // "no such item" (44) from "could not read it" (anything else).
             script += "__k=\"$(/usr/bin/security find-generic-password -s "
             script += ShellQuote.quote(keychainService)
-            script += " -a " + ShellQuote.quote(profile.slug) + " -w 2>/dev/null)\"\n"
+            script += " -a " + ShellQuote.quote(profile.slug) + " -w)\"\n"
+            script += "__s=$?\n"
             script += "if [[ -z \"$__k\" ]]; then\n"
-            script += "  echo \"" + substitute(strings.missingKeyTemplate, quotedForMessage(profile.name)) + "\" >&2\n"
+            script += "  if [[ $__s -eq 44 || $__s -eq 0 ]]; then\n"
+            script += "    echo \"" + substitute(strings.missingKeyTemplate, quotedForMessage(profile.name)) + "\" >&2\n"
+            script += "  else\n"
+            script += "    echo \"" + substitute(strings.accessDeniedTemplate, quotedForMessage(profile.name)) + "\" >&2\n"
+            script += "  fi\n"
             script += "  exit 1\n"
             script += "fi\n"
             script += "export \(variable)=\"$__k\"\n"
-            script += "unset __k\n\n"
+            script += "unset __k __s\n\n"
         }
 
         func export(_ key: String, _ value: String) {
@@ -101,7 +119,11 @@ public enum ScriptRenderer {
     }
 
     /// `true` when the file at the path is a launcher written by this app.
+    ///
+    /// A symbolic link is never a launcher of this app here: the text is not
+    /// read through it, so a link cannot make a foreign file look managed.
     public static func isManagedLauncher(at url: URL) -> Bool {
+        guard SafeFileSystem.kind(of: url) == .file else { return false }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return false }
         return isManagedLauncher(text)
     }

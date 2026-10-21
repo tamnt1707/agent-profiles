@@ -129,6 +129,9 @@
 "error.io" = "Could not write %@.";
 "error.corruptFile" = "profiles.json could not be read. A copy was saved to %@.";
 "error.launcher" = "Could not open %@ (osascript failed).";
+"error.dataNotLoaded" = "profiles.json could not be read earlier, so it is not overwritten. Save a profile to continue.";
+"error.unsafeSlug" = "The command name contains characters that are not allowed.";
+"error.targetHomeExists" = "The config folder of the new name already exists. Remove it or choose another name.";
 "error.generic" = "Something went wrong.";
 
 /* Errors of the updater */
@@ -198,3 +201,4 @@
 "script.header" = "# Created by Claude Profiles for profile \"%@\". This file is overwritten every time you save.";
 "script.unset" = "# Remove leftover provider settings from the shell so profiles do not get mixed up";
 "script.missingKey" = "No API key for profile %@ in the Keychain. Open the Claude Profiles app to enter it.";
+"script.accessDenied" = "Could not read the API key for profile %@ from the Keychain. The Keychain may be locked or access was denied. Unlock it, allow access and try again.";

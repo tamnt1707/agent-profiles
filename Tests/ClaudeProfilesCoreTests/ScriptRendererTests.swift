@@ -115,13 +115,15 @@ final class ScriptRendererTests: XCTestCase {
         let benign = try ScriptRenderer.render(profile: Profile.sample(), paths: paths)
         XCTAssertEqual(script.split(separator: "\n").count, benign.split(separator: "\n").count)
 
-        // The error message is one closed double quoted string.
-        let messageLines = script.split(separator: "\n").filter { $0.contains("echo \"") }
-        XCTAssertEqual(messageLines.count, 1)
-        if let line = messageLines.first {
-            XCTAssertTrue(line.hasPrefix("  echo \""))
+        // Each error message is one closed double quoted string (missing key and access denied).
+        let messageLines = script.split(separator: "\n").filter {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("echo \"")
+        }
+        XCTAssertEqual(messageLines.count, 2)
+        for line in messageLines {
+            XCTAssertTrue(line.hasPrefix("    echo \""))
             XCTAssertTrue(line.hasSuffix("\" >&2"))
-            let inner = unescaped(String(line.dropFirst("  echo \"".count).dropLast("\" >&2".count)))
+            let inner = unescaped(String(line.dropFirst("    echo \"".count).dropLast("\" >&2".count)))
             XCTAssertFalse(inner.contains("\""), "the message must not contain a raw quote")
             XCTAssertFalse(inner.contains("$("), "the message must not contain a command substitution")
             XCTAssertFalse(inner.contains("`"), "the message must not contain a backtick")
