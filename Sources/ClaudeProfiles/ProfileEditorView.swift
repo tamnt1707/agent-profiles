@@ -294,7 +294,7 @@ struct ProfileEditorView: View {
         // The files that could not be read are counted, never named.
         let skipped = skippedFiles(of: result)
         if skipped > 0 {
-            Text(model.loc.t("editor.usage.skippedFiles", skipped))
+            Text(model.loc.count("editor.usage.skippedFiles", skipped))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

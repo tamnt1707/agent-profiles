@@ -105,10 +105,35 @@ final class Loc {
     }
 
     /// The text of a key with `%@` / `%d` placeholders filled in.
+    ///
+    /// The arguments are filled in by kind, so a whole number that reaches a
+    /// `%@` becomes its text instead of being read as a pointer. A sentence can
+    /// therefore never crash the app because of a wrong placeholder.
     func t(_ key: String, _ arguments: CVarArg...) -> String {
         let template = t(key)
         guard !arguments.isEmpty else { return template }
-        return String(format: template, arguments: arguments)
+        return TemplateFormat.fill(template, arguments.map { $0 as Any })
+    }
+
+    /// The text of a key with one whole number in it.
+    ///
+    /// The key must hold only whole-number placeholders. A test checks that it
+    /// does, so a number can never be read as a pointer.
+    func count(_ key: String, _ n: Int) -> String {
+        TemplateFormat.fill(t(key), [n])
+    }
+
+    /// The text of a key with a whole number and a text in it.
+    ///
+    /// The number comes first, the text second: the order of the placeholders
+    /// of the key.
+    func count(_ key: String, _ n: Int, _ text: String) -> String {
+        TemplateFormat.fill(t(key), [n, text])
+    }
+
+    /// The text of a key with two whole numbers in it.
+    func count(_ key: String, _ done: Int, _ total: Int) -> String {
+        TemplateFormat.fill(t(key), [done, total])
     }
 
     /// The sentences that end up inside the launcher scripts.

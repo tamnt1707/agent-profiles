@@ -1561,9 +1561,9 @@ extension ProfileError {
         case .invalidBaseURL:
             return loc.t("error.invalidBaseURL")
         case .envMissingEquals(let line, let text):
-            return loc.t("error.envMissingEquals", line, text)
+            return loc.count("error.envMissingEquals", line, text)
         case .invalidEnvName(let line, let name):
-            return loc.t("error.invalidEnvName", line, name)
+            return loc.count("error.invalidEnvName", line, name)
         case .missingAPIKey:
             return loc.t("error.missingAPIKey")
         case .keychainReadFailed:
@@ -1627,7 +1627,7 @@ extension UpdateError {
         case .invalidResponse:
             return loc.t("error.update.invalidResponse")
         case .httpError(let code):
-            return loc.t("error.update.httpError", code)
+            return loc.count("error.update.httpError", code)
         case .downloadFailed:
             return loc.t("error.update.downloadFailed")
         case .fileTooLarge:

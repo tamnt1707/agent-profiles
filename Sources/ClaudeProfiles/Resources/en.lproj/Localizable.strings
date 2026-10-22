@@ -276,7 +276,7 @@
 "editor.usage.notIsolated" = "Usage needs a separate configuration space. Turn on \"Give this profile its own Claude configuration\" and save the profile to count its usage.";
 "editor.usage.noFolder" = "No usage yet: the configuration folder of this profile does not exist.";
 "editor.usage.notLoaded" = "Press Refresh to count this profile's usage.";
-"editor.usage.skippedFiles" = "%@ files could not be read.";
+"editor.usage.skippedFiles" = "%d files could not be read.";
 "editor.usage.cost" = "Upper estimate, all time (cache counted as input): %@";
 "editor.usage.prices" = "Price per million tokens";
 "editor.usage.priceInput" = "Input (USD)";

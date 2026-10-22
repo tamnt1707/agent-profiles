@@ -2,6 +2,67 @@ import Foundation
 import XCTest
 @testable import ClaudeProfilesCore
 
+/// The places of the package on disk, derived from the location of a test file.
+///
+/// The tests read the sources and the string tables straight from the package,
+/// so they check what is really shipped and not a copy of it.
+enum PackageLayout {
+    /// The root of the package.
+    static var root: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // ClaudeProfilesCoreTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // package root
+    }
+
+    /// A file or a folder of the package.
+    static func url(_ path: String) -> URL {
+        root.appendingPathComponent(path)
+    }
+
+    /// The string table of one language.
+    static func stringTable(_ language: String) throws -> [String: String] {
+        let url = url("Sources/ClaudeProfiles/Resources")
+            .appendingPathComponent("\(language).lproj")
+            .appendingPathComponent("Localizable.strings")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "missing \(url.path)")
+        guard let contents = NSDictionary(contentsOfFile: url.path) as? [String: String] else {
+            XCTFail("\(url.path) is not a valid strings file")
+            return [:]
+        }
+        return contents
+    }
+
+    /// Every Swift file of the package.
+    static func swiftFiles() -> [URL] {
+        swiftFiles(in: url("Sources"))
+    }
+
+    /// Every Swift file of a folder of the package.
+    static func swiftFiles(in directory: URL) -> [URL] {
+        var found: [URL] = []
+        let items = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for item in items {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory) else { continue }
+            if isDirectory.boolValue {
+                found += swiftFiles(in: item)
+            } else if item.pathExtension == "swift" {
+                found.append(item)
+            }
+        }
+        return found
+    }
+
+    /// The text of a file of the package.
+    static func text(of url: URL) -> String {
+        (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+}
+
 /// A temporary directory that is removed when the test finishes.
 final class TempDirectory {
     let url: URL

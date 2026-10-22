@@ -12,13 +12,13 @@ extension Loc {
         case .connected(let minutes):
             if minutes == 0 { return t("sidebar.health.connectedNow") }
             if minutes == 1 { return t("sidebar.health.connectedOne") }
-            return t("sidebar.health.connectedMany", minutes)
+            return count("sidebar.health.connectedMany", minutes)
         case .notTested:
             return t("sidebar.health.notTested")
         case .keychainUnreadable:
             return t("sidebar.health.keychainUnreadable")
         case .staleTest(let minutes):
-            return t("sidebar.health.stale", minutes)
+            return count("sidebar.health.stale", minutes)
         case .testWarning(let outcome):
             return t("sidebar.health.warning", probeText(outcome))
         case .testFailed(let outcome):
@@ -84,7 +84,7 @@ struct CheckAllBar: View {
             if let progress = model.healthProgress {
                 ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
                     .controlSize(.small)
-                Text(model.loc.t("sidebar.checkAll.progress", progress.done, progress.total))
+                Text(model.loc.count("sidebar.checkAll.progress", progress.done, progress.total))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                 Spacer(minLength: 4)
