@@ -803,30 +803,38 @@ final class UsageScannerTests: XCTestCase {
     /// A link that takes the place of a folder after the listing is not walked
     /// into.
     ///
-    /// The folder is opened with `O_NOFOLLOW`, so the link is refused and the
-    /// files behind it are never listed.
+    /// The folders are opened with `O_NOFOLLOW`, so a folder that is a link is
+    /// refused: the files behind it are never listed and never read.
+    ///
+    /// The folder is replaced by a link right before it is listed, so the walk
+    /// comes to a link and not to a folder.
     func testALinkThatTakesThePlaceOfAFolderAfterTheListingIsNotWalkedInto() async throws {
         try session([reply(id: "a", request: "r1", input: 1)], name: "one.jsonl")
-        // The folder behind the link: it holds files that must not be counted.
+        // The folder behind the link: it holds a file that must not be counted.
         let outside = paths.root.appendingPathComponent("outside", isDirectory: true)
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         try (reply(id: "b", request: "r2", input: 999) + "\n")
             .write(to: outside.appendingPathComponent("two.jsonl"), atomically: false, encoding: .utf8)
 
+        // A second folder of the profile, with a file of its own.
         let project = paths.home(for: "work").appendingPathComponent("projects/-proj-b", isDirectory: true)
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try (reply(id: "c", request: "r3", input: 5) + "\n")
+            .write(to: project.appendingPathComponent("three.jsonl"), atomically: false, encoding: .utf8)
 
         let scanner = UsageScanner(paths: paths, lister: { folder in
-            let names = try UsageScanner.childrenOfFolder(folder)
-            // The folder is replaced by a link right after it was listed.
             if folder.lastPathComponent == "-proj-b" {
+                // The folder is replaced by a link right before it is listed.
                 try? FileManager.default.removeItem(at: folder)
                 try FileManager.default.createSymbolicLink(at: folder, withDestinationURL: outside)
             }
-            return names
+            return try UsageScanner.childrenOfFolder(folder)
         })
         let result = try await scanner.usage(for: profile(), now: noon, calendar: utc())
 
+        // Only the file of the folder that was not touched is counted: the file
+        // behind the link is never read, and the file of the folder that was
+        // replaced is gone with it.
         XCTAssertEqual(summary(result).allTime.input, 1, "the files behind the link were read")
         XCTAssertEqual(skippedFiles(result), 0)
     }
