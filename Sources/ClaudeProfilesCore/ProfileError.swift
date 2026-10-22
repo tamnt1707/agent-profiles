@@ -38,6 +38,8 @@ public enum ProfileError: LocalizedError, Equatable {
     /// The folder holds a control character. A terminal would act on it before
     /// the shell reads the quotes, so the folder is refused.
     case unsafeFolder(String)
+    /// A price per million tokens is not a finite number of zero or more.
+    case invalidPrice
 
     public var errorDescription: String? {
         switch self {
@@ -58,6 +60,7 @@ public enum ProfileError: LocalizedError, Equatable {
         case .launcherFailed(let message): return "could not open terminal: \(message)"
         case .unsafeDeletePath(let path): return "refusing to delete an unsafe path: \(path)"
         case .unsafeFolder(let path): return "refusing to use an unsafe folder path: \(path)"
+        case .invalidPrice: return "price per million tokens must be a finite number of zero or more"
         }
     }
 }

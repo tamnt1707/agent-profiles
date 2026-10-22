@@ -305,6 +305,12 @@ public struct Store {
             throw ProfileError.unsafeFolder(profile.workdir)
         }
         _ = try ShellQuote.parseExtraEnv(profile.extraEnv)
+        // Prices are typed by hand: only finite, non-negative values are kept.
+        guard UsageCost.isValidPrice(profile.priceInputPerMillion),
+              UsageCost.isValidPrice(profile.priceOutputPerMillion)
+        else {
+            throw ProfileError.invalidPrice
+        }
     }
 
     // MARK: - Command name
@@ -694,6 +700,14 @@ enum JSONText {
             let item = String(repeating: " ", count: indent + 4)
             let items = profile.recentDirs.map { item + escape($0) }.joined(separator: ",\n")
             fields.append("\"recent_dirs\": [\n\(items)\n\(inner)]")
+        }
+        // The price keys are written only when set, so a profile without them is
+        // written exactly as the older app wrote it.
+        if let price = profile.priceInputPerMillion {
+            fields.append("\"price_input_per_million\": \(price)")
+        }
+        if let price = profile.priceOutputPerMillion {
+            fields.append("\"price_output_per_million\": \(price)")
         }
         var out = pad + "{\n"
         out += fields.map { inner + $0 }.joined(separator: ",\n") + "\n"

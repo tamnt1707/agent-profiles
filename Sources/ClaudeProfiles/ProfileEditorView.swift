@@ -6,11 +6,14 @@ import ClaudeProfilesCore
 struct ProfileEditorView: View {
     @Bindable var model: AppModel
     @State private var presetID = ""
+    /// The usage section is collapsed until the user opens it.
+    @State private var isUsageExpanded = false
 
     var body: some View {
         Form {
             providerSection
             modelsSection
+            usageSection
             environmentSection
             workspaceSection
             isolationSection
@@ -225,6 +228,190 @@ struct ProfileEditorView: View {
                 .padding(.vertical, 4)
             }
         }
+    }
+
+    // MARK: - Usage
+
+    /// The tokens this profile used, read from its session files. The section starts
+    /// collapsed, so nothing is read at launch: the first expand counts, Refresh counts again.
+    private var usageSection: some View {
+        Section(model.loc.t("editor.usage.section")) {
+            DisclosureGroup(model.loc.t("editor.usage.disclosure"), isExpanded: $isUsageExpanded) {
+                usageContent
+            }
+        }
+        .task(id: model.selectedSlug) {
+            if isUsageExpanded { model.loadUsageIfNeeded() }
+        }
+        .onChange(of: isUsageExpanded) { _, expanded in
+            if expanded { model.loadUsageIfNeeded() }
+        }
+    }
+
+    @ViewBuilder
+    private var usageContent: some View {
+        if model.currentProfile == nil {
+            Text(model.loc.t("editor.usage.unsaved"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if model.currentProfile?.isolate != true {
+            // The saved profile is the one that is counted, so the notice is
+            // about the saved profile and not about the draft.
+            Text(model.loc.t("editor.usage.notIsolated"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            usageRows
+        }
+    }
+
+    @ViewBuilder
+    private var usageRows: some View {
+        let slug = model.currentProfile?.slug ?? ""
+        let result = model.usageResults[slug]
+        let summary = usageSummary(of: result)
+
+        if result == .unavailable(.folderMissing) {
+            Text(model.loc.t("editor.usage.noFolder"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if result == .unavailable(.notIsolated) {
+            // The profile that was counted is not isolated: the section says
+            // why it shows no numbers.
+            Text(model.loc.t("editor.usage.notIsolated"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if result == nil && !model.isUsageLoading(slug) {
+            Text(model.loc.t("editor.usage.notLoaded"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+
+        usageRow(model.loc.t("editor.usage.today"), summary?.today)
+        usageRow(model.loc.t("editor.usage.week"), summary?.last7Days)
+        usageRow(model.loc.t("editor.usage.allTime"), summary?.allTime)
+
+        // The files that could not be read are counted, never named.
+        let skipped = skippedFiles(of: result)
+        if skipped > 0 {
+            Text(model.loc.t("editor.usage.skippedFiles", skipped))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+
+        HStack(spacing: 8) {
+            if model.isUsageLoading(slug) {
+                // The count runs until it is done or until it is stopped.
+                Button(model.loc.t("editor.usage.stop")) {
+                    model.stopUsage()
+                }
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button(model.loc.t("editor.usage.refresh")) {
+                    model.loadUsage()
+                }
+            }
+        }
+
+        if let totals = summary?.allTime,
+           let cost = UsageCost.estimate(
+               totals,
+               inputPerMillion: model.draft?.priceInputPerMillion,
+               outputPerMillion: model.draft?.priceOutputPerMillion
+           ) {
+            Text(model.loc.t("editor.usage.cost", UsageCost.format(cost, locale: model.loc.locale)))
+                .font(.callout)
+        }
+
+        DisclosureGroup(model.loc.t("editor.usage.prices")) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(model.loc.t("editor.usage.priceHelp"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                LabeledContent(model.loc.t("editor.usage.priceInput")) {
+                    TextField(model.loc.t("editor.usage.priceInput"), value: price(\.priceInputPerMillion), format: .number)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent(model.loc.t("editor.usage.priceOutput")) {
+                    TextField(model.loc.t("editor.usage.priceOutput"), value: price(\.priceOutputPerMillion), format: .number)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+
+        Text(model.loc.t("editor.usage.note"))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+
+        Text(model.loc.t("editor.usage.cacheNote"))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+    }
+
+    /// One window of the usage. The detail shows in the tooltip and is read
+    /// out by VoiceOver.
+    private func usageRow(_ title: String, _ totals: TokenTotals?) -> some View {
+        LabeledContent(title) {
+            if let totals {
+                Text(TokenFormat.compact(totals.total))
+                    .monospacedDigit()
+                    .help(usageDetail(totals))
+            } else {
+                Text("—")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(usageValue(totals))
+    }
+
+    /// The breakdown of a window, in the language of the user.
+    private func usageDetail(_ totals: TokenTotals) -> String {
+        let locale = model.loc.locale
+        return model.loc.t(
+            "editor.usage.detail",
+            TokenFormat.number(totals.input, locale: locale),
+            TokenFormat.number(totals.output, locale: locale),
+            TokenFormat.number(totals.cacheRead, locale: locale),
+            TokenFormat.number(totals.cacheWrite, locale: locale)
+        )
+    }
+
+    /// What VoiceOver reads for a window: the total and the whole breakdown.
+    private func usageValue(_ totals: TokenTotals?) -> String {
+        guard let totals else { return model.loc.t("editor.usage.notCounted") }
+        let locale = model.loc.locale
+        return model.loc.t(
+            "editor.usage.breakdown",
+            TokenFormat.compact(totals.total),
+            TokenFormat.number(totals.input, locale: locale),
+            TokenFormat.number(totals.output, locale: locale),
+            TokenFormat.number(totals.cacheRead, locale: locale),
+            TokenFormat.number(totals.cacheWrite, locale: locale)
+        )
+    }
+
+    private func usageSummary(of result: UsageResult?) -> UsageSummary? {
+        guard case .available(let summary, _)? = result else { return nil }
+        return summary
+    }
+
+    /// The number of files that could not be read during the last count.
+    private func skippedFiles(of result: UsageResult?) -> Int {
+        guard case .available(_, let skipped)? = result else { return 0 }
+        return skipped
+    }
+
+    private func price(_ keyPath: WritableKeyPath<Profile, Double?>) -> Binding<Double?> {
+        Binding(
+            get: { model.draft?[keyPath: keyPath] },
+            set: { model.draft?[keyPath: keyPath] = $0 }
+        )
     }
 
     private var environmentSection: some View {

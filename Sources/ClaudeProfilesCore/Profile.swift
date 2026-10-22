@@ -60,6 +60,10 @@ public struct Profile: Codable, Equatable, Sendable {
     /// Folders this profile was opened in from the menu bar, newest first, absolute.
     /// Optional on disk: an empty list is not written.
     public var recentDirs: [String]
+    /// Estimated cost: USD per million input tokens. `nil` when not set.
+    public var priceInputPerMillion: Double?
+    /// Estimated cost: USD per million output tokens. `nil` when not set.
+    public var priceOutputPerMillion: Double?
 
     public init(
         name: String = "",
@@ -74,7 +78,9 @@ public struct Profile: Codable, Equatable, Sendable {
         workdir: String = "",
         isolate: Bool = false,
         shareFromDefault: Bool = false,
-        recentDirs: [String] = []
+        recentDirs: [String] = [],
+        priceInputPerMillion: Double? = nil,
+        priceOutputPerMillion: Double? = nil
     ) {
         self.name = name
         self.slug = slug
@@ -89,6 +95,8 @@ public struct Profile: Codable, Equatable, Sendable {
         self.isolate = isolate
         self.shareFromDefault = shareFromDefault
         self.recentDirs = recentDirs
+        self.priceInputPerMillion = priceInputPerMillion
+        self.priceOutputPerMillion = priceOutputPerMillion
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -105,6 +113,8 @@ public struct Profile: Codable, Equatable, Sendable {
         case isolate
         case shareFromDefault = "share_from_default"
         case recentDirs = "recent_dirs"
+        case priceInputPerMillion = "price_input_per_million"
+        case priceOutputPerMillion = "price_output_per_million"
     }
 
     public init(from decoder: Decoder) throws {
@@ -136,6 +146,24 @@ public struct Profile: Codable, Equatable, Sendable {
         recentDirs = RecentFolders(
             (try? c.decodeIfPresent([String].self, forKey: .recentDirs)) ?? []
         ).paths
+        // Optional: a file written before prices existed has no such keys. A
+        // price that is broken is dropped instead of making the whole list of
+        // profiles unreadable: the next save writes the file without it.
+        priceInputPerMillion = Self.lenientPrice(c, forKey: .priceInputPerMillion)
+        priceOutputPerMillion = Self.lenientPrice(c, forKey: .priceOutputPerMillion)
+    }
+
+    /// The price of the file, or `nil` when it is not there or is broken.
+    ///
+    /// A price that is not a number, that is not finite or that is negative is
+    /// dropped. The price of a profile is a convenience: it must not make the
+    /// list of the profiles unreadable and it must not stop the saves.
+    private static func lenientPrice(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Double? {
+        guard let value = try? container.decode(Double.self, forKey: key) else { return nil }
+        return UsageCost.isValidPrice(value) ? value : nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -156,6 +184,10 @@ public struct Profile: Codable, Equatable, Sendable {
         if !recentDirs.isEmpty {
             try c.encode(recentDirs, forKey: .recentDirs)
         }
+        // The price keys are written only when set, so a profile without them is
+        // written exactly as the older app wrote it.
+        try c.encodeIfPresent(priceInputPerMillion, forKey: .priceInputPerMillion)
+        try c.encodeIfPresent(priceOutputPerMillion, forKey: .priceOutputPerMillion)
     }
 }
 

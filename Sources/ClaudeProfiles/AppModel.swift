@@ -144,8 +144,22 @@ final class AppModel {
     /// itself never asks the file system while it is drawn.
     private(set) var menuBarFolders: [String: [String]] = [:]
 
+    /// The token usage counted for each profile, by slug. Counted on first show and on Refresh.
+    private(set) var usageResults: [String: UsageResult] = [:]
+    /// The slugs whose usage is being counted right now. Every profile has its
+    /// own count: the count of one profile does not stop the count of another.
+    private(set) var usageLoadingSlugs: Set<String> = []
+    /// A number per slug. Only the newest count of a slug is used, so a count
+    /// that was replaced or stopped never shows its numbers.
+    private var usageGenerations: [String: Int] = [:]
+    /// The running count of every profile, so that it can be stopped.
+    private var usageTasks: [String: Task<Void, Never>] = [:]
+    /// Reads the session files of the profiles. Its cache lives in the data folder.
+    private let usageScanner: UsageScanner
+
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
+        self.usageScanner = UsageScanner(paths: store.paths)
         self.loc = loc ?? Loc()
         self.updater = updater ?? UpdateController()
         load()
@@ -479,6 +493,8 @@ final class AppModel {
             // with the one read of the Keychain that both of them use.
             refreshStoredKeys()
             refreshMenuBarFolders()
+            // The counted tokens of the old settings are gone with them.
+            forgetUsage(before: previousProfile, after: draft)
 
             do {
                 try store.save(data)
@@ -495,6 +511,81 @@ final class AppModel {
             report(error)
             return false
         }
+    }
+
+    // MARK: - Token usage
+
+    /// Counts the usage of the saved profile, unless it was counted before.
+    func loadUsageIfNeeded() {
+        guard let slug = currentProfile?.slug, usageResults[slug] == nil else { return }
+        loadUsage()
+    }
+
+    /// Counts the usage of the saved profile again. The files are read off the main thread.
+    func loadUsage() {
+        guard let profile = currentProfile else { return }
+        let slug = profile.slug
+        usageTasks[slug]?.cancel()
+        let generation = (usageGenerations[slug] ?? 0) + 1
+        usageGenerations[slug] = generation
+        usageLoadingSlugs.insert(slug)
+        let scanner = usageScanner
+        usageTasks[slug] = Task {
+            let outcome: Result<UsageResult, Error>
+            do {
+                outcome = .success(try await scanner.usage(for: profile))
+            } catch {
+                outcome = .failure(error)
+            }
+            // A newer count replaced this one, and that one owns the state now.
+            guard !Task.isCancelled else { return }
+            guard usageGenerations[slug] == generation else { return }
+            usageLoadingSlugs.remove(slug)
+            usageTasks[slug] = nil
+            // The profile may be gone (deleted or renamed) while the count ran.
+            guard data.profiles.contains(where: { $0.slug == slug }) else {
+                usageResults[slug] = nil
+                return
+            }
+            switch outcome {
+            case .success(let result):
+                usageResults[slug] = result
+            case .failure(let error):
+                report(error)
+            }
+        }
+    }
+
+    /// Stops the count of the profile that is open.
+    func stopUsage() {
+        guard let slug = currentProfile?.slug else { return }
+        cancelUsage(for: slug)
+    }
+
+    /// `true` while the usage of the profile is being counted.
+    func isUsageLoading(_ slug: String) -> Bool {
+        usageLoadingSlugs.contains(slug)
+    }
+
+    /// Stops the count of a profile and forgets its numbers. A count that is
+    /// stopped must not show its numbers later.
+    private func cancelUsage(for slug: String) {
+        usageTasks[slug]?.cancel()
+        usageTasks[slug] = nil
+        usageLoadingSlugs.remove(slug)
+        usageGenerations[slug] = (usageGenerations[slug] ?? 0) + 1
+        usageResults[slug] = nil
+    }
+
+    /// A count stays valid while the folder of the profile and its isolation stay the same.
+    private func forgetUsage(before previous: Profile?, after saved: Profile) {
+        guard let previous else {
+            usageResults[saved.slug] = nil
+            return
+        }
+        guard previous.slug != saved.slug || previous.isolate != saved.isolate else { return }
+        cancelUsage(for: previous.slug)
+        usageResults[saved.slug] = nil
     }
 
     // MARK: - Actions
@@ -705,6 +796,9 @@ final class AppModel {
         // The profile is gone: an answer of a running check must not come back
         // for it, not even when a profile with the same name is added again.
         health.profileDeleted(slug: profile.slug)
+        // The numbers of a profile that is gone are gone with it: a profile
+        // that is added again with the same name starts at zero.
+        cancelUsage(for: profile.slug)
         do {
             try store.save(data)
         } catch {
@@ -1490,6 +1584,8 @@ extension ProfileError {
             return loc.t("error.unsafeDeletePath", path)
         case .unsafeFolder(let path):
             return loc.t("error.unsafeFolder", path)
+        case .invalidPrice:
+            return loc.t("error.invalidPrice")
         }
     }
 }

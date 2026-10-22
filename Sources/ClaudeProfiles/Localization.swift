@@ -58,6 +58,16 @@ final class Loc {
     /// The language that is actually used right now.
     private(set) var resolved: ResolvedLanguage = .en
 
+    /// The locale of the language that is used right now. The numbers and the
+    /// money of the app are written the way this locale writes them, not the
+    /// way the system of the user writes them.
+    var locale: Locale {
+        switch resolved {
+        case .en: return Locale(identifier: "en")
+        case .vi: return Locale(identifier: "vi")
+        }
+    }
+
     /// The strings of the current language.
     private(set) var table: [String: String] = [:]
 
