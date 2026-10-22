@@ -86,8 +86,12 @@ final class InstallHelperTests: XCTestCase {
         XCTAssertTrue(script.contains("/usr/bin/xattr -dr"))
     }
 
-    /// The script sets its own PATH and drops the functions and the aliases of
-    /// the shell that starts it.
+    /// The script sets its own PATH before it runs anything.
+    ///
+    /// The exported functions of the shell that starts the script are not
+    /// dropped here: `unset -f` without a name removes nothing. They cannot
+    /// reach the script at all, because it starts with an empty environment
+    /// (`env -i`, see `HelperLaunch`).
     func testTheScriptSetsItsOwnPathBeforeItRunsAnything() {
         let script = InstallHelper.script(
             pid: 4242,
@@ -99,8 +103,9 @@ final class InstallHelperTests: XCTestCase {
 
         XCTAssertTrue(script.contains("PATH=\(InstallHelper.scriptPath)"))
         XCTAssertTrue(script.contains("export PATH"))
-        XCTAssertTrue(script.contains("unset -f"))
         XCTAssertTrue(script.contains("unalias -a"))
+        // The no-op is gone: `unset -f` without a name removes nothing.
+        XCTAssertFalse(script.contains("unset -f"), "the script still drops nothing with unset -f")
         // The PATH is set before the first tool is called.
         let path = script.range(of: "PATH=\(InstallHelper.scriptPath)")!.lowerBound
         let firstTool = script.range(of: "/bin/mkdir")!.lowerBound

@@ -69,10 +69,11 @@ public enum InstallHelper {
     /// quote in its name is handled as well. The bundle is only swapped when
     /// the app has quit; otherwise nothing is touched and the script fails.
     ///
-    /// The script starts with a PATH of its own and drops the aliases and the
-    /// exported functions of the shell that starts it, and every tool is
-    /// called by its absolute path. Nothing that the environment of the app
-    /// carries can change what the helper does.
+    /// The helper starts with an empty environment: `env -i` gives it a PATH
+    /// of its own and the home folder of the user, and nothing else. No shim
+    /// in the PATH, no alias and no exported function of the shell that starts
+    /// it can change what the helper does, and every tool is called by its
+    /// absolute path.
     public static func script(
         pid: Int32,
         currentBundle: URL,
@@ -85,11 +86,11 @@ public enum InstallHelper {
         let backup = backupURL(for: currentBundle)
         return """
         #!/bin/sh
-        # The tools are called by their absolute path, so no shim in the PATH,
-        # no alias and no exported function can change what this script does.
+        # The helper starts with an empty environment: the PATH below is its
+        # own, and every tool is called by its absolute path. No shim, no
+        # alias and no exported function can change what this script does.
         PATH=\(scriptPath)
         export PATH
-        unset -f 2>/dev/null || true
         unalias -a 2>/dev/null || true
 
         # Replaces the Claude Profiles bundle after the running app has quit.
