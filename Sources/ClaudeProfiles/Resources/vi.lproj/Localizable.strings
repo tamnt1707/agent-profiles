@@ -234,13 +234,15 @@
 "editor.usage.refresh" = "Làm mới";
 "editor.usage.stop" = "Dừng";
 "editor.usage.detail" = "Đầu vào %@ · Đầu ra %@ · Đọc cache %@ · Ghi cache %@";
+"editor.usage.breakdown" = "Tổng %@ · đầu vào %@ · đầu ra %@ · đọc cache %@ · ghi cache %@";
+"editor.usage.notCounted" = "chưa được đếm";
 "editor.usage.note" = "Số liệu lấy từ những gì nhà cung cấp báo cáo và có thể khác với hóa đơn của bạn. Phiên làm việc được tiếp tục hoặc sao chép có thể bị đếm nhiều lần.";
 "editor.usage.unsaved" = "Hãy lưu profile để đếm mức sử dụng.";
-"editor.usage.notIsolated" = "Cần một cấu hình Claude riêng để đếm mức sử dụng. Hãy bật \"Tách riêng cấu hình Claude cho profile này\" để đếm.";
+"editor.usage.notIsolated" = "Cần một cấu hình Claude riêng để đếm mức sử dụng. Hãy bật \"Tách riêng cấu hình Claude cho profile này\" và lưu profile để đếm.";
 "editor.usage.noFolder" = "Chưa có dữ liệu: thư mục cấu hình của profile này chưa tồn tại.";
 "editor.usage.notLoaded" = "Nhấn Làm mới để đếm mức sử dụng của profile này.";
 "editor.usage.skippedFiles" = "Không đọc được %@ tệp.";
-"editor.usage.cost" = "Chi phí ước tính (toàn bộ): %@";
+"editor.usage.cost" = "Ước tính tối đa, toàn bộ thời gian (tính cache vào đầu vào): %@";
 "editor.usage.prices" = "Giá trên mỗi triệu token";
 "editor.usage.priceInput" = "Đầu vào (USD)";
 "editor.usage.priceOutput" = "Đầu ra (USD)";

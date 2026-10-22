@@ -254,7 +254,9 @@ struct ProfileEditorView: View {
             Text(model.loc.t("editor.usage.unsaved"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
-        } else if model.draft?.isolate != true {
+        } else if model.currentProfile?.isolate != true {
+            // The saved profile is the one that is counted, so the notice is
+            // about the saved profile and not about the draft.
             Text(model.loc.t("editor.usage.notIsolated"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -271,6 +273,12 @@ struct ProfileEditorView: View {
 
         if result == .unavailable(.folderMissing) {
             Text(model.loc.t("editor.usage.noFolder"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if result == .unavailable(.notIsolated) {
+            // The profile that was counted is not isolated: the section says
+            // why it shows no numbers.
+            Text(model.loc.t("editor.usage.notIsolated"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         } else if result == nil && !model.isUsageLoading(slug) {
@@ -312,7 +320,7 @@ struct ProfileEditorView: View {
                inputPerMillion: model.draft?.priceInputPerMillion,
                outputPerMillion: model.draft?.priceOutputPerMillion
            ) {
-            Text(model.loc.t("editor.usage.cost", String(format: "$%.2f", cost)))
+            Text(model.loc.t("editor.usage.cost", UsageCost.format(cost, locale: model.loc.locale)))
                 .font(.callout)
         }
 
@@ -344,24 +352,48 @@ struct ProfileEditorView: View {
             .foregroundStyle(.secondary)
     }
 
-    /// One window of the usage. The detail shows in the tooltip.
+    /// One window of the usage. The detail shows in the tooltip and is read
+    /// out by VoiceOver.
     private func usageRow(_ title: String, _ totals: TokenTotals?) -> some View {
         LabeledContent(title) {
             if let totals {
                 Text(TokenFormat.compact(totals.total))
                     .monospacedDigit()
-                    .help(model.loc.t(
-                        "editor.usage.detail",
-                        totals.input.formatted(),
-                        totals.output.formatted(),
-                        totals.cacheRead.formatted(),
-                        totals.cacheWrite.formatted()
-                    ))
+                    .help(usageDetail(totals))
             } else {
                 Text("—")
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(usageValue(totals))
+    }
+
+    /// The breakdown of a window, in the language of the user.
+    private func usageDetail(_ totals: TokenTotals) -> String {
+        let locale = model.loc.locale
+        return model.loc.t(
+            "editor.usage.detail",
+            TokenFormat.number(totals.input, locale: locale),
+            TokenFormat.number(totals.output, locale: locale),
+            TokenFormat.number(totals.cacheRead, locale: locale),
+            TokenFormat.number(totals.cacheWrite, locale: locale)
+        )
+    }
+
+    /// What VoiceOver reads for a window: the total and the whole breakdown.
+    private func usageValue(_ totals: TokenTotals?) -> String {
+        guard let totals else { return model.loc.t("editor.usage.notCounted") }
+        let locale = model.loc.locale
+        return model.loc.t(
+            "editor.usage.breakdown",
+            TokenFormat.compact(totals.total),
+            TokenFormat.number(totals.input, locale: locale),
+            TokenFormat.number(totals.output, locale: locale),
+            TokenFormat.number(totals.cacheRead, locale: locale),
+            TokenFormat.number(totals.cacheWrite, locale: locale)
+        )
     }
 
     private func usageSummary(of result: UsageResult?) -> UsageSummary? {
