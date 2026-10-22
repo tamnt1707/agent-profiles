@@ -175,6 +175,9 @@ enum ShellCheck {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
             process.arguments = ["-n", file.path]
+            // A clean environment: the check must not see anything of the
+            // machine it runs on.
+            process.environment = ["PATH": "/usr/bin:/bin", "HOME": directory.path]
             try process.run()
             process.waitUntilExit()
             return process.terminationStatus == 0

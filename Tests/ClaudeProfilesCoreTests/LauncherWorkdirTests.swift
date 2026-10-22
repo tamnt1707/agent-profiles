@@ -92,6 +92,9 @@ final class LauncherWorkdirTests: XCTestCase {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", command]
+        // A clean environment: no shim, no alias and no exported function of
+        // this machine can change what the command does.
+        process.environment = ["PATH": "/usr/bin:/bin", "HOME": temp.url.path]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
