@@ -170,14 +170,13 @@ public actor UsageScanner {
                     return
                 }
                 // Most lines of a transcript hold no usage at all. Their bytes
-                // are looked at before they become a string.
+                // are looked at before they are decoded.
                 guard Self.holds(line.bytes, Self.usageMarker),
                       Self.holds(line.bytes, Self.assistantMarker)
                 else {
                     return
                 }
-                let text = String(decoding: line.bytes, as: UTF8.self)
-                guard let record = Self.decode(text, with: decoder),
+                guard let record = Self.decode(line.bytes, with: decoder),
                       record.type == "assistant",
                       let message = record.message,
                       let usage = message.usage
@@ -330,9 +329,10 @@ public actor UsageScanner {
         return Int(value)
     }
 
-    /// A malformed line gives `nil`.
-    private static func decode(_ line: String, with decoder: JSONDecoder) -> Record? {
-        try? decoder.decode(Record.self, from: Data(line.utf8))
+    /// A malformed line gives `nil`. The bytes of the line are decoded as they
+    /// are: they do not have to become a string first.
+    private static func decode(_ bytes: Data, with decoder: JSONDecoder) -> Record? {
+        try? decoder.decode(Record.self, from: bytes)
     }
 
     // MARK: - Lines
@@ -554,20 +554,21 @@ public actor UsageScanner {
     }
 }
 
-/// Parses the ISO-8601 timestamps of transcript lines, with or without fractions of a second.
+/// Parses the ISO-8601 timestamps of transcript lines, with or without
+/// fractions of a second.
 private final class TimestampReader {
-    private let fractional: ISO8601DateFormatter
-    private let plain: ISO8601DateFormatter
-
-    init() {
-        fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-    }
+    /// The format of the timestamps of the transcripts.
+    ///
+    /// It is much faster than `ISO8601DateFormatter`, which matters with a
+    /// hundred thousand lines in a file. A time without a zone is not a
+    /// moment in time and is not read, as before.
+    private let format = Date.ISO8601FormatStyle(
+        includingFractionalSeconds: true,
+        timeZone: TimeZone(secondsFromGMT: 0)!
+    )
 
     func date(_ text: String?) -> Date? {
         guard let text else { return nil }
-        return fractional.date(from: text) ?? plain.date(from: text)
+        return try? Date(text, strategy: format)
     }
 }
