@@ -7,6 +7,27 @@
 "sidebar.add" = "Add profile";
 "sidebar.empty.title" = "No profiles yet";
 "sidebar.empty.description" = "Add a profile to get a claude-<name> command.";
+"sidebar.health.stateReady" = "Ready";
+"sidebar.health.stateUntested" = "Not tested";
+"sidebar.health.stateAttention" = "Needs attention";
+"sidebar.health.stateProblem" = "Problem";
+"sidebar.health.a11y" = "Connection status: %@. %@";
+"sidebar.health.noKey" = "No key stored";
+"sidebar.health.connectedNow" = "Connected just now";
+"sidebar.health.connectedOne" = "Connected 1 minute ago";
+"sidebar.health.connectedMany" = "Connected %d minutes ago";
+"sidebar.health.notTested" = "Not tested yet";
+"sidebar.health.keychainUnreadable" = "Could not read the Keychain";
+"sidebar.health.stale" = "Last test was %d minutes ago. Test again to refresh.";
+"sidebar.health.warning" = "Last test gave a warning. %@";
+"sidebar.health.failed" = "Last test failed. %@";
+"sidebar.checkAll" = "Check all connections";
+"sidebar.checkAll.menu" = "Check all connections";
+"sidebar.checkAll.progress" = "%d of %d checked";
+"sidebar.checkAll.stop" = "Stop";
+"sidebar.checkAll.confirm.title" = "Check all connections?";
+"sidebar.checkAll.confirm.message" = "This sends one tiny request (about one token) to each provider.";
+"sidebar.checkAll.confirm.check" = "Check";
 
 /* Detail */
 "detail.empty.title" = "Select a profile";

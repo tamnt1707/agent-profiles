@@ -3,7 +3,10 @@ import Security
 
 /// Somewhere to keep the API keys. The real implementation is the macOS
 /// Keychain; the tests use an in-memory store.
-public protocol KeyStore: AnyObject {
+///
+/// A key store may be read from any thread: the existence of a key is asked
+/// off the main actor, so a long list of profiles does not freeze the window.
+public protocol KeyStore: AnyObject, Sendable {
     /// Returns the stored key, or `nil` when there is none.
     func get(_ account: String) throws -> String?
     /// Tells whether a key is stored, without reading the secret itself.
@@ -90,7 +93,7 @@ public final class KeychainStore: KeyStore {
 }
 
 /// Key store that only lives in memory. Used by the tests, never by the app.
-public final class InMemoryKeyStore: KeyStore {
+public final class InMemoryKeyStore: KeyStore, @unchecked Sendable {
     private var storage: [String: String] = [:]
     private let lock = NSLock()
 

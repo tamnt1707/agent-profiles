@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ClaudeProfilesCore
 
@@ -32,6 +33,10 @@ struct ContentView: View {
         .onChange(of: model.selectedSlug) { _, slug in
             model.sidebarSelectionChanged(to: slug)
         }
+        // Key presence is re-read when the window comes back; no request is sent.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshStoredKeys()
+        }
         .alert(model.loc.t("update.unsaved.title"), isPresented: $model.isConfirmingUpdate) {
             Button(model.loc.t("update.unsaved.save")) { model.saveAndUpdate() }
             Button(model.loc.t("update.unsaved.discard")) { model.discardAndUpdate() }
@@ -61,7 +66,7 @@ struct ContentView: View {
     private var sidebar: some View {
         List(selection: $model.selectedSlug) {
             ForEach(model.data.profiles, id: \.slug) { profile in
-                ProfileRow(profile: profile)
+                ProfileRow(model: model, profile: profile)
                     .tag(profile.slug)
                     .contextMenu {
                         // The menu acts on the row that was clicked, not on the edited profile.
@@ -71,6 +76,20 @@ struct ContentView: View {
             }
         }
         .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // The bar is only there when there is something to check: no
+            // disabled button over the empty state.
+            if !model.data.profiles.isEmpty {
+                CheckAllBar(model: model)
+            }
+        }
+        // The question is asked before any request: one tiny request per provider.
+        .alert(model.loc.t("sidebar.checkAll.confirm.title"), isPresented: $model.isConfirmingHealthCheck) {
+            Button(model.loc.t("sidebar.checkAll.confirm.check")) { model.startHealthCheck() }
+            Button(model.loc.t("actions.cancel"), role: .cancel) {}
+        } message: {
+            Text(model.loc.t("sidebar.checkAll.confirm.message"))
+        }
         // The question about unsaved changes belongs to the sidebar, next to
         // the selection it protects. The update question stays on the window.
         .alert(model.loc.t("unsaved.switch.title"), isPresented: $model.isConfirmingSwitch) {
@@ -170,17 +189,24 @@ private struct DataWarningView: View {
     }
 }
 
-/// One profile in the sidebar.
+/// One profile in the sidebar, with its health dot at the leading edge.
 private struct ProfileRow: View {
+    let model: AppModel
     let profile: Profile
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(profile.name.isEmpty ? profile.slug : profile.name)
-                .font(.body)
-            Text("claude-\(profile.slug)")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 8) {
+            // The minute tick only redraws the dot, so a test ages into "not tested" with no request.
+            TimelineView(.everyMinute) { context in
+                HealthDot(loc: model.loc, status: model.healthStatus(for: profile, now: context.date))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(profile.name.isEmpty ? profile.slug : profile.name)
+                    .font(.body)
+                Text("claude-\(profile.slug)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
     }

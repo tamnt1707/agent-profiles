@@ -94,6 +94,13 @@ struct AppCommands: Commands {
 
             Button(model.loc.t("actions.reveal")) { model.revealFolder() }
 
+            Divider()
+
+            Button(model.loc.t("sidebar.checkAll.menu")) { model.requestHealthCheck() }
+                .disabled(!model.canCheckAllConnections)
+
+            Divider()
+
             Button(model.loc.t("actions.delete")) { model.requestDelete() }
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(model.draftIndex == nil)

@@ -106,6 +106,34 @@ final class AppModel {
     /// `true` while the model list is being fetched.
     private(set) var isFetchingModels = false
 
+    /// `true` when the model list may be fetched: not while another fetch runs
+    /// and not while the check of the profiles runs.
+    var canFetchModelList: Bool {
+        ModelFetchGate.canFetch(isFetching: isFetchingModels, isCheckingHealth: isCheckingHealth)
+    }
+
+    /// How far the running "Check all connections" has got.
+    struct HealthProgress: Equatable {
+        var done: Int
+        var total: Int
+    }
+
+    /// The last test of each profile, kept for this session only.
+    private(set) var health = HealthBook()
+    /// What is known about the key of each profile: stored, missing, or the
+    /// Keychain could not be read. A slug that is not in the map was never
+    /// read: its presence is unknown.
+    private(set) var keyPresence = KeyPresenceBook()
+    /// The check of all profiles while it runs.
+    private var healthTask: Task<Void, Never>?
+    /// The progress of the running check, `nil` when none runs.
+    private(set) var healthProgress: HealthProgress?
+    /// Set while the question "Check all connections?" is open.
+    var isConfirmingHealthCheck = false
+
+    /// `true` while "Check all connections" runs.
+    var isCheckingHealth: Bool { healthTask != nil }
+
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
         self.loc = loc ?? Loc()
@@ -138,6 +166,7 @@ final class AppModel {
         if let warning = loaded.warning {
             status = Status(kind: .failure, text: warning.localizedMessage(loc))
         }
+        refreshStoredKeys()
     }
 
     /// `true` while `profiles.json` is unread. Automatic saves are refused then.
@@ -397,6 +426,9 @@ final class AppModel {
     @discardableResult
     func save() -> Bool {
         guard var draft else { return false }
+        let previousProfile = currentProfile
+        // The key the user typed, before the field is cleared by the save.
+        let typedKey = keyInput
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         command.name = draft.name
         if command.mode == .auto {
@@ -425,6 +457,9 @@ final class AppModel {
             command = CommandNameDraft(profile: draft)
             keyInput = ""
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
+            // A typed key, a new Base URL or auth kind, or a new slug makes the last test describe something else.
+            health.profileSaved(old: previousProfile, new: draft, typedKey: typedKey)
+            refreshStoredKeys()
 
             do {
                 try store.save(data)
@@ -536,11 +571,15 @@ final class AppModel {
         // The entry always leaves the list and the data file.
         var failures = removal.failures
         data.profiles.remove(at: index)
+        // The profile is gone: an answer of a running check must not come back
+        // for it, not even when a profile with the same name is added again.
+        health.profileDeleted(slug: profile.slug)
         do {
             try store.save(data)
         } catch {
             failures.append(.dataFile)
         }
+        refreshStoredKeys()
 
         // Empty shared folders go too. Folders with content are kept.
         store.removeEmptySharedFolders()
@@ -628,7 +667,7 @@ final class AppModel {
     /// Sends one tiny request with the edited settings and shows the result.
     /// A second tap while the request runs does nothing.
     func testConnection() {
-        guard let draft, !isTestingConnection else { return }
+        guard let draft, !isTestingConnection, !isCheckingHealth else { return }
         let key: String
         do {
             key = try probeKey(for: draft)
@@ -636,6 +675,11 @@ final class AppModel {
             report(error)
             return
         }
+        // The settings of the test are the ones of this moment: the answer
+        // belongs to them and to no other.
+        let saved = currentProfile
+        let typedKey = keyInput
+        let generation = health.generation(for: draft.slug)
         isTestingConnection = true
         connectionReport = nil
         let token = UUID()
@@ -645,6 +689,13 @@ final class AppModel {
             guard let self, !Task.isCancelled, self.connectionToken == token else { return }
             self.isTestingConnection = false
             self.connectionReport = result
+            // The result also updates the dot of the profile, when it is in the
+            // list and the test was made with the saved settings: a typed, not
+            // yet stored key says nothing about the saved one.
+            if let result,
+               HealthBook.canRecordEditorTest(draft: draft, saved: saved, typedKey: typedKey) {
+                self.health.record(result.outcome, at: Date(), for: draft, generation: generation)
+            }
         }
     }
 
@@ -661,7 +712,9 @@ final class AppModel {
     /// reused unless `refresh` is set. Only the user's open or refresh calls this:
     /// never typing, never the launch of the app.
     func loadModelList(refresh: Bool = false) {
-        guard let draft, !isFetchingModels else { return }
+        guard let draft else { return }
+        // The list and the check of the profiles do not run at the same time.
+        guard canFetchModelList else { return }
         let key = ModelListCacheKey(baseURL: draft.baseURL, auth: draft.auth)
         if !refresh, let cache = modelListCache, cache.isReusable(for: key) { return }
         let apiKey: String
@@ -696,6 +749,113 @@ final class AppModel {
         isFetchingModels = false
         connectionReport = nil
         modelListCache = nil
+    }
+
+    // MARK: - Health of the profiles
+
+    /// Reads which profiles have a key stored. Only existence is asked for: no
+    /// secret is read and no request is sent. Runs on launch, on save, on delete
+    /// and when the window becomes active.
+    ///
+    /// The Keychain is read off the main actor, so a long list of profiles does
+    /// not freeze the window. Every read gets a number: a read that comes back
+    /// late after a newer one is dropped, so it cannot overwrite the newer one.
+    func refreshStoredKeys() {
+        let slugs = data.profiles.map(\.slug)
+        let keys = store.keys
+        let sequence = keyPresence.nextSequence()
+        Task { [weak self] in
+            let read = await KeyPresence.read(slugs: slugs, keys: keys)
+            guard let self else { return }
+            // The profiles of this moment: a profile that is gone is not kept.
+            self.keyPresence.merge(
+                slugs: self.data.profiles.map(\.slug),
+                read: read,
+                sequence: sequence
+            )
+        }
+    }
+
+    /// The health of a profile at `now`, from its stored key and its last test in this session.
+    func healthStatus(for profile: Profile, now: Date) -> HealthStatus {
+        // The Keychain could not be read: the dot says so, instead of showing
+        // a key that is missing or a key that is there.
+        return ProfileHealth.evaluate(
+            profile: profile,
+            key: keyPresence.state(for: profile.slug),
+            lastTest: health.lastTest(for: profile),
+            now: now
+        )
+    }
+
+    /// `true` when "Check all connections" can start. The same rule for the
+    /// button of the sidebar and for the item of the Profile menu.
+    var canCheckAllConnections: Bool {
+        !data.profiles.isEmpty && !isCheckingHealth && !isTestingConnection && !isFetchingModels
+    }
+
+    /// Asks before the first request of "Check all connections".
+    func requestHealthCheck() {
+        guard canCheckAllConnections else { return }
+        isConfirmingHealthCheck = true
+    }
+
+    /// Tests every profile one at a time with its stored key. Only runs after the user confirmed.
+    func startHealthCheck() {
+        // The check of the profiles and the fetch of the model list do not run
+        // at the same time.
+        guard healthTask == nil, !isTestingConnection, !isFetchingModels else { return }
+        let profiles = data.profiles
+        let checker = HealthChecker(keys: store.keys)
+        healthProgress = HealthProgress(done: 0, total: profiles.count)
+        healthTask = Task { [weak self] in
+            guard let self else { return }
+            // The generations of the run: an answer of an older setting is
+            // refused instead of landing in the dot of the new one.
+            let captured = Dictionary(uniqueKeysWithValues: profiles.map {
+                ($0.slug, self.health.generation(for: $0.slug))
+            })
+            await checker.run(
+                profiles: profiles,
+                currentProfile: { [weak self] slug in
+                    self?.data.profiles.first { $0.slug == slug }
+                },
+                generation: { [weak self] slug in
+                    self?.health.generation(for: slug) ?? 0
+                }
+            ) { step in
+                self.applyHealthStep(step, captured: captured)
+            }
+            self.finishHealthCheck()
+        }
+    }
+
+    /// Stops the check: the request in flight is cancelled and no further one is sent.
+    func stopHealthCheck() {
+        healthTask?.cancel()
+    }
+
+    private func applyHealthStep(_ step: HealthCheckStep, captured: [String: Int]) {
+        switch step {
+        case .tested(let slug, let outcome, let at):
+            // The profile must still be there and its settings must be the
+            // ones the answer was made for: an answer of an older key or of
+            // an older URL never reaches the dot of the new settings.
+            if let profile = data.profiles.first(where: { $0.slug == slug }),
+               let generation = captured[slug] {
+                health.record(outcome, at: at, for: profile, generation: generation)
+            }
+        case .skipped:
+            break
+        }
+        if let progress = healthProgress {
+            healthProgress = HealthProgress(done: progress.done + 1, total: progress.total)
+        }
+    }
+
+    private func finishHealthCheck() {
+        healthTask = nil
+        healthProgress = nil
     }
 
     /// The key of a request. The Keychain is read only now, at the click, and the
