@@ -17,6 +17,7 @@
 "sidebar.health.connectedOne" = "Connected 1 minute ago";
 "sidebar.health.connectedMany" = "Connected %d minutes ago";
 "sidebar.health.notTested" = "Not tested yet";
+"sidebar.health.keychainUnreadable" = "Could not read the Keychain";
 "sidebar.health.stale" = "Last test was %d minutes ago. Test again to refresh.";
 "sidebar.health.warning" = "Last test gave a warning. %@";
 "sidebar.health.failed" = "Last test failed. %@";

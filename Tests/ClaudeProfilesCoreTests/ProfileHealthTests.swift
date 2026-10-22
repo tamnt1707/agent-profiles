@@ -41,7 +41,7 @@ final class ProfileHealthTests: XCTestCase {
     func testEveryOutcomeMapsToItsStateWhenFreshAndKeyed() {
         for (outcome, expected) in table {
             let status = ProfileHealth.evaluate(
-                profile: profile(), hasKey: true, lastTest: test(outcome), now: now
+                profile: profile(), key: .stored, lastTest: test(outcome), now: now
             )
             XCTAssertEqual(status.state, expected, "outcome \(outcome)")
         }
@@ -50,7 +50,7 @@ final class ProfileHealthTests: XCTestCase {
     func testEveryOutcomeMapsToItsStateForAuthNoneWithoutKey() {
         for (outcome, expected) in table {
             let status = ProfileHealth.evaluate(
-                profile: profile(auth: .none), hasKey: false, lastTest: test(outcome), now: now
+                profile: profile(auth: .none), key: .missing, lastTest: test(outcome), now: now
             )
             XCTAssertEqual(status.state, expected, "auth none, outcome \(outcome)")
         }
@@ -58,23 +58,23 @@ final class ProfileHealthTests: XCTestCase {
 
     func testSuccessForAuthNoneIsReadyWithoutAnyKey() {
         let status = ProfileHealth.evaluate(
-            profile: profile(auth: .none), hasKey: false, lastTest: test(.ok(latencyMs: 1, model: nil)), now: now
+            profile: profile(auth: .none), key: .missing, lastTest: test(.ok(latencyMs: 1, model: nil)), now: now
         )
         XCTAssertEqual(status, HealthStatus(state: .ready, reason: .connected(minutesAgo: 0)))
     }
 
     func testReasonsCarryTheOutcomeOrTheAge() {
         XCTAssertEqual(
-            ProfileHealth.evaluate(profile: profile(), hasKey: true, lastTest: test(.rateLimited), now: now).reason,
+            ProfileHealth.evaluate(profile: profile(), key: .stored, lastTest: test(.rateLimited), now: now).reason,
             .testWarning(.rateLimited)
         )
         XCTAssertEqual(
-            ProfileHealth.evaluate(profile: profile(), hasKey: true, lastTest: test(.unauthorized), now: now).reason,
+            ProfileHealth.evaluate(profile: profile(), key: .stored, lastTest: test(.unauthorized), now: now).reason,
             .testFailed(.unauthorized)
         )
         XCTAssertEqual(
             ProfileHealth.evaluate(
-                profile: profile(), hasKey: true,
+                profile: profile(), key: .stored,
                 lastTest: test(.ok(latencyMs: 1, model: nil), secondsAgo: 10 * 60), now: now
             ).reason,
             .connected(minutesAgo: 10)
@@ -91,19 +91,67 @@ final class ProfileHealthTests: XCTestCase {
             test(.unauthorized),
         ]
         for record in records {
-            let status = ProfileHealth.evaluate(profile: profile(), hasKey: false, lastTest: record, now: now)
+            let status = ProfileHealth.evaluate(profile: profile(), key: .missing, lastTest: record, now: now)
             XCTAssertEqual(status, HealthStatus(state: .problem, reason: .noKeyStored), "record \(String(describing: record))")
         }
     }
 
     func testNoTestAndNoKeyNeededIsUntested() {
-        let status = ProfileHealth.evaluate(profile: profile(auth: .none), hasKey: false, lastTest: nil, now: now)
+        let status = ProfileHealth.evaluate(profile: profile(auth: .none), key: .missing, lastTest: nil, now: now)
         XCTAssertEqual(status, HealthStatus(state: .untested, reason: .notTested))
     }
 
     func testNoTestAndKeyPresentIsUntested() {
-        let status = ProfileHealth.evaluate(profile: profile(), hasKey: true, lastTest: nil, now: now)
+        let status = ProfileHealth.evaluate(profile: profile(), key: .stored, lastTest: nil, now: now)
         XCTAssertEqual(status, HealthStatus(state: .untested, reason: .notTested))
+    }
+
+    // MARK: - The Keychain that could not be read
+
+    func testAKeychainThatCouldNotBeReadIsUntestedAndSaysSo() {
+        let status = ProfileHealth.evaluate(profile: profile(), key: .unreadable, lastTest: nil, now: now)
+        XCTAssertEqual(status, HealthStatus(state: .untested, reason: .keychainUnreadable))
+    }
+
+    func testAKeychainThatCouldNotBeReadIsNotAMissingKey() {
+        let status = ProfileHealth.evaluate(profile: profile(), key: .unreadable, lastTest: nil, now: now)
+        XCTAssertNotEqual(status.state, .problem, "a Keychain that cannot be read was shown as a problem")
+        XCTAssertNotEqual(status.reason, .noKeyStored, "a Keychain that cannot be read was shown as a missing key")
+    }
+
+    func testAKeychainThatCouldNotBeReadIsNotASilentSuccess() {
+        // The profile was tested before, but nobody could read the Keychain
+        // since: the dot does not say that the key is there.
+        let status = ProfileHealth.evaluate(
+            profile: profile(), key: .unreadable, lastTest: test(.ok(latencyMs: 1, model: nil)), now: now
+        )
+        XCTAssertEqual(status.state, .untested)
+        XCTAssertEqual(status.reason, .keychainUnreadable)
+    }
+
+    func testTheReasonOfAnUnreadableKeychainIsItsOwn() {
+        let status = ProfileHealth.evaluate(profile: profile(), key: .unreadable, lastTest: nil, now: now)
+        XCTAssertNotEqual(status.reason, .notTested, "a Keychain that cannot be read looks like a profile that was never tested")
+    }
+
+    func testAProfileThatWasNeverReadIsPlainUntested() {
+        let status = ProfileHealth.evaluate(profile: profile(), key: .unknown, lastTest: nil, now: now)
+        XCTAssertEqual(status, HealthStatus(state: .untested, reason: .notTested))
+    }
+
+    func testAProfileThatWasNeverReadIsNotAMissingKey() {
+        let status = ProfileHealth.evaluate(profile: profile(), key: .unknown, lastTest: nil, now: now)
+        XCTAssertNotEqual(status.reason, .noKeyStored, "a presence that was never read was shown as a missing key")
+    }
+
+    func testAProfileThatNeedsNoKeyIsNotAboutTheKeychain() {
+        // The auth kind needs no key, so a Keychain that cannot be read says
+        // nothing about this profile.
+        let status = ProfileHealth.evaluate(
+            profile: profile(auth: .none), key: .unreadable,
+            lastTest: test(.ok(latencyMs: 1, model: nil)), now: now
+        )
+        XCTAssertEqual(status, HealthStatus(state: .ready, reason: .connected(minutesAgo: 0)))
     }
 
     // MARK: - Freshness
@@ -111,7 +159,7 @@ final class ProfileHealthTests: XCTestCase {
     func testEveryOutcomeIsUntestedWhenStale() {
         for (outcome, _) in table {
             let status = ProfileHealth.evaluate(
-                profile: profile(), hasKey: true, lastTest: test(outcome, secondsAgo: 31 * 60), now: now
+                profile: profile(), key: .stored, lastTest: test(outcome, secondsAgo: 31 * 60), now: now
             )
             XCTAssertEqual(status.state, .untested, "stale outcome \(outcome)")
             XCTAssertEqual(status.reason, .staleTest(minutesAgo: 31), "stale outcome \(outcome)")
@@ -120,7 +168,7 @@ final class ProfileHealthTests: XCTestCase {
 
     func testExactlyThirtyMinutesIsStillFresh() {
         let status = ProfileHealth.evaluate(
-            profile: profile(), hasKey: true,
+            profile: profile(), key: .stored,
             lastTest: test(.ok(latencyMs: 1, model: nil), secondsAgo: ProfileHealth.freshWindow), now: now
         )
         XCTAssertEqual(status.state, .ready)
@@ -129,7 +177,7 @@ final class ProfileHealthTests: XCTestCase {
 
     func testOneSecondPastThirtyMinutesIsStale() {
         let status = ProfileHealth.evaluate(
-            profile: profile(), hasKey: true,
+            profile: profile(), key: .stored,
             lastTest: test(.ok(latencyMs: 1, model: nil), secondsAgo: ProfileHealth.freshWindow + 1), now: now
         )
         XCTAssertEqual(status.state, .untested)
@@ -141,7 +189,7 @@ final class ProfileHealthTests: XCTestCase {
 
     func testTestFromTheFutureIsNotTrusted() {
         let future = TestRecord(outcome: .ok(latencyMs: 1, model: nil), testedAt: now.addingTimeInterval(60))
-        let status = ProfileHealth.evaluate(profile: profile(), hasKey: true, lastTest: future, now: now)
+        let status = ProfileHealth.evaluate(profile: profile(), key: .stored, lastTest: future, now: now)
         XCTAssertEqual(status.state, .untested)
     }
 
@@ -150,7 +198,7 @@ final class ProfileHealthTests: XCTestCase {
     func testStatusTextNeverContainsTheKey() {
         let secret = "sk-SECRET-123"
         for (outcome, _) in table {
-            let status = ProfileHealth.evaluate(profile: profile(), hasKey: true, lastTest: test(outcome), now: now)
+            let status = ProfileHealth.evaluate(profile: profile(), key: .stored, lastTest: test(outcome), now: now)
             XCTAssertFalse(String(describing: status).contains(secret))
         }
     }

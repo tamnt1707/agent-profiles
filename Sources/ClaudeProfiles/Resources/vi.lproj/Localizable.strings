@@ -17,6 +17,7 @@
 "sidebar.health.connectedOne" = "Đã kết nối 1 phút trước";
 "sidebar.health.connectedMany" = "Đã kết nối %d phút trước";
 "sidebar.health.notTested" = "Chưa kiểm tra";
+"sidebar.health.keychainUnreadable" = "Không đọc được Keychain";
 "sidebar.health.stale" = "Lần kiểm tra cuối cách đây %d phút. Hãy kiểm tra lại.";
 "sidebar.health.warning" = "Lần kiểm tra cuối có cảnh báo. %@";
 "sidebar.health.failed" = "Lần kiểm tra cuối thất bại. %@";

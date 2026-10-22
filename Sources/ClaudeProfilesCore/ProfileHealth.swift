@@ -18,6 +18,8 @@ public enum HealthReason: Equatable, Sendable {
     case noKeyStored
     case connected(minutesAgo: Int)
     case notTested
+    /// The Keychain could not be read. Nothing is known about the key.
+    case keychainUnreadable
     /// A test exists but is older than `ProfileHealth.freshWindow`.
     case staleTest(minutesAgo: Int)
     case testWarning(ProbeOutcome)
@@ -54,11 +56,19 @@ public enum ProfileHealth {
     public static let freshWindow: TimeInterval = 30 * 60
 
     /// - Parameters:
-    ///   - hasKey: whether a key is stored (existence only, the secret is never read here).
+    ///   - key: what is known about the stored key of the profile.
     ///   - lastTest: the last test kept for this profile, if any.
     ///   - now: the current moment.
-    public static func evaluate(profile: Profile, hasKey: Bool, lastTest: TestRecord?, now: Date) -> HealthStatus {
-        if profile.auth != .none && !hasKey {
+    public static func evaluate(profile: Profile, key: KeyState, lastTest: TestRecord?, now: Date) -> HealthStatus {
+        // The Keychain could not be read: nothing is known about the key.
+        // That is not a missing key, and it is not a stored one either, so
+        // the dot says that the Keychain could not be read.
+        if profile.auth != .none, key == .unreadable {
+            return HealthStatus(state: .untested, reason: .keychainUnreadable)
+        }
+        // A key that is needed and not stored is a problem. A presence that
+        // was never read says nothing at all: it is not a missing key.
+        if profile.auth != .none, key == .missing {
             return HealthStatus(state: .problem, reason: .noKeyStored)
         }
         guard let lastTest else {

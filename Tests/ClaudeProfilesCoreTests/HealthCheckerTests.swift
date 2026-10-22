@@ -252,7 +252,7 @@ final class HealthCheckerTests: XCTestCase {
             return (HealthStatus(state: .problem, reason: .noKeyStored), requests)
         }
         let status = ProfileHealth.evaluate(
-            profile: profile, hasKey: true, lastTest: TestRecord(outcome: outcome, testedAt: at), now: fixedNow
+            profile: profile, key: .stored, lastTest: TestRecord(outcome: outcome, testedAt: at), now: fixedNow
         )
         return (status, requests)
     }

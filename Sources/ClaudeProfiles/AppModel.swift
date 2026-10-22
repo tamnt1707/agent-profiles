@@ -778,12 +778,11 @@ final class AppModel {
 
     /// The health of a profile at `now`, from its stored key and its last test in this session.
     func healthStatus(for profile: Profile, now: Date) -> HealthStatus {
-        // A profile whose key presence is unknown (the Keychain could not be
-        // read) is not shown as a missing key: that would be a wrong red.
-        let hasKey = keyPresence.state(for: profile.slug) != .missing
+        // The Keychain could not be read: the dot says so, instead of showing
+        // a key that is missing or a key that is there.
         return ProfileHealth.evaluate(
             profile: profile,
-            hasKey: hasKey,
+            key: keyPresence.state(for: profile.slug),
             lastTest: health.lastTest(for: profile),
             now: now
         )

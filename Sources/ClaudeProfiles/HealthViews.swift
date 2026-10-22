@@ -15,6 +15,8 @@ extension Loc {
             return t("sidebar.health.connectedMany", minutes)
         case .notTested:
             return t("sidebar.health.notTested")
+        case .keychainUnreadable:
+            return t("sidebar.health.keychainUnreadable")
         case .staleTest(let minutes):
             return t("sidebar.health.stale", minutes)
         case .testWarning(let outcome):
