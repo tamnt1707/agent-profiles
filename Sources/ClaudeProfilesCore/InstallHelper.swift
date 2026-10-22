@@ -85,15 +85,15 @@ public enum InstallHelper {
         let backup = backupURL(for: currentBundle)
         return """
         #!/bin/sh
-        # Replaces the Claude Profiles bundle after the running app has quit.
-        # Written by Claude Profiles; every path is single quoted.
-
         # The tools are called by their absolute path, so no shim in the PATH,
         # no alias and no exported function can change what this script does.
         PATH=\(scriptPath)
         export PATH
         unset -f 2>/dev/null || true
         unalias -a 2>/dev/null || true
+
+        # Replaces the Claude Profiles bundle after the running app has quit.
+        # Written by Claude Profiles; every path is single quoted.
 
         PID=\(ShellQuote.quote(String(pid)))
         CURRENT=\(ShellQuote.quote(currentBundle.path))

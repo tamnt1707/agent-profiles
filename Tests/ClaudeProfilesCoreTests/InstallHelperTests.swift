@@ -107,9 +107,31 @@ final class InstallHelperTests: XCTestCase {
         XCTAssertLessThan(path, firstTool)
     }
 
+    /// The script starts with its own PATH: nothing but a comment comes before
+    /// it, so the environment of the shell that starts the script cannot
+    /// change what the helper does.
+    func testTheScriptStartsWithItsOwnPath() {
+        let script = InstallHelper.script(
+            pid: 4242,
+            currentBundle: URL(fileURLWithPath: "/Applications/Claude Profiles.app"),
+            newBundle: URL(fileURLWithPath: "/tmp/work/Claude Profiles.app"),
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: logFile
+        )
+
+        let lines = script.split(separator: "\n", omittingEmptySubsequences: false)
+        let path = lines.firstIndex { $0.hasPrefix("PATH=") }
+        XCTAssertNotNil(path, "the script does not set a PATH of its own")
+        guard let path else { return }
+        XCTAssertEqual(lines[path], "PATH=\(InstallHelper.scriptPath)")
+        for line in lines[..<path] {
+            XCTAssertTrue(line.hasPrefix("#"),
+                          "the script does something before it sets its PATH: \(line)")
+        }
+    }
+
     /// The places where the script names a tool without its full path.
-    private func bareCalls(_ script: String, of tool: String) -> [String] {
-        // The tool is not part of a path and not part of a longer word.
+    private func bareCalls(_ script: String, of tool: String) -> [String] {        // The tool is not part of a path and not part of a longer word.
         let pattern = "(?<![/\\w])\(tool)\\b"
         guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(script.startIndex..<script.endIndex, in: script)
