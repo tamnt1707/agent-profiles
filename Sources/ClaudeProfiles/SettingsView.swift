@@ -135,7 +135,9 @@ struct SettingsView: View {
                     }
                     .controlSize(.small)
                 }
-                if status == .configured || status == .partlyConfigured {
+                let removable = status == .configured || status == .partlyConfigured
+                    || (status == .unresolvedZdotdir && model.zshRemovableWhileUnresolved)
+                if removable {
                     Button(model.loc.t("pathSetup.remove")) { shellToRemove = shell }
                         .controlSize(.small)
                 }

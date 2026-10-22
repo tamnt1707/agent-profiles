@@ -867,6 +867,8 @@ final class AppModel {
     private(set) var shellDamagedFiles: [ShellKind: String] = [:]
     /// For a shell with a block in a file it does not read: those files, with `~`.
     private(set) var shellStrayFiles: [ShellKind: String] = [:]
+    /// `true` when `ZDOTDIR` cannot be read but a zsh block the app wrote can still be removed.
+    private(set) var zshRemovableWhileUnresolved = false
     /// Set while the question "Make the claude-<name> commands work…?" is open.
     var isOfferingPathSetup = false
     /// The profile slug shown in that question.
@@ -888,6 +890,7 @@ final class AppModel {
         shellStatuses = Dictionary(uniqueKeysWithValues: ShellKind.supported.map { ($0, setup.status(for: $0)) })
         shellDamagedFiles = [:]
         shellStrayFiles = [:]
+        zshRemovableWhileUnresolved = setup.hasZshBlockWhileUnresolved()
         for shell in ShellKind.supported {
             if shellStatuses[shell] == .damaged, let file = setup.damagedFile(for: shell) ?? setup.targets(for: shell).first?.url {
                 shellDamagedFiles[shell] = displayPath(file)
