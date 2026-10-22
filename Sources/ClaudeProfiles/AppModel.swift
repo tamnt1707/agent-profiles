@@ -254,6 +254,9 @@ final class AppModel {
         refreshStoredKeys()
         refreshMenuBarFolders()
         health.profilesLoaded(data.profiles)
+        // The profiles are read again: the name of the command is looked at
+        // again, because another profile may own it now.
+        refreshForeignCommandPath()
     }
 
     /// `true` while `profiles.json` is unread. Automatic saves are refused then.
@@ -338,6 +341,8 @@ final class AppModel {
         // Another profile is shown: a measurement of the old one must not
         // come back and change the text of the next question.
         cancelDelete()
+        // The name of the command of the new profile is looked at.
+        refreshForeignCommandPath()
     }
 
     /// The sidebar selection changed. The user may switch to another profile
@@ -433,6 +438,8 @@ final class AppModel {
         hasStoredKey = false
         cancelDelete()
         selectedSlug = nil
+        // A new profile has no name yet: nothing takes it.
+        refreshForeignCommandPath()
     }
 
     /// Applies a provider template. Only used while creating a profile.
@@ -467,6 +474,10 @@ final class AppModel {
     /// Keeps the slug of the draft in sync with the command name.
     private func syncSlug() {
         draft?.slug = command.slug
+        // The name of the command changed: the folder of the launchers is
+        // looked at again, so the editor can tell right away that the name
+        // is taken by a file that this app did not write.
+        refreshForeignCommandPath()
     }
 
     /// `true` when the editor holds changes that are not saved yet.
@@ -505,10 +516,26 @@ final class AppModel {
         if let owner = command.duplicateOwner(among: otherProfiles) {
             return .duplicateCommand(slug, owner.name)
         }
-        if let path = store.foreignCommandPath(for: slug, ownedBy: currentProfile?.slug) {
+        if let path = foreignCommandPath {
             return .foreignCommandExists(slug, path)
         }
         return nil
+    }
+
+    /// The file that took the name of the command, when a file that this app
+    /// did not write has that name.
+    ///
+    /// The file system is not asked while the window is drawn: the answer
+    /// comes from the last look, which is made when the name of the command
+    /// changes and when the profiles are read, saved or deleted.
+    private(set) var foreignCommandPath: String?
+
+    /// Looks the name of the command up in the folder of the launchers.
+    ///
+    /// The name of a profile that is not written yet belongs to no one, so
+    /// the launcher of that name may be there without being a problem.
+    private func refreshForeignCommandPath() {
+        foreignCommandPath = store.foreignCommandPath(for: command.slug, ownedBy: currentProfile?.slug)
     }
 
     // MARK: - Saving
@@ -548,6 +575,9 @@ final class AppModel {
             command = CommandNameDraft(profile: draft)
             keyInput = ""
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
+            // The launcher of the profile was written: the name of the
+            // command is looked at again, now that it belongs to this profile.
+            refreshForeignCommandPath()
             // A typed key, a new Base URL or auth kind, or a new slug makes the last test describe something else.
             health.profileSaved(old: previousProfile, new: draft, typedKey: typedKey)
             // The key presence and the folders of the menu are looked at again,
@@ -1046,6 +1076,8 @@ final class AppModel {
         // The entry always leaves the list and the data file.
         var failures = removal.failures
         data.profiles.remove(at: index)
+        // The name of the command may belong to another profile now.
+        refreshForeignCommandPath()
         // The profile is gone: an answer of a running check must not come back
         // for it, not even when a profile with the same name is added again.
         health.profileDeleted(slug: profile.slug)
@@ -1514,6 +1546,11 @@ final class AppModel {
     private(set) var shellDamagedFiles: [ShellKind: String] = [:]
     /// For a shell with a block in a file it does not read: those files, with `~`.
     private(set) var shellStrayFiles: [ShellKind: String] = [:]
+    /// The files that carry the setup, for the question about removing it.
+    /// Read with `refreshPathStatus()`, never while drawing: the question is
+    /// part of the window, and reading the files of the shells there would
+    /// ask the file system on every pass of the window.
+    private(set) var pathFilesText: String = ""
     /// `true` when `ZDOTDIR` cannot be read but a zsh block the app wrote can still be removed.
     private(set) var zshRemovableWhileUnresolved = false
     /// Set while the question "Make the claude-<name> commands work…?" is open.
@@ -1547,6 +1584,10 @@ final class AppModel {
                 shellStrayFiles[shell] = strays.map { displayPath($0) }.joined(separator: ", ")
             }
         }
+        // The files that carry the setup are read here as well: the question
+        // about removing them is part of the window, and it must not ask the
+        // file system while the window is drawn.
+        pathFilesText = setup.managedFiles().map { displayPath($0) }.joined(separator: ", ")
     }
 
     /// The line the user copies when the app does not edit the login shell.
@@ -1554,11 +1595,6 @@ final class AppModel {
 
     /// The zsh line the user adds by hand when `ZDOTDIR` cannot be read.
     var zshManualLine: String { pathSetup.manualLine(for: .zsh) }
-
-    /// The files that carry the setup, for the question about removing it.
-    var pathFilesText: String {
-        pathSetup.managedFiles().map { displayPath($0) }.joined(separator: ", ")
-    }
 
     /// A path with the home folder written as "~".
     func displayPath(_ url: URL) -> String {
