@@ -248,9 +248,10 @@ final class HealthRequestOrderTests: XCTestCase {
         ) { _ in }
 
         XCTAssertEqual(probes.calls.count, 1)
-        XCTAssertEqual(probes.calls[0].baseURL, "https://old.example.com",
+        let call = probes.calls.first
+        XCTAssertEqual(call?.baseURL, "https://old.example.com",
                        "the request used a profile that was not read together with the key")
-        XCTAssertEqual(probes.calls[0].key, "sk-old",
+        XCTAssertEqual(call?.key, "sk-old",
                        "the request carried a key that does not belong to the profile it was made for")
     }
 
