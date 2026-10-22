@@ -283,6 +283,7 @@
 "pathSetup.brokenLink" = "%@ is a link that leads nowhere or loops. Claude Profiles did not change it.";
 "pathSetup.readOnly" = "%@ is not writable, so it was not changed. Make it writable and try again.";
 "pathSetup.changedWhileEditing" = "A file changed while Claude Profiles was editing it, so that file was not written. Try again.";
+"pathSetup.recordFailed" = "%@ was cleaned, but the app's own note (path-setup.json) could not be updated. Check that the folder can be written.";
 "pathSetup.offer.partlyMessage" = "Some of the files that carry this setup are missing. Add it again to finish. Each file gets ONE managed block, after a backup.";
 "pathSetup.leftAlone" = "Left alone, nothing was changed in: %@";
 "pathSetup.status.stray" = "Partly added. A block is in %@, which bash no longer reads.";

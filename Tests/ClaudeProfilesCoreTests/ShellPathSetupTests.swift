@@ -1230,40 +1230,187 @@ final class ShellPathSetupTests: XCTestCase {
         XCTAssertTrue(exists(zdot.appendingPathComponent(".zshrc")))
     }
 
-    // MARK: - Bash login file drift (M-I)
+    // MARK: - Record written before a file appears (I4)
 
-    func testBlockLeftInProfileIsPartlyConfiguredAndInstallNeverAddsASecondBlock() throws {
-        let bash = setup(login: "/bin/bash")
-        _ = try setup().install(for: .posix)
-        try write("bp\n", to: file(".bash_profile"))
+    /// Records the existence of a file at the moment the record is written.
+    private final class RecordProbe: @unchecked Sendable {
+        var existedAtRecordWrite: [Bool] = []
+    }
 
-        XCTAssertEqual(bash.status(for: .bash), .partlyConfigured)
-        XCTAssertEqual(bash.strayFiles(for: .bash).map(\.path), [file(".profile").path])
+    func testBashRecordFailureLeavesNoBashProfileBehind() throws {
+        var bash = setup(login: "/bin/bash")
+        bash.recordWriteHook = { throw CocoaError(.fileWriteUnknown) }
+
         XCTAssertThrowsError(try bash.install(for: .bash)) { error in
-            XCTAssertEqual(error as? ShellPathError, .blockElsewhere(self.file(".profile").path))
+            XCTAssertEqual(error as? ShellPathError, .ioFailed(self.recordPath))
         }
+        XCTAssertFalse(exists(file(".bash_profile")))
+        XCTAssertFalse(exists(file(".profile")))
+    }
+
+    func testFishRecordFailureLeavesNoFishFileBehind() throws {
+        var fish = setup(login: "/usr/bin/fish")
+        fish.recordWriteHook = { throw CocoaError(.fileWriteUnknown) }
+
+        XCTAssertThrowsError(try fish.install(for: .fish)) { error in
+            XCTAssertEqual(error as? ShellPathError, .ioFailed(self.recordPath))
+        }
+        XCTAssertFalse(exists(fishFileURL))
+    }
+
+    /// The folder is already recorded, so only the file's own record entry is written.
+    func testZshRecordFailureWithTheFolderAlreadyRecordedLeavesNoZshrcBehind() throws {
+        try write("{\"created\":[],\"zshFolders\":[\"\(home.path)\"]}", to: home.appendingPathComponent(".claude-profiles/path-setup.json"))
+        var zsh = setup()
+        zsh.recordWriteHook = { throw CocoaError(.fileWriteUnknown) }
+
+        XCTAssertThrowsError(try zsh.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .ioFailed(self.recordPath))
+        }
+        XCTAssertFalse(exists(file(".zshrc")))
+    }
+
+    /// The record is written while the file does not exist yet, and lists it once it is created.
+    func testRecordIsWrittenBeforeTheFileAppears() throws {
+        let probe = RecordProbe()
+        let watched = file(".bash_profile")
+        var bash = setup(login: "/bin/bash")
+        bash.recordWriteHook = {
+            probe.existedAtRecordWrite.append(SafeFileSystem.kind(of: watched) != .missing)
+        }
+
+        _ = try bash.install(for: .bash)
+        XCTAssertEqual(probe.existedAtRecordWrite, [false])
+        XCTAssertEqual(createdRecord(), [watched.path])
+        XCTAssertTrue(exists(watched))
+    }
+
+    // MARK: - Removing a zsh block while ZDOTDIR cannot be read (M4)
+
+    func testRemoveForZshWorksOnTheRecordedFolderWhenZdotdirBecameUnreadable() throws {
+        let zdot = home.appendingPathComponent("zdot-moved", isDirectory: true)
+        try write("ZDOTDIR=\(zdot.path)\n", to: file(".zshenv"))
+        _ = try setup().install(for: .zsh)
+        try write("ZDOTDIR=$(echo \(zdot.path))\n", to: file(".zshenv"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir)
+        XCTAssertTrue(setup.hasZshBlockWhileUnresolved())
+        let removed = try setup.remove(for: .zsh)
+        XCTAssertEqual(removed.map(\.path), [zdot.appendingPathComponent(".zshrc").path])
+        XCTAssertFalse(exists(zdot.appendingPathComponent(".zshrc")))
+        XCTAssertFalse(setup.hasZshBlockWhileUnresolved())
+    }
+
+    func testRemoveForZshWhileUnresolvedWithNothingOfOursStillThrows() throws {
+        try write("ZDOTDIR=$(echo \(home.path)/x)\n", to: file(".zshenv"))
+        let setup = setup()
+
+        XCTAssertFalse(setup.hasZshBlockWhileUnresolved())
+        XCTAssertThrowsError(try setup.remove(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .zdotdirUnresolved(self.file(".zshenv").path))
+        }
+    }
+
+    // MARK: - Removal that cleaned a file but could not update the record (M8)
+
+    func testRecordFailureOnRemoveReportsTheCleanedFileNotAFailedWrite() throws {
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        var failing = setup
+        failing.recordWriteHook = { throw CocoaError(.fileWriteUnknown) }
+
+        XCTAssertThrowsError(try failing.remove(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .changedButNotRecorded(changed: [self.file(".zshrc").path]))
+        }
+        XCTAssertFalse(exists(file(".zshrc")), "the file was cleaned before the record failed")
+    }
+
+    // MARK: - Who owns ~/.profile (I3)
+
+    /// sh owns `~/.profile`. Once `~/.bash_profile` exists bash does not read it, so its
+    /// block is not a stray for bash: both shells keep their own block.
+    func testShAndBashKeepTheirOwnBlocksWhenBashReadsAnotherFile() throws {
+        let posix = setup()
+        _ = try posix.install(for: .posix)
+        try write("bp\n", to: file(".bash_profile"))
+        let bash = setup(login: "/bin/bash")
+
+        XCTAssertEqual(bash.status(for: .bash), .notConfigured)
+        XCTAssertEqual(bash.strayFiles(for: .bash), [])
+        XCTAssertEqual(bash.status(for: .posix), .configured)
+
+        guard case .added(let files, _) = try bash.install(for: .bash) else {
+            return XCTFail("expected bash to be added")
+        }
+        XCTAssertEqual(files.map(\.lastPathComponent), [".bash_profile"])
+        XCTAssertEqual(occurrences(begin, in: text(file(".profile"))), 1)
+        XCTAssertEqual(bash.status(for: .bash), .configured)
+        XCTAssertEqual(posix.status(for: .posix), .configured)
+
+        // Removing bash leaves the sh block alone, and removing sh leaves nothing of bash behind.
+        let removed = try bash.remove(for: .bash)
+        XCTAssertEqual(removed.map(\.lastPathComponent), [".bash_profile"])
         XCTAssertEqual(text(file(".bash_profile")), "bp\n")
         XCTAssertEqual(occurrences(begin, in: text(file(".profile"))), 1)
+        XCTAssertEqual(bash.status(for: .bash), .notConfigured)
+        XCTAssertEqual(posix.status(for: .posix), .configured)
+    }
+
+    /// Removing bash never touches `~/.profile` while bash reads another login file.
+    func testRemoveForBashNeverTouchesProfileWhenBashReadsAnotherFile() throws {
+        try write("bp\n", to: file(".bash_profile"))
+        let bash = setup(login: "/bin/bash")
+        _ = try bash.install(for: .bash)
+        _ = try setup().install(for: .posix)
 
         let removed = try bash.remove(for: .bash)
+        XCTAssertEqual(removed.map(\.lastPathComponent), [".bash_profile"])
+        XCTAssertEqual(occurrences(begin, in: text(file(".profile"))), 1)
+        XCTAssertEqual(setup().status(for: .posix), .configured)
+    }
+
+    /// Removing sh removes only `~/.profile`; a bash block in `~/.bash_profile` stays.
+    func testRemoveForShLeavesTheBashBlockAlone() throws {
+        try write("bp\n", to: file(".bash_profile"))
+        let bash = setup(login: "/bin/bash")
+        _ = try bash.install(for: .bash)
+        _ = try setup().install(for: .posix)
+
+        let removed = try setup().remove(for: .posix)
         XCTAssertEqual(removed.map(\.lastPathComponent), [".profile"])
         XCTAssertFalse(exists(file(".profile")), "created by the app, so it goes with its block")
-        XCTAssertEqual(bash.status(for: .bash), .notConfigured)
-        _ = try bash.install(for: .bash)
         XCTAssertEqual(bash.status(for: .bash), .configured)
     }
 
-    func testRemoveForBashFindsEveryManagedBlockInAnyLoginFile() throws {
+    /// A block in a bash-only login file that bash no longer reads is still a stray: Remove fixes it.
+    func testBlockInBashLoginWhileBashProfileExistsIsStrayAndRemovedByBash() throws {
         try write("bp\n", to: file(".bash_profile"))
-        try write("p\n", to: file(".profile"))
+        try write("bl\n\n" + block, to: file(".bash_login"))
         let bash = setup(login: "/bin/bash")
-        _ = try bash.install(for: .bash)
-        _ = try setup().install(for: .posix)
-        XCTAssertEqual(occurrences(begin, in: text(file(".profile"))), 1)
 
-        _ = try bash.remove(for: .bash)
-        XCTAssertEqual(text(file(".bash_profile")), "bp\n")
-        XCTAssertEqual(text(file(".profile")), "p\n")
+        XCTAssertEqual(bash.status(for: .bash), .partlyConfigured)
+        XCTAssertEqual(bash.strayFiles(for: .bash).map(\.path), [file(".bash_login").path])
+        XCTAssertThrowsError(try bash.install(for: .bash)) { error in
+            XCTAssertEqual(error as? ShellPathError, .blockElsewhere(self.file(".bash_login").path))
+        }
+
+        let removed = try bash.remove(for: .bash)
+        XCTAssertEqual(removed.map(\.lastPathComponent), [".bash_login"])
+        XCTAssertEqual(text(file(".bash_login")), "bl\n")
         XCTAssertEqual(bash.status(for: .bash), .notConfigured)
+        XCTAssertEqual(text(file(".bash_profile")), "bp\n")
+    }
+
+    /// A damaged `~/.profile` is sh's problem: bash, reading another login file, is not blocked by it.
+    func testDamagedProfileDoesNotDamageBashWhenBashReadsAnotherFile() throws {
+        try write("p\n" + begin + "\nexport X=1\n", to: file(".profile"))
+        try write("bp\n", to: file(".bash_profile"))
+        let bash = setup(login: "/bin/bash")
+
+        XCTAssertEqual(bash.status(for: .bash), .notConfigured)
+        XCTAssertEqual(bash.status(for: .posix), .damaged)
+        _ = try bash.install(for: .bash)
+        XCTAssertEqual(bash.status(for: .bash), .configured)
     }
 }

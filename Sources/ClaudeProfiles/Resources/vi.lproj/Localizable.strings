@@ -283,6 +283,7 @@
 "pathSetup.brokenLink" = "%@ là liên kết dẫn tới một nơi không tồn tại hoặc bị lặp vòng. Claude Profiles không thay đổi nó.";
 "pathSetup.readOnly" = "%@ không ghi được nên không bị đổi. Hãy cho phép ghi rồi thử lại.";
 "pathSetup.changedWhileEditing" = "Một file đã đổi trong lúc Claude Profiles đang sửa, nên file đó chưa được ghi. Hãy thử lại.";
+"pathSetup.recordFailed" = "%@ đã được dọn sạch, nhưng không cập nhật được ghi chú của app (path-setup.json). Hãy kiểm tra thư mục có ghi được không.";
 "pathSetup.offer.partlyMessage" = "Một số file chứa thiết lập này đang thiếu. Hãy thêm lại để hoàn tất. Mỗi file nhận MỘT khối quản lý, sau khi được sao lưu.";
 "pathSetup.leftAlone" = "Đã để nguyên, không đổi gì trong: %@";
 "pathSetup.status.stray" = "Mới thêm một phần. Có khối trong %@, nơi bash không còn đọc nữa.";

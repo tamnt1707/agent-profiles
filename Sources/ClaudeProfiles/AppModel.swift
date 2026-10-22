@@ -1027,6 +1027,9 @@ final class AppModel {
             return loc.t("pathSetup.readOnly", displayPath(URL(fileURLWithPath: path)))
         case .changedWhileEditing:
             return loc.t("pathSetup.changedWhileEditing")
+        case .changedButNotRecorded(let changed):
+            let list = changed.map { displayPath(URL(fileURLWithPath: $0)) }.joined(separator: ", ")
+            return loc.t("pathSetup.recordFailed", list)
         case .zdotdirUnresolved(let path):
             return loc.t("pathSetup.zdotdir", displayPath(URL(fileURLWithPath: path)), zshManualLine)
         }

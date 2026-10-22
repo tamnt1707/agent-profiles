@@ -16,6 +16,9 @@ public enum ShellPathError: Error, Equatable, Sendable {
     case notWritable(String)
     /// A file changed twice while it was being edited. That file was not written.
     case changedWhileEditing
+    /// The files in `changed` were cleaned by a removal, but the app's own record
+    /// (`path-setup.json`) could not be updated.
+    case changedButNotRecorded(changed: [String])
     /// `ZDOTDIR` is set in `~/.zshenv` in a form the app cannot read. Carries `~/.zshenv`.
     case zdotdirUnresolved(String)
     /// Some files were already changed by this install before `reason` stopped it.
@@ -266,6 +269,15 @@ public struct ShellPathSetup: Sendable {
     /// the login file changed) is still ours to find and remove.
     private func bashCandidates() -> [Target] {
         [".bash_profile", ".bash_login", ".profile", ".bashrc"].map { .block(homeFile($0)) }
+    }
+
+    /// The bash files bash owns: the login file it reads, `.bashrc`, and the bash-only login
+    /// files (`.bash_profile`, `.bash_login`). `~/.profile` belongs to the sh row, so it is
+    /// included only when bash reads it.
+    private func bashOwnedCandidates() -> [Target] {
+        var names = [".bash_profile", ".bash_login", ".bashrc"]
+        if bashLoginFile().lastPathComponent == ".profile" { names.append(".profile") }
+        return names.map { .block(homeFile($0)) }
     }
 
     /// The files that may hold a line the user wrote by hand for this shell.
@@ -633,8 +645,9 @@ public struct ShellPathSetup: Sendable {
         }
     }
 
-    /// The managed blocks of a shell that sit in a file the shell does not read.
-    /// Only bash has such files (for example `~/.profile` once `~/.bash_profile` exists).
+    /// The managed blocks of a shell that sit in a bash-owned file the shell does not read
+    /// (for example `~/.bash_login` once `~/.bash_profile` exists). A block in `~/.profile`
+    /// is never a stray for bash: sh owns it.
     public func strayFiles(for shell: ShellKind) -> [URL] {
         (try? strayBlocks(for: shell)) ?? []
     }
@@ -644,7 +657,7 @@ public struct ShellPathSetup: Sendable {
         guard shell == .bash else { return [] }
         let read = Set(targets(for: .bash).map { $0.url.standardizedFileURL.path })
         var strays: [URL] = []
-        for target in bashCandidates() where !read.contains(target.url.standardizedFileURL.path) {
+        for target in bashOwnedCandidates() where !read.contains(target.url.standardizedFileURL.path) {
             if try state(of: target) { strays.append(target.url) }
         }
         return strays
@@ -821,14 +834,22 @@ public struct ShellPathSetup: Sendable {
     /// the files that were changed or deleted.
     public func remove(for shell: ShellKind) throws -> [URL] {
         guard shell.isSupported else { throw ShellPathError.unsupported }
-        if shell == .zsh, case .unresolved = zshDirectory {
-            throw ShellPathError.zdotdirUnresolved(homeFile(".zshenv").path)
+        var unresolved = false
+        if shell == .zsh, case .unresolved = zshDirectory { unresolved = true }
+        // Bash removes only the files it owns (`~/.profile` stays with sh unless bash reads it).
+        let candidates: [Target]
+        if unresolved {
+            candidates = zshCandidatesWhileUnresolved()
+        } else {
+            candidates = shell == .bash ? bashOwnedCandidates() : targets(for: shell)
         }
-        // Bash removes its block from every file it may have written, not only the one it reads now.
-        let candidates = shell == .bash ? bashCandidates() : targets(for: shell)
         var managed: [Target] = []
         for target in candidates {
             if try state(of: target) { managed.append(target) }
+        }
+        // Nothing of ours is there to remove, and ZDOTDIR cannot be read: say so.
+        if unresolved, managed.isEmpty {
+            throw ShellPathError.zdotdirUnresolved(homeFile(".zshenv").path)
         }
         for target in managed {
             try Self.requireWritable(try Self.writeTarget(target.url))
@@ -841,8 +862,21 @@ public struct ShellPathSetup: Sendable {
             // A record that cannot be written does not stop the other files; it is reported at the end.
             do { try setCreated(url.path, false) } catch { recordFailed = true }
         }
-        if recordFailed { throw ShellPathError.ioFailed(stateFile.path) }
+        if recordFailed { throw ShellPathError.changedButNotRecorded(changed: changed.map(\.path)) }
         return changed
+    }
+
+    /// The zsh files that may carry our block while `ZDOTDIR` cannot be read: the folders
+    /// an install wrote to, and `~/.zshrc`. Nothing is installed there.
+    private func zshCandidatesWhileUnresolved() -> [Target] {
+        recordedZshFolders().map { .block($0.appendingPathComponent(".zshrc")) } + [.block(homeFile(".zshrc"))]
+    }
+
+    /// `true` when Remove can undo a zsh block while `ZDOTDIR` cannot be read: a block
+    /// sits in a recorded folder or in `~/.zshrc`. Never `true` when `ZDOTDIR` resolves.
+    public func hasZshBlockWhileUnresolved() -> Bool {
+        guard case .unresolved = zshDirectory else { return false }
+        return zshCandidatesWhileUnresolved().contains { (try? state(of: $0)) == true }
     }
 
     /// Removes the setup from every file the app may have edited, for every
