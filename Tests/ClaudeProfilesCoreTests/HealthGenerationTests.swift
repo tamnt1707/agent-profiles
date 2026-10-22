@@ -155,6 +155,106 @@ final class HealthGenerationTests: XCTestCase {
         XCTAssertNil(book.lastTest(for: tested))
     }
 
+    // MARK: - The list that is read again
+
+    /// A profile that changed while the list was read again gets a new
+    /// generation, also when it was never tested.
+    ///
+    /// The answer of a running check is about the old settings, so it must not
+    /// land in the dot of the new ones.
+    func testAProfileThatChangedOnReloadRaisesItsGenerationWithoutAResult() {
+        var book = HealthBook()
+        // The profile is read once: it was never tested, so it has no result.
+        book.profilesLoaded([profile("a")])
+        XCTAssertEqual(book.generation(for: "a"), 0)
+        XCTAssertNil(book.lastTest(for: profile("a")))
+
+        // The file was changed by hand: the Base URL is another one.
+        book.profilesLoaded([profile("a", baseURL: "https://other.example.com")])
+
+        XCTAssertEqual(
+            book.generation(for: "a"),
+            1,
+            "the generation of a changed profile did not move"
+        )
+    }
+
+    /// The auth kind is a setting too: a profile whose auth kind changed gets
+    /// a new generation, also without a result.
+    func testAProfileWhoseAuthKindChangedOnReloadRaisesItsGeneration() {
+        var book = HealthBook()
+        book.profilesLoaded([profile("a", auth: .bearer)])
+
+        book.profilesLoaded([profile("a", auth: .apiKey)])
+
+        XCTAssertEqual(book.generation(for: "a"), 1)
+    }
+
+    /// A profile that did not change keeps its generation.
+    func testAProfileThatDidNotChangeKeepsItsGeneration() {
+        var book = HealthBook()
+        book.profilesLoaded([profile("a")])
+        book.profilesLoaded([profile("a")])
+        book.profilesLoaded([profile("a"), profile("b")])
+
+        XCTAssertEqual(book.generation(for: "a"), 0)
+        XCTAssertEqual(book.generation(for: "b"), 0)
+    }
+
+    /// A profile that is gone keeps nothing, and its generation rises, also
+    /// when it was never tested.
+    func testAProfileThatIsGoneRaisesItsGenerationWithoutAResult() {
+        var book = HealthBook()
+        book.profilesLoaded([profile("a")])
+
+        book.profilesLoaded([])
+
+        XCTAssertEqual(book.generation(for: "a"), 1)
+    }
+
+    /// The answer of a check that ran before the list was read again is not
+    /// recorded for the new settings of the profile.
+    func testAnAnswerOfTheOldSettingsIsNotRecordedAfterAReload() {
+        var book = HealthBook()
+        book.profilesLoaded([profile("a")])
+        let generation = book.generation(for: "a")
+
+        // The file was changed by hand while the check was on its way.
+        book.profilesLoaded([profile("a", baseURL: "https://other.example.com")])
+
+        XCTAssertFalse(
+            book.record(.ok(latencyMs: 1, model: nil), at: fixedNow, for: profile("a"), generation: generation),
+            "the answer of the old settings was recorded for the new ones"
+        )
+        XCTAssertNil(book.lastTest(for: profile("a")))
+    }
+
+    /// A profile that was saved keeps its generation when the list is read
+    /// again: the save already raised it.
+    func testASavedProfileKeepsItsGenerationWhenTheListIsReadAgain() {
+        var book = HealthBook()
+        book.profilesLoaded([profile("a")])
+        var changed = profile("a")
+        changed.baseURL = "https://other.example.com"
+        book.profileSaved(old: profile("a"), new: changed, typedKey: "")
+
+        book.profilesLoaded([changed])
+
+        XCTAssertEqual(book.generation(for: "a"), 1, "the generation moved twice")
+    }
+
+    /// A profile that was deleted and added again with the same name keeps the
+    /// generation of the delete: the answer of the old profile is not kept.
+    func testAProfileThatComesBackKeepsTheGenerationOfTheDelete() {
+        var book = HealthBook()
+        book.profilesLoaded([profile("a")])
+        book.profileDeleted(slug: "a")
+
+        book.profilesLoaded([profile("a")])
+
+        XCTAssertEqual(book.generation(for: "a"), 1, "the generation of the delete was forgotten")
+    }
+
     // MARK: - The answer of an older setting
 
     func testAnAnswerOfTheCurrentGenerationIsRecorded() {

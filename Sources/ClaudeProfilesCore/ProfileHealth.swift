@@ -102,6 +102,11 @@ public enum ProfileHealth {
 /// A check that started before the change must not write its answer into the
 /// dot of the new settings, so an answer always says which generation it was
 /// made for.
+///
+/// The settings of every profile are remembered, also the ones of a profile
+/// that was never tested: a profile whose settings changed while the list was
+/// read again has to get a new generation, or an answer of a running check
+/// would land in the dot of the new settings.
 public struct HealthBook: Equatable, Sendable {
     private struct Entry: Equatable, Sendable {
         var baseURL: String
@@ -109,7 +114,18 @@ public struct HealthBook: Equatable, Sendable {
         var test: TestRecord
     }
 
+    /// The settings a slug was last seen with.
+    ///
+    /// They are kept for every profile, also for one that was never tested:
+    /// the generation of a profile that changed has to rise, so an answer of
+    /// a running check cannot land in the dot of the new settings.
+    private struct Settings: Equatable, Sendable {
+        var baseURL: String
+        var auth: AuthKind
+    }
+
     private var entries: [String: Entry] = [:]
+    private var settings: [String: Settings] = [:]
     private var generations: [String: Int] = [:]
 
     public init() {}
@@ -171,11 +187,13 @@ public struct HealthBook: Equatable, Sendable {
         if let old, old.slug != new.slug {
             forget(slug: old.slug)
             bump(slug: old.slug)
+            settings[old.slug] = nil
         }
         if HealthInvalidation.shouldForget(old: old, new: new, typedKey: typedKey) {
             forget(slug: new.slug)
             bump(slug: new.slug)
         }
+        settings[new.slug] = Settings(baseURL: new.baseURL, auth: new.auth)
     }
 
     /// The profile is gone.
@@ -186,6 +204,7 @@ public struct HealthBook: Equatable, Sendable {
     public mutating func profileDeleted(slug: String) {
         forget(slug: slug)
         bump(slug: slug)
+        settings[slug] = nil
     }
 
     /// The list of the profiles was read again.
@@ -195,20 +214,30 @@ public struct HealthBook: Equatable, Sendable {
     /// URL or auth kind changed keeps no result either. The generation of
     /// every profile that changed rises, so an answer of a running check
     /// cannot land in the dot of the new settings.
+    ///
+    /// A profile that was never tested has no result, but its settings are
+    /// known: they are compared too, so the generation of a profile that
+    /// changed while it was never tested rises as well.
     public mutating func profilesLoaded(_ profiles: [Profile]) {
         let loaded = Dictionary(profiles.map { ($0.slug, $0) }, uniquingKeysWith: { first, _ in first })
-        // A profile that is gone: its result is dropped.
-        for slug in Array(entries.keys) where loaded[slug] == nil {
+        // A profile that is gone: its result is dropped and its generation
+        // rises, so an answer of a running check cannot come back for it.
+        for slug in Array(settings.keys) where loaded[slug] == nil {
             forget(slug: slug)
             bump(slug: slug)
+            settings[slug] = nil
         }
         // A profile that is still there but changed: the result describes
-        // another provider or another account.
+        // another provider or another account. A profile that was never tested
+        // has no result, but its generation rises too: an answer of a running
+        // check is about the old settings.
         for profile in profiles {
-            guard let entry = entries[profile.slug] else { continue }
-            guard entry.baseURL != profile.baseURL || entry.auth != profile.auth else { continue }
-            forget(slug: profile.slug)
-            bump(slug: profile.slug)
+            let current = Settings(baseURL: profile.baseURL, auth: profile.auth)
+            if let known = settings[profile.slug], known != current {
+                forget(slug: profile.slug)
+                bump(slug: profile.slug)
+            }
+            settings[profile.slug] = current
         }
     }
 
