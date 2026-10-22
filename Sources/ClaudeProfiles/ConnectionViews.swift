@@ -8,10 +8,12 @@ extension Loc {
     func probeText(_ outcome: ProbeOutcome) -> String {
         switch outcome {
         case .ok(let latency, let model):
-            if let model { return t("probe.ok.model", latency, model) }
-            return t("probe.ok", latency)
-        case .serverError(let code), .unexpectedStatus(let code):
-            return t(outcome.messageKey, code)
+            if let model { return count("probe.ok.model", latency, model) }
+            return count("probe.ok", latency)
+        case .serverError(let code):
+            return count("probe.serverError", code)
+        case .unexpectedStatus(let code):
+            return count("probe.unexpectedStatus", code)
         default:
             return t(outcome.messageKey)
         }

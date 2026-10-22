@@ -220,12 +220,20 @@ public struct UpdateInstaller {
     ///
     /// The script has to survive the quit of the app, so it is started through
     /// `nohup` in the background and gets its own process.
+    ///
+    /// It also starts with an empty environment: an exported function of the
+    /// shell of the app, an alias or a shim in the PATH must not be able to
+    /// change what the helper does. `env -i` gives the script a PATH of its
+    /// own and the home folder of the user, and nothing else.
     static func launchDetached(_ script: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [
             "-c",
-            "/usr/bin/nohup " + ShellQuote.quote(script.path) + " >/dev/null 2>&1 &",
+            HelperLaunch.command(
+                script: script,
+                home: FileManager.default.homeDirectoryForCurrentUser
+            ),
         ]
         try process.run()
     }

@@ -31,10 +31,10 @@ final class InstallHelperTests: XCTestCase {
         XCTAssertTrue(script.contains("WORK='/tmp/work'"))
         XCTAssertTrue(script.contains("BACKUP='/Applications/Claude Profiles.app.old'"))
         // The script waits, checks the signature, starts the app and cleans up.
-        XCTAssertTrue(script.contains("kill -0 \"$PID\""))
-        XCTAssertTrue(script.contains("xattr -dr com.apple.quarantine"))
-        XCTAssertTrue(script.contains("open \"$CURRENT\""))
-        XCTAssertTrue(script.contains("rm -rf \"$BACKUP\""))
+        XCTAssertTrue(script.contains("/bin/kill -0 \"$PID\""))
+        XCTAssertTrue(script.contains("/usr/bin/xattr -dr com.apple.quarantine"))
+        XCTAssertTrue(script.contains("/usr/bin/open \"$CURRENT\""))
+        XCTAssertTrue(script.contains("/bin/rm -rf \"$BACKUP\""))
     }
 
     func testAPathWithAQuoteIsQuoted() {
@@ -55,9 +55,104 @@ final class InstallHelperTests: XCTestCase {
         XCTAssertEqual(backup.path, "/Applications/Claude Profiles.app.old")
     }
 
+    // MARK: - The tools of the script
+
+    /// The script calls every tool by its absolute path.
+    ///
+    /// A shim in the PATH, an alias or an exported function of the shell that
+    /// starts the script must not be able to change what the helper does: a
+    /// "rm" that is not "/bin/rm" could move a file to the Trash instead of
+    /// removing it.
+    func testEveryToolIsCalledByItsAbsolutePath() {
+        let script = InstallHelper.script(
+            pid: 4242,
+            currentBundle: URL(fileURLWithPath: "/Applications/Claude Profiles.app"),
+            newBundle: URL(fileURLWithPath: "/tmp/work/Claude Profiles.app"),
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: logFile
+        )
+
+        for tool in ["rm", "mv", "sleep", "kill", "mkdir", "date", "echo", "xattr", "open"] {
+            XCTAssertEqual(
+                bareCalls(script, of: tool), [],
+                "the script calls \(tool) without its full path"
+            )
+        }
+        // The tools of the system are the ones the app uses.
+        XCTAssertTrue(script.contains("/bin/rm -rf"))
+        XCTAssertTrue(script.contains("/bin/mv \"$CURRENT\""))
+        XCTAssertTrue(script.contains("/bin/sleep 0.1"))
+        XCTAssertTrue(script.contains("/usr/bin/open \"$CURRENT\""))
+        XCTAssertTrue(script.contains("/usr/bin/xattr -dr"))
+    }
+
+    /// The script sets its own PATH before it runs anything.
+    ///
+    /// The exported functions of the shell that starts the script are not
+    /// dropped here: `unset -f` without a name removes nothing. They cannot
+    /// reach the script at all, because it starts with an empty environment
+    /// (`env -i`, see `HelperLaunch`).
+    func testTheScriptSetsItsOwnPathBeforeItRunsAnything() {
+        let script = InstallHelper.script(
+            pid: 4242,
+            currentBundle: URL(fileURLWithPath: "/Applications/Claude Profiles.app"),
+            newBundle: URL(fileURLWithPath: "/tmp/work/Claude Profiles.app"),
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: logFile
+        )
+
+        XCTAssertTrue(script.contains("PATH=\(InstallHelper.scriptPath)"))
+        XCTAssertTrue(script.contains("export PATH"))
+        XCTAssertTrue(script.contains("unalias -a"))
+        // The no-op is gone: `unset -f` without a name removes nothing.
+        XCTAssertFalse(script.contains("unset -f"), "the script still drops nothing with unset -f")
+        // The PATH is set before the first tool is called.
+        let path = script.range(of: "PATH=\(InstallHelper.scriptPath)")!.lowerBound
+        let firstTool = script.range(of: "/bin/mkdir")!.lowerBound
+        XCTAssertLessThan(path, firstTool)
+    }
+
+    /// The script starts with its own PATH: nothing but a comment comes before
+    /// it, so the environment of the shell that starts the script cannot
+    /// change what the helper does.
+    func testTheScriptStartsWithItsOwnPath() {
+        let script = InstallHelper.script(
+            pid: 4242,
+            currentBundle: URL(fileURLWithPath: "/Applications/Claude Profiles.app"),
+            newBundle: URL(fileURLWithPath: "/tmp/work/Claude Profiles.app"),
+            workDirectory: URL(fileURLWithPath: "/tmp/work"),
+            logFile: logFile
+        )
+
+        let lines = script.split(separator: "\n", omittingEmptySubsequences: false)
+        let path = lines.firstIndex { $0.hasPrefix("PATH=") }
+        XCTAssertNotNil(path, "the script does not set a PATH of its own")
+        guard let path else { return }
+        XCTAssertEqual(lines[path], "PATH=\(InstallHelper.scriptPath)")
+        for line in lines[..<path] {
+            XCTAssertTrue(line.hasPrefix("#"),
+                          "the script does something before it sets its PATH: \(line)")
+        }
+    }
+
+    /// The places where the script names a tool without its full path.
+    private func bareCalls(_ script: String, of tool: String) -> [String] {        // The tool is not part of a path and not part of a longer word.
+        let pattern = "(?<![/\\w])\(tool)\\b"
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(script.startIndex..<script.endIndex, in: script)
+        return expression.matches(in: script, range: range).map { match in
+            let start = script.index(script.startIndex, offsetBy: match.range.location)
+            let end = script.index(start, offsetBy: match.range.length)
+            return String(script[start..<end])
+        }
+    }
+
     // MARK: - The script in the shell
 
     /// A folder with a fake `open`, so the test sees what the script starts.
+    ///
+    /// The fake is used through its full path: the script does not look a tool
+    /// up in the PATH, so the folder is not in the PATH of the test run.
     private func makeFakeOpen() throws -> (directory: URL, log: URL) {
         let directory = temp.url.appendingPathComponent("fake-bin", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -65,15 +160,28 @@ final class InstallHelperTests: XCTestCase {
         let open = directory.appendingPathComponent("open")
         let text = """
         #!/bin/sh
-        echo "$1" >> "$OPEN_LOG"
+        echo "$1" >> '\(log.path)'
         """
         try Data(text.utf8).write(to: open)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: open.path)
         return (directory, log)
     }
 
+    /// The tools of a script whose `open` is the fake one of the test.
+    private func tools(withFakeOpen directory: URL) -> ToolPaths {
+        var tools = ToolPaths.system
+        tools.open = directory.appendingPathComponent("open").path
+        return tools
+    }
+
     /// Runs the helper and waits for it.
-    private func run(_ script: String, extraPath: URL?, log: URL) throws -> Int32 {
+    ///
+    /// The script is started with a clean environment: only the PATH the
+    /// script sets for itself and a home folder inside the test folder. The
+    /// same as `env -i PATH=/usr/bin:/bin HOME=<temp>`: nothing of the
+    /// environment of the test run reaches the script, so no shim, no alias
+    /// and no exported function of this machine can change what it does.
+    private func run(_ script: String) throws -> Int32 {
         let path = temp.url.appendingPathComponent("helper.sh")
         try Data(script.utf8).write(to: path)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
@@ -81,12 +189,10 @@ final class InstallHelperTests: XCTestCase {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [path.path]
-        var environment = ProcessInfo.processInfo.environment
-        if let extraPath {
-            environment["PATH"] = extraPath.path + ":" + (environment["PATH"] ?? "")
-        }
-        environment["OPEN_LOG"] = log.path
-        process.environment = environment
+        process.environment = [
+            "PATH": InstallHelper.scriptPath,
+            "HOME": temp.url.path
+        ]
         try process.run()
         process.waitUntilExit()
         return process.terminationStatus
@@ -126,9 +232,10 @@ final class InstallHelperTests: XCTestCase {
             currentBundle: current,
             newBundle: newBundle,
             workDirectory: work,
-            logFile: logFile
+            logFile: logFile,
+            tools: tools(withFakeOpen: fake.directory)
         )
-        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 0)
+        XCTAssertEqual(try run(script), 0)
 
         // The new app is in place.
         XCTAssertTrue(FileManager.default.fileExists(atPath: current.appendingPathComponent("marker.txt").path))
@@ -163,9 +270,10 @@ final class InstallHelperTests: XCTestCase {
             currentBundle: current,
             newBundle: newBundle,
             workDirectory: work,
-            logFile: logFile
+            logFile: logFile,
+            tools: tools(withFakeOpen: fake.directory)
         )
-        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 1)
+        XCTAssertEqual(try run(script), 1)
 
         // The failure is in the log, one line.
         XCTAssertEqual(logText().split(separator: "\n").count, 1)
@@ -202,11 +310,12 @@ final class InstallHelperTests: XCTestCase {
             currentBundle: current,
             newBundle: newBundle,
             workDirectory: work,
-            logFile: logFile
+            logFile: logFile,
+            tools: tools(withFakeOpen: fake.directory)
         )
 
         let start = Date()
-        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 0)
+        XCTAssertEqual(try run(script), 0)
         let duration = Date().timeIntervalSince(start)
 
         sleeper.waitUntilExit()
@@ -242,9 +351,10 @@ final class InstallHelperTests: XCTestCase {
             currentBundle: current,
             newBundle: newBundle,
             workDirectory: work,
-            logFile: logFile
+            logFile: logFile,
+            tools: tools(withFakeOpen: fake.directory)
         )
-        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 0)
+        XCTAssertEqual(try run(script), 0)
 
         // The new app is in place and the old one is gone; nothing was nested in the stale copy.
         XCTAssertEqual(try String(contentsOf: current.appendingPathComponent("marker.txt"), encoding: .utf8), "new")
@@ -284,9 +394,10 @@ final class InstallHelperTests: XCTestCase {
             newBundle: newBundle,
             workDirectory: work,
             waitSeconds: 1,
-            logFile: logFile
+            logFile: logFile,
+            tools: tools(withFakeOpen: fake.directory)
         )
-        XCTAssertEqual(try run(script, extraPath: fake.directory, log: fake.log), 1)
+        XCTAssertEqual(try run(script), 1)
 
         // Nothing was swapped and the app was not started.
         XCTAssertEqual(try String(contentsOf: current.appendingPathComponent("marker.txt"), encoding: .utf8), "old")
@@ -307,7 +418,7 @@ final class InstallHelperTests: XCTestCase {
         // The log file and its folder are quoted; the folder is created on failure.
         XCTAssertTrue(script.contains("LOG='/tmp/logs/ClaudeProfilesUpdate.log'"))
         XCTAssertTrue(script.contains("LOG_DIR='/tmp/logs'"))
-        XCTAssertTrue(script.contains("mkdir -p \"$LOG_DIR\""))
+        XCTAssertTrue(script.contains("/bin/mkdir -p \"$LOG_DIR\""))
         XCTAssertTrue(script.contains(">> \"$LOG\""))
         // Every failure stops with a non zero status.
         XCTAssertTrue(script.contains("exit 1"))
@@ -315,17 +426,17 @@ final class InstallHelperTests: XCTestCase {
         // A running app stops the helper before anything is moved.
         XCTAssertLessThan(
             script.range(of: "fail \"the app did not quit in time\"")!.lowerBound,
-            script.range(of: "mv \"$CURRENT\" \"$BACKUP\"")!.lowerBound
+            script.range(of: "/bin/mv \"$CURRENT\" \"$BACKUP\"")!.lowerBound
         )
         // A stale copy is removed before the first move.
         XCTAssertLessThan(
-            script.range(of: "rm -rf \"$BACKUP\"")!.lowerBound,
-            script.range(of: "mv \"$CURRENT\" \"$BACKUP\"")!.lowerBound
+            script.range(of: "/bin/rm -rf \"$BACKUP\"")!.lowerBound,
+            script.range(of: "/bin/mv \"$CURRENT\" \"$BACKUP\"")!.lowerBound
         )
         // A half moved bundle is removed before the old one is put back.
         XCTAssertLessThan(
-            script.range(of: "rm -rf \"$CURRENT\"")!.lowerBound,
-            script.range(of: "mv \"$BACKUP\" \"$CURRENT\"")!.lowerBound
+            script.range(of: "/bin/rm -rf \"$CURRENT\"")!.lowerBound,
+            script.range(of: "/bin/mv \"$BACKUP\" \"$CURRENT\"")!.lowerBound
         )
     }
 

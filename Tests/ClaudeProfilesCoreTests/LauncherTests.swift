@@ -15,15 +15,15 @@ final class LauncherTests: XCTestCase {
         paths = nil
     }
 
-    func testCommandWithoutWorkdir() {
-        let command = Launcher.command(for: Profile.sample(), paths: paths)
+    func testCommandWithoutWorkdir() throws {
+        let command = try Launcher.command(for: Profile.sample(), paths: paths)
         XCTAssertEqual(command, "'\(paths.script(for: "test").path)'")
     }
 
-    func testCommandWithWorkdir() {
+    func testCommandWithWorkdir() throws {
         var profile = Profile.sample()
         profile.workdir = "/tmp/my project"
-        let command = Launcher.command(for: profile, paths: paths)
+        let command = try Launcher.command(for: profile, paths: paths)
         XCTAssertEqual(command, "cd '/tmp/my project' && '\(paths.script(for: "test").path)'")
     }
 
@@ -46,28 +46,152 @@ final class LauncherTests: XCTestCase {
         XCTAssertTrue(script.contains(#"do script "say \"hi\" \\ bye""#))
     }
 
-    // MARK: - Working directory
+    // MARK: - Hostile content in the AppleScript string
 
-    func testTildeInTheWorkdirIsExpandedToTheHomeDirectory() {
+    /// A backslash and a double quote are the two characters that would end the
+    /// AppleScript string. Both are escaped, and the rest of the hostile text
+    /// stays where it is.
+    func testHostileContentStaysInsideOneAppleScriptString() {
+        let hostile = #"say "hi" \ bye; rm -rf ~ ; echo `id`"#
+        let script = Launcher.appleScript(command: hostile, terminal: .terminal)
+        XCTAssertTrue(script.contains(#"do script "say \"hi\" \\ bye; rm -rf ~ ; echo `id`""#))
+        // The string of the script is closed exactly once, at the end.
+        XCTAssertEqual(script.components(separatedBy: "\"").count % 2, 1)
+    }
+
+    /// The same for iTerm, which writes the text into the session.
+    func testHostileContentStaysInsideOneITermString() {
+        let hostile = #"say "hi" \ bye"#
+        let script = Launcher.appleScript(command: hostile, terminal: .iTerm)
+        XCTAssertTrue(script.contains(#"write text "say \"hi\" \\ bye""#))
+    }
+
+    /// A control character never reaches the terminal: the folder it could come
+    /// from is refused before the command is built, and the escaping writes it
+    /// as its name, so it cannot end the string of the script.
+    func testAControlCharacterNeverReachesTheAppleScript() throws {
+        let runner = LauncherStubRunner(result: ProcessResult(status: 0))
+        XCTAssertThrowsError(
+            try Launcher.launch(profile: Profile.sample(), terminal: .terminal, paths: paths,
+                                workdirOverride: "/tmp/a\u{1}b", runner: runner)
+        )
+        XCTAssertTrue(runner.calls.isEmpty, "osascript was run for an unsafe folder")
+
+        // The escaping writes the control character as its name: the string of
+        // the script cannot end before the command does.
+        let script = Launcher.appleScript(command: "a\u{1}b", terminal: .terminal)
+        XCTAssertTrue(script.contains(#"do script "a\u{1}b""#))
+        XCTAssertFalse(script.contains("\u{1}"))
+    }
+
+    // MARK: - The AppleScript cannot be broken
+
+    /// The exact text that the escaping writes.
+    func testTheExactEscapedText() {
+        XCTAssertEqual(Launcher.escapeForAppleScript(#"a\b"c"#), #"a\\b\"c"#)
+        XCTAssertEqual(Launcher.escapeForAppleScript("a\tb"), #"a\tb"#)
+        XCTAssertEqual(Launcher.escapeForAppleScript("a\nb"), #"a\nb"#)
+        XCTAssertEqual(Launcher.escapeForAppleScript("a\rb"), #"a\rb"#)
+        XCTAssertEqual(Launcher.escapeForAppleScript("a\u{1B}b"), #"a\u{1B}b"#)
+    }
+
+    /// A string with the characters that could end the string of the script
+    /// stays inside it: no control character is left in the command, and the
+    /// command does not add a line to the script.
+    func testTheAppleScriptKeepsADangerousStringInsideOneStatement() {
+        var dangerous = "\\ \" ' $ ` "
+        for value in 0x00...0x1F {
+            dangerous.unicodeScalars.append(Unicode.Scalar(value)!)
+        }
+        dangerous.unicodeScalars.append(Unicode.Scalar(0x7F)!)
+        for value in 0x80...0x9F {
+            dangerous.unicodeScalars.append(Unicode.Scalar(value)!)
+        }
+        dangerous.unicodeScalars.append(Unicode.Scalar(0x2028)!)
+        dangerous.unicodeScalars.append(Unicode.Scalar(0x2029)!)
+
+        // Not one control character is left in the command.
+        let escaped = Launcher.escapeForAppleScript(dangerous)
+        for scalar in escaped.unicodeScalars {
+            XCTAssertFalse(FolderPathSafety.isControl(scalar),
+                           "the command holds a raw control character")
+        }
+
+        for terminal in [TerminalApp.terminal, .iTerm] {
+            let script = Launcher.appleScript(command: dangerous, terminal: terminal)
+            let plain = Launcher.appleScript(command: "harmless", terminal: terminal)
+            // The command did not become a second statement of the script.
+            XCTAssertEqual(script.components(separatedBy: "\n").count,
+                           plain.components(separatedBy: "\n").count)
+            // The quote of the command and the backslash are escaped, so the
+            // string of the script cannot end before the command does.
+            XCTAssertTrue(script.contains(escaped))
+            XCTAssertTrue(script.contains("\\\""))
+            XCTAssertTrue(script.contains("\\\\"))
+        }
+    }
+
+    /// The command of the profile goes into the script as one string, and the
+    /// quote of the command does not end it.
+    func testTheQuoteOfTheCommandDoesNotEndTheString() {
+        let script = Launcher.appleScript(command: #"say "hi""#, terminal: .terminal)
+        XCTAssertTrue(script.contains(#"do script "say \"hi\"""#))
+    }
+
+    // MARK: - The paths that go into the command
+
+    /// The script of the profile goes into the command too: a path with a
+    /// control character in it is refused there as well.
+    func testTheCommandRefusesAScriptPathWithAControlCharacter() {
+        let unsafe = Paths(root: paths.root.appendingPathComponent("ro\u{1}ot", isDirectory: true),
+                           home: paths.home)
+        XCTAssertThrowsError(try Launcher.command(for: Profile.sample(), paths: unsafe)) { error in
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToOpen(unsafe.script(for: "test").path))
+        }
+    }
+
+    /// The home folder of the profile goes into the command too.
+    func testTheCommandRefusesAHomePathWithAControlCharacter() {
+        let unsafe = Paths(root: paths.root,
+                           home: paths.home.appendingPathComponent("ho\u{1}me", isDirectory: true))
+        XCTAssertThrowsError(try Launcher.command(for: Profile.sample(), paths: unsafe)) { error in
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToOpen(unsafe.home.path))
+        }
+    }
+
+    /// Nothing is typed into the terminal when a path of the command is not
+    /// safe.
+    func testAnUnsafePathOfTheCommandNeverReachesTheTerminal() {
+        let unsafe = Paths(root: paths.root,
+                           home: paths.home.appendingPathComponent("ho\u{1}me", isDirectory: true))
+        let runner = LauncherStubRunner(result: ProcessResult(status: 0))
+        XCTAssertThrowsError(
+            try Launcher.launch(profile: Profile.sample(), terminal: .terminal, paths: unsafe, runner: runner)
+        )
+        XCTAssertTrue(runner.calls.isEmpty, "osascript was run for an unsafe path")
+    }
+
+    // MARK: - Working directory
+    func testTildeInTheWorkdirIsExpandedToTheHomeDirectory() throws {
         var profile = Profile.sample()
         profile.workdir = "~/work dir"
-        let command = Launcher.command(for: profile, paths: paths)
+        let command = try Launcher.command(for: profile, paths: paths)
         XCTAssertEqual(command, "cd '\(paths.home.path)/work dir' && '\(paths.script(for: "test").path)'")
         XCTAssertFalse(command.contains("'~"))
     }
 
-    func testABareTildeIsTheHomeDirectory() {
+    func testABareTildeIsTheHomeDirectory() throws {
         var profile = Profile.sample()
         profile.workdir = "~"
-        XCTAssertEqual(Launcher.command(for: profile, paths: paths),
+        XCTAssertEqual(try Launcher.command(for: profile, paths: paths),
                        "cd '\(paths.home.path)' && '\(paths.script(for: "test").path)'")
     }
 
     /// `~user` is another user's home, which is not ours to guess: it stays as it is.
-    func testTildeWithAUserNameIsNotExpanded() {
+    func testTildeWithAUserNameIsNotExpanded() throws {
         var profile = Profile.sample()
         profile.workdir = "~bob/x"
-        XCTAssertTrue(Launcher.command(for: profile, paths: paths).hasPrefix("cd '~bob/x' && "))
+        XCTAssertTrue(try Launcher.command(for: profile, paths: paths).hasPrefix("cd '~bob/x' && "))
     }
 
     // MARK: - Running osascript

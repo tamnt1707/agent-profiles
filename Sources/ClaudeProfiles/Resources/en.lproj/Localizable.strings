@@ -7,6 +7,27 @@
 "sidebar.add" = "Add profile";
 "sidebar.empty.title" = "No profiles yet";
 "sidebar.empty.description" = "Add a profile to get a claude-<name> command.";
+"sidebar.health.stateReady" = "Ready";
+"sidebar.health.stateUntested" = "Not tested";
+"sidebar.health.stateAttention" = "Needs attention";
+"sidebar.health.stateProblem" = "Problem";
+"sidebar.health.a11y" = "Connection status: %@. %@";
+"sidebar.health.noKey" = "No key stored";
+"sidebar.health.connectedNow" = "Connected just now";
+"sidebar.health.connectedOne" = "Connected 1 minute ago";
+"sidebar.health.connectedMany" = "Connected %d minutes ago";
+"sidebar.health.notTested" = "Not tested yet";
+"sidebar.health.keychainUnreadable" = "Could not read the Keychain";
+"sidebar.health.stale" = "Last test was %d minutes ago. Test again to refresh.";
+"sidebar.health.warning" = "Last test gave a warning. %@";
+"sidebar.health.failed" = "Last test failed. %@";
+"sidebar.checkAll" = "Check all connections";
+"sidebar.checkAll.menu" = "Check all connections";
+"sidebar.checkAll.progress" = "%d of %d checked";
+"sidebar.checkAll.stop" = "Stop";
+"sidebar.checkAll.confirm.title" = "Check all connections?";
+"sidebar.checkAll.confirm.message" = "This sends one tiny request (about one token) to each provider.";
+"sidebar.checkAll.confirm.check" = "Check";
 
 /* Detail */
 "detail.empty.title" = "Select a profile";
@@ -124,6 +145,8 @@
 "error.duplicateCommand" = "The command claude-%@ is already used by the profile \"%@\".";
 "error.foreignCommand" = "The command claude-%@ is taken by the file %@, which was not created by this app.";
 "error.unsafeDeletePath" = "Refused to delete %@: this is not a safe profile folder.";
+"error.unsafeFolder.open" = "Refused to open %@: the path holds control characters that a terminal would act on.";
+"error.unsafeFolder.save" = "Refused to save the profile: the working directory %@ holds control characters (for example a tab or a line break) that a terminal could act on. Choose or type another folder.";
 "error.invalidBaseURL" = "The base URL must start with https:// or http://";
 "error.envMissingEquals" = "Line %d of the environment variables is missing the '=': %@";
 "error.invalidEnvName" = "Invalid variable name on line %d: %@";
@@ -201,6 +224,19 @@
 "menu.checkForUpdates" = "Check for Updates…";
 "menu.about" = "About Claude Profiles";
 
+/* Menu bar launcher */
+"menubar.section" = "Menu bar";
+"menubar.show" = "Show in the menu bar";
+"menubar.openInFolder" = "Open in a folder…";
+"menubar.chooseFolder" = "Choose a folder…";
+"menubar.recentFolders" = "Recent folders";
+"menubar.openApp" = "Open Claude Profiles";
+"menubar.settings" = "Settings…";
+"menubar.quit" = "Quit";
+"menubar.noKey" = "no key";
+"menubar.panel.message" = "Choose the folder to open this profile in.";
+"menubar.panel.prompt" = "Open";
+
 /* Provider templates */
 "preset.custom" = "Custom";
 "preset.openrouter" = "OpenRouter";
@@ -226,6 +262,30 @@
 "editor.models.noList" = "This provider does not offer a model list; type the name by hand.";
 "editor.models.needKey" = "Enter the API key to load the list.";
 "editor.models.more" = "More models match. Type more of the name to narrow the list.";
+"editor.usage.section" = "Usage";
+"editor.usage.disclosure" = "Show token usage";
+"editor.usage.today" = "Today";
+"editor.usage.week" = "Last 7 days";
+"editor.usage.allTime" = "All time";
+"editor.usage.refresh" = "Refresh";
+"editor.usage.stop" = "Stop";
+"editor.usage.stopped" = "The count was stopped. The numbers are the ones of the last count that finished.";
+"editor.usage.detail" = "Input %@ · Output %@ · Cache read %@ · Cache written %@";
+"editor.usage.breakdown" = "Total %@ · input %@ · output %@ · cache read %@ · cache written %@";
+"editor.usage.notCounted" = "not counted yet";
+"editor.usage.note" = "Numbers come from what the provider reports and can differ from your bill. Sessions that were resumed or copied can be counted more than once.";
+"editor.usage.unsaved" = "Save the profile to count its usage.";
+"editor.usage.notIsolated" = "Usage needs a separate configuration space. Turn on \"Give this profile its own Claude configuration\" and save the profile to count its usage.";
+"editor.usage.noFolder" = "No usage yet: the configuration folder of this profile does not exist.";
+"editor.usage.notLoaded" = "Press Refresh to count this profile's usage.";
+"editor.usage.skippedFiles" = "%d files could not be read.";
+"editor.usage.cost" = "Upper estimate, all time (cache counted as input): %@";
+"editor.usage.prices" = "Price per million tokens";
+"editor.usage.priceInput" = "Input (USD)";
+"editor.usage.priceOutput" = "Output (USD)";
+"editor.usage.priceHelp" = "Cache reads and writes are priced as input tokens. The estimate shows only when both prices are set.";
+"editor.usage.cacheNote" = "The numbers are kept in a small cache file of this app, so that the next count is faster. It holds the token totals and the names of the project folders of your sessions, but no text of your conversations. You can delete it at any time.";
+"error.invalidPrice" = "Prices must be a number of zero or more.";
 "probe.ok" = "Connected, %d ms";
 "probe.ok.model" = "Connected, %d ms (model %@)";
 "probe.providerSaid" = "The provider said: %@";

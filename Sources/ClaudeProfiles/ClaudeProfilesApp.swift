@@ -34,7 +34,9 @@ struct ClaudeProfilesApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // A single window: opening it again brings the same window forward
+        // instead of making a second one that would share the draft.
+        Window(Text(model.loc.t("app.title")), id: MenuBarLauncherView.mainWindowID) {
             ContentView(model: model)
                 .frame(minWidth: 800, minHeight: 480)
                 .preferredColorScheme(model.colorScheme)
@@ -49,6 +51,15 @@ struct ClaudeProfilesApp: App {
                 .preferredColorScheme(model.colorScheme)
                 .onAppear { model.applyAppearance() }
         }
+
+        // The launcher in the menu bar. The "Show in the menu bar" setting inserts or removes it.
+        MenuBarExtra(model.loc.t("app.title"), systemImage: "terminal", isInserted: menuBarBinding) {
+            MenuBarLauncherView(model: model)
+        }
+    }
+
+    private var menuBarBinding: Binding<Bool> {
+        Binding(get: { model.data.showMenuBar }, set: { model.setShowMenuBar($0) })
     }
 }
 
@@ -93,6 +104,13 @@ struct AppCommands: Commands {
             Divider()
 
             Button(model.loc.t("actions.reveal")) { model.revealFolder() }
+
+            Divider()
+
+            Button(model.loc.t("sidebar.checkAll.menu")) { model.requestHealthCheck() }
+                .disabled(!model.canCheckAllConnections)
+
+            Divider()
 
             Button(model.loc.t("actions.delete")) { model.requestDelete() }
                 .keyboardShortcut(.delete, modifiers: .command)

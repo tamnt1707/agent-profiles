@@ -35,6 +35,15 @@ public enum ProfileError: LocalizedError, Equatable {
     case launcherFailed(String)
     /// The folder of a profile is not a safe place to delete something.
     case unsafeDeletePath(String)
+    /// A path that holds a control character is refused when a profile is
+    /// opened in it. A terminal would act on the character before the shell
+    /// reads the quotes, so the path is refused.
+    case unsafeFolderToOpen(String)
+    /// A working directory that holds a control character is refused when the
+    /// profile is saved.
+    case unsafeFolderToSave(String)
+    /// A price per million tokens is not a finite number of zero or more.
+    case invalidPrice
 
     public var errorDescription: String? {
         switch self {
@@ -54,6 +63,9 @@ public enum ProfileError: LocalizedError, Equatable {
         case .dataUnreadable(let path): return "data file could not be read and was not copied: \(path)"
         case .launcherFailed(let message): return "could not open terminal: \(message)"
         case .unsafeDeletePath(let path): return "refusing to delete an unsafe path: \(path)"
+        case .unsafeFolderToOpen(let path): return "refusing to open an unsafe path: \(path)"
+        case .unsafeFolderToSave(let path): return "refusing to save an unsafe working directory: \(path)"
+        case .invalidPrice: return "price per million tokens must be a finite number of zero or more"
         }
     }
 }

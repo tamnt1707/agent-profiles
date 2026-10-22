@@ -57,6 +57,13 @@ public struct Profile: Codable, Equatable, Sendable {
     public var isolate: Bool
     /// When isolated, symlink `CLAUDE.md` / `skills` / `commands` / `agents` from `~/.claude`.
     public var shareFromDefault: Bool
+    /// Folders this profile was opened in from the menu bar, newest first, absolute.
+    /// Optional on disk: an empty list is not written.
+    public var recentDirs: [String]
+    /// Estimated cost: USD per million input tokens. `nil` when not set.
+    public var priceInputPerMillion: Double?
+    /// Estimated cost: USD per million output tokens. `nil` when not set.
+    public var priceOutputPerMillion: Double?
 
     public init(
         name: String = "",
@@ -70,7 +77,10 @@ public struct Profile: Codable, Equatable, Sendable {
         extraEnv: String = "",
         workdir: String = "",
         isolate: Bool = false,
-        shareFromDefault: Bool = false
+        shareFromDefault: Bool = false,
+        recentDirs: [String] = [],
+        priceInputPerMillion: Double? = nil,
+        priceOutputPerMillion: Double? = nil
     ) {
         self.name = name
         self.slug = slug
@@ -84,6 +94,9 @@ public struct Profile: Codable, Equatable, Sendable {
         self.workdir = workdir
         self.isolate = isolate
         self.shareFromDefault = shareFromDefault
+        self.recentDirs = recentDirs
+        self.priceInputPerMillion = priceInputPerMillion
+        self.priceOutputPerMillion = priceOutputPerMillion
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -99,6 +112,9 @@ public struct Profile: Codable, Equatable, Sendable {
         case workdir
         case isolate
         case shareFromDefault = "share_from_default"
+        case recentDirs = "recent_dirs"
+        case priceInputPerMillion = "price_input_per_million"
+        case priceOutputPerMillion = "price_output_per_million"
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,6 +135,35 @@ public struct Profile: Codable, Equatable, Sendable {
         workdir = try c.decodeIfPresent(String.self, forKey: .workdir) ?? ""
         isolate = try c.decodeIfPresent(Bool.self, forKey: .isolate) ?? false
         shareFromDefault = try c.decodeIfPresent(Bool.self, forKey: .shareFromDefault) ?? false
+        // Lenient: the list is a convenience, so a malformed value is dropped
+        // instead of failing the whole profile list.
+        //
+        // The list is normalized while it is read: entries that are not
+        // absolute, that hold a control character, or that are duplicates are
+        // dropped, and the list is cut to the five newest folders. A hand
+        // edited file can therefore not keep an endless list in memory, and a
+        // list the app wrote stays byte identical when it is saved again.
+        recentDirs = RecentFolders(
+            (try? c.decodeIfPresent([String].self, forKey: .recentDirs)) ?? []
+        ).paths
+        // Optional: a file written before prices existed has no such keys. A
+        // price that is broken is dropped instead of making the whole list of
+        // profiles unreadable: the next save writes the file without it.
+        priceInputPerMillion = Self.lenientPrice(c, forKey: .priceInputPerMillion)
+        priceOutputPerMillion = Self.lenientPrice(c, forKey: .priceOutputPerMillion)
+    }
+
+    /// The price of the file, or `nil` when it is not there or is broken.
+    ///
+    /// A price that is not a number, that is not finite or that is negative is
+    /// dropped. The price of a profile is a convenience: it must not make the
+    /// list of the profiles unreadable and it must not stop the saves.
+    private static func lenientPrice(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Double? {
+        guard let value = try? container.decode(Double.self, forKey: key) else { return nil }
+        return UsageCost.isValidPrice(value) ? value : nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -135,6 +180,14 @@ public struct Profile: Codable, Equatable, Sendable {
         try c.encode(workdir, forKey: .workdir)
         try c.encode(isolate, forKey: .isolate)
         try c.encode(shareFromDefault, forKey: .shareFromDefault)
+        // Written only when there is something, so an old file stays as it was.
+        if !recentDirs.isEmpty {
+            try c.encode(recentDirs, forKey: .recentDirs)
+        }
+        // The price keys are written only when set, so a profile without them is
+        // written exactly as the older app wrote it.
+        try c.encodeIfPresent(priceInputPerMillion, forKey: .priceInputPerMillion)
+        try c.encodeIfPresent(priceOutputPerMillion, forKey: .priceOutputPerMillion)
     }
 }
 
@@ -152,6 +205,8 @@ public struct AppData: Codable, Equatable, Sendable {
     public var lastUpdateCheck: Date?
     /// The user chose "Don't ask again" for the PATH setup of the shell.
     public var pathPromptDeclined: Bool
+    /// Show the launcher in the menu bar. On by default; only written when off.
+    public var showMenuBar: Bool
 
     public init(
         terminal: TerminalApp = .terminal,
@@ -160,7 +215,8 @@ public struct AppData: Codable, Equatable, Sendable {
         appearance: AppearanceMode = .system,
         autoCheckUpdates: Bool = true,
         lastUpdateCheck: Date? = nil,
-        pathPromptDeclined: Bool = false
+        pathPromptDeclined: Bool = false,
+        showMenuBar: Bool = true
     ) {
         self.terminal = terminal
         self.profiles = profiles
@@ -169,6 +225,7 @@ public struct AppData: Codable, Equatable, Sendable {
         self.autoCheckUpdates = autoCheckUpdates
         self.lastUpdateCheck = lastUpdateCheck
         self.pathPromptDeclined = pathPromptDeclined
+        self.showMenuBar = showMenuBar
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -179,6 +236,7 @@ public struct AppData: Codable, Equatable, Sendable {
         case autoCheckUpdates = "auto_check_updates"
         case lastUpdateCheck = "last_update_check"
         case pathPromptDeclined = "path_prompt_declined"
+        case showMenuBar = "show_menu_bar"
     }
 
     public init(from decoder: Decoder) throws {
@@ -200,6 +258,7 @@ public struct AppData: Codable, Equatable, Sendable {
         autoCheckUpdates = (try? c.decode(Bool.self, forKey: .autoCheckUpdates)) ?? true
         lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
         pathPromptDeclined = (try? c.decode(Bool.self, forKey: .pathPromptDeclined)) ?? false
+        showMenuBar = MenuBarSetting.value(stored: try? c.decode(Bool.self, forKey: .showMenuBar))
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
@@ -235,6 +294,9 @@ public struct AppData: Codable, Equatable, Sendable {
         // Written only when set, so a file without it stays as the old app wrote it.
         if pathPromptDeclined {
             try c.encode(true, forKey: .pathPromptDeclined)
+        }
+        if !showMenuBar {
+            try c.encode(false, forKey: .showMenuBar)
         }
     }
 }

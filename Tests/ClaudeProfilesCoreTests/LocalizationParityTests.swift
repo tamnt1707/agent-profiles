@@ -3,25 +3,8 @@ import XCTest
 /// The English and Vietnamese tables must stay in sync: same keys, same
 /// number of placeholders.
 final class LocalizationParityTests: XCTestCase {
-    /// The root of the package, derived from the location of this file.
-    private static var packageRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // ClaudeProfilesCoreTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // package root
-    }
-
     private func table(_ language: String) throws -> [String: String] {
-        let url = Self.packageRoot
-            .appendingPathComponent("Sources/ClaudeProfiles/Resources")
-            .appendingPathComponent("\(language).lproj")
-            .appendingPathComponent("Localizable.strings")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "missing \(url.path)")
-        guard let contents = NSDictionary(contentsOfFile: url.path) as? [String: String] else {
-            XCTFail("\(url.path) is not a valid strings file")
-            return [:]
-        }
-        return contents
+        try PackageLayout.stringTable(language)
     }
 
     private func placeholders(_ value: String) -> (strings: Int, numbers: Int) {
