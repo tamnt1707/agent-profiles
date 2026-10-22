@@ -67,7 +67,13 @@ The script
    `ditto -c -k --keepParent`,
 5. signs the archive into `build/Claude-Profiles-<version>-macos.zip.sig`,
 6. prints the SHA-256 sums of both files,
-7. prints the `gh release create` command.
+7. takes the notes from the section of this version in `CHANGELOG.md`,
+8. prints the `gh release create` command.
+
+Before a release: raise `VERSION`, and write the notes of that version in
+`CHANGELOG.md` as a section `## [<version>] - <date>`. The script refuses to run
+without that section and uses it, unchanged, as the notes of the GitHub release
+(the app shows these notes when it offers the update).
 
 Nothing is published by default. With
 
@@ -171,7 +177,13 @@ Kịch bản này
    `ditto -c -k --keepParent`,
 5. ký tệp nén thành `build/Claude-Profiles-<phiên-bản>-macos.zip.sig`,
 6. in ra giá trị SHA-256 của cả hai tệp,
-7. in ra lệnh `gh release create`.
+7. lấy ghi chú từ mục của phiên bản này trong `CHANGELOG.md`,
+8. in ra lệnh `gh release create`.
+
+Trước khi phát hành: tăng `VERSION` và viết ghi chú của phiên bản đó trong
+`CHANGELOG.md` thành một mục `## [<phiên-bản>] - <ngày>`. Kịch bản từ chối chạy nếu
+thiếu mục này và dùng nguyên văn nó làm ghi chú của bản phát hành trên GitHub (app
+hiển thị ghi chú này khi đề nghị cập nhật).
 
 Mặc định không có gì được phát hành. Khi chạy
 

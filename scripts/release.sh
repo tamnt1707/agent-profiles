@@ -11,6 +11,7 @@
 #   * packs the app into build/Claude-Profiles-<version>-macos.zip,
 #   * signs the archive with the private key of $RELEASE_KEY_FILE,
 #   * prints the SHA-256 sums,
+#   * takes the release notes from the section of this version in CHANGELOG.md,
 #   * prints (and with --create-draft runs) the `gh release create` command.
 #
 # The private key never enters the repository. See RELEASE.md.
@@ -97,14 +98,28 @@ shasum -a 256 "$ARCHIVE" "$ARCHIVE.sig" "$DISK_IMAGE"
 # 7. The release command. It is only run with --create-draft, and then as a
 #    draft: the notes and the assets can be looked at before it is public.
 NOTES="build/release-notes-$VERSION.md"
-{
-  echo "## Claude Profiles $VERSION"
-  echo ""
-  git log --pretty=format:'- %s' "$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10)"..HEAD
-} > "$NOTES"
+# The notes are the section of this version in CHANGELOG.md: that is the one
+# place where they are written, so the release never ships with a thin list of
+# commit subjects.
+if [[ ! -f CHANGELOG.md ]]; then
+  echo "CHANGELOG.md does not exist" >&2
+  exit 1
+fi
+awk -v version="$VERSION" '
+  /^## \[/ { if (found) exit; if (index($0, "## [" version "]") == 1) { found = 1; next } }
+  found { print }
+  END { if (!found) exit 3 }
+' CHANGELOG.md > "$NOTES" || {
+  echo "CHANGELOG.md has no section '## [$VERSION]'. Write the notes of this version first." >&2
+  exit 1
+}
+if [[ ! -s "$NOTES" ]]; then
+  echo "the section of $VERSION in CHANGELOG.md is empty" >&2
+  exit 1
+fi
 
 COMMAND=(gh release create "$TAG" "$ARCHIVE" "$ARCHIVE.sig" "$DISK_IMAGE" --repo "$REPO"
-         --title "$TAG" --notes-file "$NOTES" --generate-notes)
+         --title "Claude Profiles $VERSION" --notes-file "$NOTES")
 
 echo ""
 if [[ $CREATE_DRAFT -eq 1 ]]; then
