@@ -298,6 +298,12 @@ public struct Store {
             throw ProfileError.invalidBaseURL
         }
         _ = try ShellQuote.parseExtraEnv(profile.extraEnv)
+        // Prices are typed by hand: only finite, non-negative values are kept.
+        guard UsageCost.isValidPrice(profile.priceInputPerMillion),
+              UsageCost.isValidPrice(profile.priceOutputPerMillion)
+        else {
+            throw ProfileError.invalidPrice
+        }
     }
 
     // MARK: - Command name
@@ -677,8 +683,16 @@ enum JSONText {
         out += "\(inner)\"extra_env\": \(escape(profile.extraEnv)),\n"
         out += "\(inner)\"workdir\": \(escape(profile.workdir)),\n"
         out += "\(inner)\"isolate\": \(profile.isolate),\n"
-        out += "\(inner)\"share_from_default\": \(profile.shareFromDefault)\n"
-        out += "\(pad)}"
+        out += "\(inner)\"share_from_default\": \(profile.shareFromDefault)"
+        // The price keys are written only when set, so a profile without them is
+        // written exactly as the older app wrote it.
+        if let price = profile.priceInputPerMillion {
+            out += ",\n\(inner)\"price_input_per_million\": \(price)"
+        }
+        if let price = profile.priceOutputPerMillion {
+            out += ",\n\(inner)\"price_output_per_million\": \(price)"
+        }
+        out += "\n\(pad)}"
         return out
     }
 

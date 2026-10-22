@@ -106,8 +106,18 @@ final class AppModel {
     /// `true` while the model list is being fetched.
     private(set) var isFetchingModels = false
 
+    /// The token usage counted for each profile, by slug. Counted on first show and on Refresh.
+    private(set) var usageResults: [String: UsageResult] = [:]
+    /// The slug whose usage is being counted, if any.
+    private(set) var usageLoadingSlug: String?
+    /// The count that is running, so that a newer one can replace it.
+    private var usageTask: Task<Void, Never>?
+    /// Reads the session files of the profiles. Its cache lives in the data folder.
+    private let usageScanner: UsageScanner
+
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
+        self.usageScanner = UsageScanner(paths: store.paths)
         self.loc = loc ?? Loc()
         self.updater = updater ?? UpdateController()
         load()
@@ -397,6 +407,7 @@ final class AppModel {
     @discardableResult
     func save() -> Bool {
         guard var draft else { return false }
+        let previousProfile = currentProfile
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         command.name = draft.name
         if command.mode == .auto {
@@ -425,6 +436,7 @@ final class AppModel {
             command = CommandNameDraft(profile: draft)
             keyInput = ""
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
+            forgetUsage(before: previousProfile, after: draft)
 
             do {
                 try store.save(data)
@@ -441,6 +453,50 @@ final class AppModel {
             report(error)
             return false
         }
+    }
+
+    // MARK: - Token usage
+
+    /// Counts the usage of the saved profile, unless it was counted before.
+    func loadUsageIfNeeded() {
+        guard let slug = currentProfile?.slug, usageResults[slug] == nil else { return }
+        loadUsage()
+    }
+
+    /// Counts the usage of the saved profile again. The files are read off the main thread.
+    func loadUsage() {
+        guard let profile = currentProfile else { return }
+        usageTask?.cancel()
+        usageLoadingSlug = profile.slug
+        let scanner = usageScanner
+        usageTask = Task {
+            let outcome: Result<UsageResult, Error>
+            do {
+                outcome = .success(try await scanner.usage(for: profile))
+            } catch {
+                outcome = .failure(error)
+            }
+            // A newer count replaced this one, and that one owns the state now.
+            guard !Task.isCancelled else { return }
+            usageLoadingSlug = nil
+            switch outcome {
+            case .success(let result):
+                usageResults[profile.slug] = result
+            case .failure(let error):
+                report(error)
+            }
+        }
+    }
+
+    /// A count stays valid while the folder of the profile and its isolation stay the same.
+    private func forgetUsage(before previous: Profile?, after saved: Profile) {
+        guard let previous else {
+            usageResults[saved.slug] = nil
+            return
+        }
+        guard previous.slug != saved.slug || previous.isolate != saved.isolate else { return }
+        usageResults[previous.slug] = nil
+        usageResults[saved.slug] = nil
     }
 
     // MARK: - Actions
@@ -536,6 +592,7 @@ final class AppModel {
         // The entry always leaves the list and the data file.
         var failures = removal.failures
         data.profiles.remove(at: index)
+        usageResults[profile.slug] = nil
         do {
             try store.save(data)
         } catch {
@@ -1184,6 +1241,8 @@ extension ProfileError {
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
             return loc.t("error.unsafeDeletePath", path)
+        case .invalidPrice:
+            return loc.t("error.invalidPrice")
         }
     }
 }

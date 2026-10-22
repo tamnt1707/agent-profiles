@@ -57,6 +57,10 @@ public struct Profile: Codable, Equatable, Sendable {
     public var isolate: Bool
     /// When isolated, symlink `CLAUDE.md` / `skills` / `commands` / `agents` from `~/.claude`.
     public var shareFromDefault: Bool
+    /// Estimated cost: USD per million input tokens. `nil` when not set.
+    public var priceInputPerMillion: Double?
+    /// Estimated cost: USD per million output tokens. `nil` when not set.
+    public var priceOutputPerMillion: Double?
 
     public init(
         name: String = "",
@@ -70,7 +74,9 @@ public struct Profile: Codable, Equatable, Sendable {
         extraEnv: String = "",
         workdir: String = "",
         isolate: Bool = false,
-        shareFromDefault: Bool = false
+        shareFromDefault: Bool = false,
+        priceInputPerMillion: Double? = nil,
+        priceOutputPerMillion: Double? = nil
     ) {
         self.name = name
         self.slug = slug
@@ -84,6 +90,8 @@ public struct Profile: Codable, Equatable, Sendable {
         self.workdir = workdir
         self.isolate = isolate
         self.shareFromDefault = shareFromDefault
+        self.priceInputPerMillion = priceInputPerMillion
+        self.priceOutputPerMillion = priceOutputPerMillion
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -99,6 +107,8 @@ public struct Profile: Codable, Equatable, Sendable {
         case workdir
         case isolate
         case shareFromDefault = "share_from_default"
+        case priceInputPerMillion = "price_input_per_million"
+        case priceOutputPerMillion = "price_output_per_million"
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,6 +129,9 @@ public struct Profile: Codable, Equatable, Sendable {
         workdir = try c.decodeIfPresent(String.self, forKey: .workdir) ?? ""
         isolate = try c.decodeIfPresent(Bool.self, forKey: .isolate) ?? false
         shareFromDefault = try c.decodeIfPresent(Bool.self, forKey: .shareFromDefault) ?? false
+        // Optional: a file written before prices existed has no such keys.
+        priceInputPerMillion = try c.decodeIfPresent(Double.self, forKey: .priceInputPerMillion)
+        priceOutputPerMillion = try c.decodeIfPresent(Double.self, forKey: .priceOutputPerMillion)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -135,6 +148,8 @@ public struct Profile: Codable, Equatable, Sendable {
         try c.encode(workdir, forKey: .workdir)
         try c.encode(isolate, forKey: .isolate)
         try c.encode(shareFromDefault, forKey: .shareFromDefault)
+        try c.encodeIfPresent(priceInputPerMillion, forKey: .priceInputPerMillion)
+        try c.encodeIfPresent(priceOutputPerMillion, forKey: .priceOutputPerMillion)
     }
 }
 
