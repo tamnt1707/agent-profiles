@@ -47,6 +47,10 @@ struct SettingsView: View {
                 .pickerStyle(.radioGroup)
             }
 
+            Section(model.loc.t("menubar.section")) {
+                Toggle(model.loc.t("menubar.show"), isOn: menuBarBinding)
+            }
+
             Section(model.loc.t("pathSetup.section")) {
                 ForEach(ShellKind.supported, id: \.self) { shell in
                     shellRow(shell)
@@ -180,6 +184,10 @@ struct SettingsView: View {
 
     private var terminalBinding: Binding<TerminalApp> {
         Binding(get: { model.data.terminal }, set: { model.setTerminal($0) })
+    }
+
+    private var menuBarBinding: Binding<Bool> {
+        Binding(get: { model.data.showMenuBar }, set: { model.setShowMenuBar($0) })
     }
 
     private var autoCheckBinding: Binding<Bool> {

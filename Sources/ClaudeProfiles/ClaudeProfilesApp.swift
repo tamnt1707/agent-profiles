@@ -34,7 +34,7 @@ struct ClaudeProfilesApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: MenuBarLauncherView.mainWindowID) {
             ContentView(model: model)
                 .frame(minWidth: 800, minHeight: 480)
                 .preferredColorScheme(model.colorScheme)
@@ -49,6 +49,15 @@ struct ClaudeProfilesApp: App {
                 .preferredColorScheme(model.colorScheme)
                 .onAppear { model.applyAppearance() }
         }
+
+        // The launcher in the menu bar. The "Show in the menu bar" setting inserts or removes it.
+        MenuBarExtra(model.loc.t("app.title"), systemImage: "terminal", isInserted: menuBarBinding) {
+            MenuBarLauncherView(model: model)
+        }
+    }
+
+    private var menuBarBinding: Binding<Bool> {
+        Binding(get: { model.data.showMenuBar }, set: { model.setShowMenuBar($0) })
     }
 }
 
