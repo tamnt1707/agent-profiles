@@ -462,26 +462,29 @@ final class AppModel {
         }
     }
 
-    /// Copies the command that runs the profile, the same one the "Open in
-    /// terminal" button types: the full path of the launcher script (and the
-    /// `cd` into the working directory), so it works in any terminal even when
-    /// the `bin` folder is not on the PATH. The command that is being edited is
-    /// used, not the one of the saved profile.
+    /// Copies `claude-<name>`: the short command, which works in any terminal
+    /// once the `bin` folder is on the PATH (the Terminal commands setup does
+    /// that). The command that is being edited is used, not the saved one.
     func copyCommand() {
-        guard var draft else { return }
-        if !command.slug.isEmpty { draft.slug = command.slug }
-        copyToPasteboard(Launcher.command(for: draft, paths: store.paths))
+        guard let draft else { return }
+        copyToPasteboard(slug: command.slug.isEmpty ? draft.slug : command.slug)
     }
 
     /// Copies the command of a profile in the sidebar, the one that was clicked.
     func copyCommand(for profile: Profile) {
-        copyToPasteboard(Launcher.command(for: profile, paths: store.paths))
+        copyToPasteboard(slug: profile.slug)
     }
 
-    private func copyToPasteboard(_ text: String) {
+    private func copyToPasteboard(slug: String) {
+        let text = store.paths.command(for: slug)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        status = Status(kind: .success, text: loc.t("status.copied", text))
+        refreshPathStatus()
+        // Without the PATH setup the short name would not run: say so.
+        let onPath = loginShellStatus == .configured || loginShellStatus == .manual
+            || loginShellStatus == .partlyConfigured
+        status = Status(kind: onPath ? .success : .hint,
+                        text: loc.t(onPath ? "status.copied" : "status.copiedNoPath", text))
     }
 
     /// Shows the delete confirmation.
@@ -918,6 +921,12 @@ final class AppModel {
             switch try pathSetup.install(for: shell) {
             case .added(let files, _):
                 let first = files.first.map { displayPath($0) } ?? ""
+                // The shells that are already open do not read the file again:
+                // put the command that does it on the clipboard.
+                if let file = files.first {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("source \(ShellQuote.quote(file.path))", forType: .string)
+                }
                 message = Status(kind: .success, text: loc.t("pathSetup.done", first))
             case .alreadyConfigured:
                 message = Status(kind: .hint, text: loc.t("pathSetup.alreadyDone"))
@@ -975,7 +984,10 @@ final class AppModel {
 
     /// Copies the line for the login shell, for a shell the app does not edit.
     func copyLoginLine() {
-        copyToPasteboard(loginManualLine)
+        let line = loginManualLine
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(line, forType: .string)
+        status = Status(kind: .success, text: loc.t("status.copied", line))
     }
 
     /// Shows ~/.zshrc in Finder, or the home folder when it does not exist.

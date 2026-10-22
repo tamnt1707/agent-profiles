@@ -87,6 +87,7 @@
 "status.deleted" = "Đã xóa \"%@\".";
 "status.deletedItems" = "Đã xóa: %@.";
 "status.deleteFailed" = "Không xóa được %@. Bạn xóa thủ công giúp nhé.";
+"status.copiedNoPath" = "Đã sao chép: %@. Thư mục này chưa nằm trong PATH nên lệnh chưa chạy được ở mọi nơi: bật ở Cài đặt › Lệnh trong terminal.";
 "status.copied" = "Đã sao chép: %@";
 "status.pathHint" = "Thêm %@ vào PATH để gọi claude-<tên> từ mọi terminal.";
 "status.scriptsUpdated" = "Đã cập nhật lệnh chạy của mọi profile theo ngôn ngữ mới.";
@@ -260,7 +261,7 @@
 "pathSetup.copyLine" = "Sao chép dòng";
 "pathSetup.remove.title" = "Gỡ các dòng của Claude Profiles khỏi %@?";
 "pathSetup.remove.message" = "Các lệnh claude-<tên> sẽ không chạy được trong terminal mới của shell này cho đến khi thêm lại.";
-"pathSetup.done" = "Xong. Mở tab terminal mới, hoặc chạy: source %@";
+"pathSetup.done" = "Xong. Tab terminal mới tự nhận. Với terminal đang mở, chạy: source %@ (đã sao chép vào clipboard)";
 "pathSetup.alreadyDone" = "Đã thiết lập sẵn. Không có gì thay đổi.";
 "pathSetup.removed" = "Đã gỡ các dòng của Claude Profiles khỏi %@.";
 "pathSetup.nothingToRemove" = "Không có gì để gỡ.";

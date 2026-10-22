@@ -87,6 +87,7 @@
 "status.deleted" = "Deleted \"%@\".";
 "status.deletedItems" = "Removed: %@.";
 "status.deleteFailed" = "Could not remove %@. Please remove it by hand.";
+"status.copiedNoPath" = "Copied: %@. The folder is not on your PATH yet, so it will not run from everywhere: turn it on in Settings > Terminal commands.";
 "status.copied" = "Copied: %@";
 "status.pathHint" = "Add %@ to your PATH to call claude-<name> from every terminal.";
 "status.scriptsUpdated" = "Updated the launcher of every profile for the new language.";
@@ -260,7 +261,7 @@
 "pathSetup.copyLine" = "Copy line";
 "pathSetup.remove.title" = "Remove the Claude Profiles lines from %@?";
 "pathSetup.remove.message" = "The claude-<name> commands will not work in new terminals for this shell until the setup is added again.";
-"pathSetup.done" = "Done. Open a new terminal tab, or run: source %@";
+"pathSetup.done" = "Done. New terminal tabs pick it up by themselves. In terminals that are already open run: source %@ (copied to the clipboard)";
 "pathSetup.alreadyDone" = "Already set up. Nothing was changed.";
 "pathSetup.removed" = "Removed the Claude Profiles lines from %@.";
 "pathSetup.nothingToRemove" = "There was nothing to remove.";
