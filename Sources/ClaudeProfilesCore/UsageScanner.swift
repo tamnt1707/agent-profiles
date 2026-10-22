@@ -12,15 +12,42 @@ import Foundation
 /// can be deleted at any time, and a damaged one is ignored.
 public actor UsageScanner {
     /// Calls the body with every line of a file, in order. Injected by tests to count reads.
-    public typealias LineReader = @Sendable (URL, (String) throws -> Void) throws -> Void
+    public typealias LineReader = @Sendable (URL, (RawLine) throws -> Void) throws -> Void
+
+    /// One line of a session file, as raw bytes.
+    public struct RawLine: Sendable {
+        /// The bytes of the line, without the newline.
+        public let bytes: Data
+        /// `true` when the line was longer than the limit and was not read fully.
+        public let tooLong: Bool
+
+        public init(bytes: Data = Data(), tooLong: Bool = false) {
+            self.bytes = bytes
+            self.tooLong = tooLong
+        }
+    }
 
     /// The file name of the cache, under the data root.
     public static let cacheFileName = "usage-cache.json"
+
+    /// The biggest line that is read. A longer line is skipped: it cannot be a
+    /// usage line and it would fill the memory.
+    public static let maxLineBytes = 64 * 1024 * 1024
+
+    /// The number of files that are written to the cache between two writes.
+    private static let filesPerSave = 25
+    /// The number of seconds after which the cache is written, even when fewer
+    /// files were read.
+    private static let secondsPerSave: TimeInterval = 5
 
     private let paths: Paths
     private let readLines: LineReader
     private var cache: [String: FileEntry] = [:]
     private var cacheLoaded = false
+
+    /// The number of lines of the last count that were too long to be read.
+    /// It is only a counter: the user is not told about it.
+    private(set) var skippedLines: Int = 0
 
     public init(paths: Paths, readLines: @escaping LineReader = UsageScanner.streamLines) {
         self.paths = paths
@@ -29,6 +56,9 @@ public actor UsageScanner {
 
     /// The usage of a profile. Runs off the main thread and stops when the
     /// calling task is cancelled.
+    ///
+    /// A file that cannot be read is skipped: the other files are counted and
+    /// the number of skipped files is in the result.
     ///
     /// - Parameters:
     ///   - now: the moment the windows are measured from.
@@ -48,71 +78,106 @@ public actor UsageScanner {
         var summary = UsageSummary()
         var changed = false
         var skippedFiles = 0
+        var skipped = 0
         var seen = Set<String>()
-        for file in Self.sessionFiles(in: home.appendingPathComponent("projects", isDirectory: true)) {
+        var filesSinceSave = 0
+        var lastSave = Date()
+        for file in Self.sessionFiles(in: home, slug: profile.slug) {
             try Task.checkCancellation()
-            seen.insert(file.path)
-            let entry: FileEntry
-            if let cached = cache[file.path], cached.size == file.size, cached.modified == file.modified, cached.zone == zone {
+            seen.insert(file.key)
+            let entry: FileEntry?
+            if let cached = cache[file.key], cached.size == file.size, cached.modified == file.modified, cached.zone == zone {
                 entry = cached
             } else {
                 do {
-                    entry = try scan(file, zone: zone, calendar: calendar)
+                    let scanned = try scan(file, zone: zone, calendar: calendar)
+                    entry = scanned.entry
+                    skipped += scanned.skippedLines
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
                     // The file cannot be read: it is skipped and the other
                     // files are counted as before.
+                    entry = nil
                     skippedFiles += 1
-                    if cache[file.path] != nil {
-                        cache[file.path] = nil
+                    if cache[file.key] != nil {
+                        cache[file.key] = nil
                         changed = true
                     }
-                    continue
                 }
-                cache[file.path] = entry
-                changed = true
-            }
-            for (day, totals) in entry.days {
-                summary.allTime += totals
-                if day == todayKey {
-                    summary.today += totals
-                }
-                if day >= weekStart && day <= todayKey {
-                    summary.last7Days += totals
+                if let entry {
+                    cache[file.key] = entry
+                    changed = true
                 }
             }
-            summary.allTime += entry.undated
+            if let entry {
+                for (day, totals) in entry.days {
+                    summary.allTime += totals
+                    if day == todayKey {
+                        summary.today += totals
+                    }
+                    if day >= weekStart && day <= todayKey {
+                        summary.last7Days += totals
+                    }
+                }
+                summary.allTime += entry.undated
+            }
+            // The cache is written from time to time, so that a scan that is
+            // stopped keeps the work it has already done.
+            filesSinceSave += 1
+            if filesSinceSave >= Self.filesPerSave || Date().timeIntervalSince(lastSave) >= Self.secondsPerSave {
+                saveCache()
+                changed = false
+                filesSinceSave = 0
+                lastSave = Date()
+            }
         }
 
         // Entries of files that no longer exist leave the cache. Entries of other
-        // profiles stay while their files exist. (Paths are not compared as text:
-        // the enumerator and `resolvingSymlinksInPath` spell /var and /private/var differently.)
-        for path in Array(cache.keys) where !seen.contains(path) && !FileManager.default.fileExists(atPath: path) {
-            cache[path] = nil
-            changed = true
+        // profiles stay while their files exist.
+        for key in Array(cache.keys) where !seen.contains(key) {
+            guard let url = fileURL(forKey: key), FileManager.default.fileExists(atPath: url.path) else {
+                cache[key] = nil
+                changed = true
+                continue
+            }
         }
         if changed {
             saveCache()
         }
+        skippedLines = skipped
         return .available(summary, skippedFiles: skippedFiles)
     }
 
     // MARK: - Reading one file
 
     /// Reads a whole file, line by line, into its per-day totals.
-    private func scan(_ file: SessionFile, zone: String, calendar: Calendar) throws -> FileEntry {
+    private func scan(_ file: SessionFile, zone: String, calendar: Calendar) throws -> ScanResult {
         var entry = FileEntry(size: file.size, modified: file.modified, zone: zone, days: [:], undated: TokenTotals())
         // The replies of this file, by their id. A reply that is written
         // several times to the same file counts once, with the largest numbers
         // of all its lines.
         var replies: [String: Reply] = [:]
+        var skipped = 0
         let dates = TimestampReader()
         let decoder = JSONDecoder()
         do {
             try readLines(file.url) { line in
                 try Task.checkCancellation()
-                guard let record = Self.decode(line, with: decoder),
+                // A line that is longer than the limit is not read.
+                guard !line.tooLong, line.bytes.count <= Self.maxLineBytes else {
+                    skipped += 1
+                    return
+                }
+                // Most lines of a transcript hold no usage at all. Their bytes
+                // are looked at before they become a string.
+                guard Self.holds(line.bytes, Self.usageMarker),
+                      Self.holds(line.bytes, Self.assistantMarker)
+                else {
+                    return
+                }
+                let text = String(decoding: line.bytes, as: UTF8.self)
+                guard let record = Self.decode(text, with: decoder),
                       record.type == "assistant",
                       let message = record.message,
                       let usage = message.usage
@@ -151,8 +216,18 @@ public actor UsageScanner {
         for reply in replies.values {
             Self.add(reply.totals, ofDay: reply.day, to: &entry)
         }
-        return entry
+        return ScanResult(entry: entry, skippedLines: skipped)
     }
+
+    /// What the reading of one file gives.
+    private struct ScanResult {
+        var entry: FileEntry
+        /// The lines that were too long to be read.
+        var skippedLines: Int
+    }
+
+    /// A file that could not be read. It says nothing about the file itself.
+    private struct UnreadableFile: Error {}
 
     /// One reply of a file: the largest numbers of its lines and the day it
     /// was written on.
@@ -170,8 +245,32 @@ public actor UsageScanner {
         entry.days[day, default: TokenTotals()] += totals
     }
 
-    /// A file that could not be read. It says nothing about the file itself.
-    private struct UnreadableFile: Error {}
+    /// The bytes a line must hold to be worth decoding.
+    private static let usageMarker = Array("\"usage\"".utf8)
+    private static let assistantMarker = Array("\"assistant\"".utf8)
+
+    /// `true` when the raw bytes of a line hold the text.
+    private static func holds(_ bytes: Data, _ text: [UInt8]) -> Bool {
+        guard !text.isEmpty, bytes.count >= text.count else { return false }
+        let first = text[0]
+        let last = bytes.count - text.count
+        return bytes.withUnsafeBytes { raw -> Bool in
+            guard let base = raw.baseAddress else { return false }
+            let pointer = base.assumingMemoryBound(to: UInt8.self)
+            var index = 0
+            while index <= last {
+                if pointer[index] == first {
+                    var offset = 1
+                    while offset < text.count, pointer[index + offset] == text[offset] {
+                        offset += 1
+                    }
+                    if offset == text.count { return true }
+                }
+                index += 1
+            }
+            return false
+        }
+    }
 
     /// The fields of a transcript line that the scanner needs. Every other key is skipped by the decoder.
     private struct Record: Decodable {
@@ -231,37 +330,70 @@ public actor UsageScanner {
         return Int(value)
     }
 
-    /// A malformed line gives `nil`. A line without a `usage` key is skipped before decoding.
+    /// A malformed line gives `nil`.
     private static func decode(_ line: String, with decoder: JSONDecoder) -> Record? {
-        guard line.contains("\"usage\"") else { return nil }
-        return try? decoder.decode(Record.self, from: Data(line.utf8))
+        try? decoder.decode(Record.self, from: Data(line.utf8))
     }
 
     // MARK: - Lines
 
-    /// Calls the body with each line of the file. The file is read in chunks of
-    /// 64 KB, so only one line (plus one chunk) is in memory at a time.
-    public static let streamLines: LineReader = { url, body in
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        var pending = Data()
-        while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
-            try Task.checkCancellation()
-            // `pending` always starts at index 0; only the new bytes are searched for a newline.
-            var searchFrom = pending.count
-            pending.append(chunk)
-            var lineStart = 0
-            while let newline = pending[searchFrom...].firstIndex(of: 0x0A) {
-                try body(String(decoding: pending[lineStart..<newline], as: UTF8.self))
-                lineStart = newline + 1
-                searchFrom = lineStart
+    /// Calls the body with each line of the file, as raw bytes. The file is
+    /// read in chunks of 64 KB, so only one line (plus one chunk) is in memory
+    /// at a time.
+    ///
+    /// A line that is longer than `maxLineBytes` is not handed over: its bytes
+    /// are dropped while it is read, so a huge line cannot fill the memory.
+    public static let streamLines: LineReader = streamLines(limit: maxLineBytes)
+
+    /// The reader of the lines of a file, with a limit of its own for the
+    /// length of a line.
+    public static func streamLines(limit: Int) -> LineReader {
+        { url, body in
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            var pending = Data()
+            var searched = 0
+            var dropping = false
+            while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
+                try Task.checkCancellation()
+                var bytes = chunk
+                if dropping {
+                    // The line is too long: only its end matters.
+                    guard let newline = bytes.firstIndex(of: 0x0A) else { continue }
+                    try body(RawLine(tooLong: true))
+                    dropping = false
+                    bytes = bytes[bytes.index(after: newline)...]
+                    pending = Data()
+                    searched = 0
+                }
+                pending.append(bytes)
+                var lineStart = 0
+                while let newline = pending[searched...].firstIndex(of: 0x0A) {
+                    if newline - lineStart > limit {
+                        // The line is longer than the limit: it is not read.
+                        try body(RawLine(tooLong: true))
+                    } else {
+                        try body(RawLine(bytes: Data(pending[lineStart..<newline])))
+                    }
+                    lineStart = newline + 1
+                    searched = lineStart
+                }
+                if lineStart > 0 {
+                    pending = Data(pending[lineStart...])
+                    searched = 0
+                }
+                if pending.count > limit {
+                    // The line is longer than the limit: its bytes are dropped.
+                    dropping = true
+                    pending = Data()
+                    searched = 0
+                }
             }
-            if lineStart > 0 {
-                pending = Data(pending[lineStart...])
+            if dropping {
+                try body(RawLine(tooLong: true))
+            } else if !pending.isEmpty {
+                try body(RawLine(bytes: pending))
             }
-        }
-        if !pending.isEmpty {
-            try body(String(decoding: pending, as: UTF8.self))
         }
     }
 
@@ -269,29 +401,73 @@ public actor UsageScanner {
 
     /// A session transcript on disk, with what the cache checks.
     private struct SessionFile {
-        let path: String
+        /// The key of the file in the cache.
+        let key: String
         let url: URL
         let size: Int64
         let modified: Double
     }
 
-    /// Every `*.jsonl` file under the folder, sorted by path. Empty when the folder does not exist.
-    private static func sessionFiles(in root: URL) -> [SessionFile] {
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else {
-            return []
-        }
+    /// Every `*.jsonl` file under the folder of the profile, sorted by key.
+    /// Empty when the folder does not exist.
+    ///
+    /// Links are never followed: a link could lead to a file outside of the
+    /// folder of the profile.
+    private static func sessionFiles(in home: URL, slug: String) -> [SessionFile] {
+        let root = home.appendingPathComponent("projects", isDirectory: true)
+        guard SafeFileSystem.kind(of: root) == .directory else { return [] }
         var files: [SessionFile] = []
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
-            files.append(SessionFile(
-                path: url.path,
-                url: url,
-                size: Int64(values.fileSize ?? 0),
-                modified: values.contentModificationDate?.timeIntervalSince1970 ?? 0
-            ))
+        var folders: [URL] = [root]
+        while let folder = folders.first {
+            folders.removeFirst()
+            let children = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            for name in children where !name.hasPrefix(".") {
+                let url = folder.appendingPathComponent(name)
+                switch SafeFileSystem.kind(of: url) {
+                case .directory:
+                    folders.append(url)
+                case .file:
+                    guard url.pathExtension == "jsonl" else { continue }
+                    let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+                    let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+                    let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+                    files.append(SessionFile(
+                        key: cacheKey(slug: slug, path: relativePath(of: url, in: home)),
+                        url: url,
+                        size: size,
+                        modified: modified
+                    ))
+                default:
+                    continue
+                }
+            }
         }
-        return files.sorted { $0.path < $1.path }
+        return files.sorted { $0.key < $1.key }
+    }
+
+    /// The key of a file in the cache: the slug of the profile and the path of
+    /// the file, relative to the config folder of the profile.
+    ///
+    /// The cache holds no absolute path, and a profile that is renamed keeps
+    /// its cache: the name of a project folder of the user is all it can show.
+    static func cacheKey(slug: String, path: String) -> String {
+        "\(slug)/\(path)"
+    }
+
+    /// The path of a file relative to the config folder of the profile.
+    private static func relativePath(of url: URL, in home: URL) -> String {
+        let prefix = home.path.hasSuffix("/") ? home.path : home.path + "/"
+        guard url.path.hasPrefix(prefix) else { return url.lastPathComponent }
+        return String(url.path.dropFirst(prefix.count))
+    }
+
+    /// The file of a key of the cache, or `nil` when the key is not ours.
+    private func fileURL(forKey key: String) -> URL? {
+        guard let slash = key.firstIndex(of: "/") else { return nil }
+        let slug = String(key[key.startIndex..<slash])
+        let path = String(key[key.index(after: slash)...])
+        guard Slug.isSafe(slug), !path.isEmpty else { return nil }
+        return paths.home(for: slug).appendingPathComponent(path)
     }
 
     // MARK: - Days
@@ -329,14 +505,29 @@ public actor UsageScanner {
     }
 
     /// Writes the cache atomically. A failure only means the next scan reads more files.
+    ///
+    /// The file holds the names of the project folders of the user, so only the
+    /// user may read it.
     private func saveCache() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         guard let bytes = try? encoder.encode(CacheFile(version: CacheFile.currentVersion, files: cache)) else { return }
+        let manager = FileManager.default
+        // The name carries the pid, so two running instances never share one file.
+        let temporary = paths.root.appendingPathComponent(
+            "\(Self.cacheFileName).\(ProcessInfo.processInfo.processIdentifier).tmp"
+        )
         do {
-            try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
-            try bytes.write(to: cacheURL, options: .atomic)
+            try manager.createDirectory(at: paths.root, withIntermediateDirectories: true)
+            try? manager.removeItem(at: temporary)
+            try bytes.write(to: temporary, options: .withoutOverwriting)
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            guard rename(temporary.path, cacheURL.path) == 0 else {
+                try? manager.removeItem(at: temporary)
+                return
+            }
         } catch {
+            try? manager.removeItem(at: temporary)
             return
         }
     }
@@ -354,9 +545,11 @@ public actor UsageScanner {
     }
 
     private struct CacheFile: Codable {
-        static let currentVersion = 1
+        // Version 2: the keys of the files are relative to the config folder
+        // of the profile. A cache of version 1 is simply dropped.
+        static let currentVersion = 2
         var version: Int
-        /// By absolute file path.
+        /// By the key of the file: the slug and the relative path.
         var files: [String: FileEntry]
     }
 }

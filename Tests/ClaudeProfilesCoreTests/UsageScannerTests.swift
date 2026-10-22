@@ -398,7 +398,9 @@ final class UsageScannerTests: XCTestCase {
         try session([long, "second", ""])
         let url = paths.home(for: "work").appendingPathComponent("projects/-proj-a/s1.jsonl")
         var received: [String] = []
-        try UsageScanner.streamLines(url) { received.append($0) }
+        try UsageScanner.streamLines(url) { line in
+            received.append(String(decoding: line.bytes, as: UTF8.self))
+        }
         XCTAssertEqual(received, [long, "second", ""])
     }
 
@@ -552,6 +554,170 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertEqual(skippedFiles(first), 1)
         let second = try await scanner.usage(for: profile(), now: noon, calendar: utc())
         XCTAssertEqual(skippedFiles(second), 1)
+    }
+
+    // MARK: - The bytes of the lines
+
+    /// Only the lines that can hold a usage are worth decoding.
+    func testOnlyTheLinesWithAUsageAreCounted() async throws {
+        try session([
+            // A line with a usage but without an assistant reply.
+            #"{"type":"user","message":{"id":"b","usage":{"input_tokens":100}}}"#,
+            // An assistant reply without a usage.
+            #"{"type":"assistant","message":{"id":"a"}}"#,
+            reply(id: "c", request: "r", input: 7),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+    }
+
+    /// A line that is longer than the limit is not read and not counted.
+    func testALineThatIsTooLongIsNotCounted() async throws {
+        let long = String(repeating: "a", count: 5_000)
+        try session([long, reply(id: "a", request: "r", input: 7)])
+        let scanner = UsageScanner(paths: paths, readLines: UsageScanner.streamLines(limit: 1_000))
+        let result = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        let skipped = await scanner.skippedLines
+        XCTAssertEqual(skipped, 1)
+    }
+
+    /// The reader hands the line that is too long over as "too long" and keeps
+    /// reading the lines that follow it.
+    func testTheReaderSkipsALineThatIsTooLongAndKeepsTheRest() throws {
+        let long = String(repeating: "a", count: 5_000)
+        try session([long, "second", "third"])
+        let url = paths.home(for: "work").appendingPathComponent("projects/-proj-a/s1.jsonl")
+        var received: [UsageScanner.RawLine] = []
+        try UsageScanner.streamLines(limit: 1_000)(url) { received.append($0) }
+        XCTAssertEqual(received.count, 3)
+        XCTAssertTrue(received[0].tooLong)
+        XCTAssertFalse(received[1].tooLong)
+        XCTAssertFalse(received[2].tooLong)
+        XCTAssertEqual(String(decoding: received[1].bytes, as: UTF8.self), "second")
+        XCTAssertEqual(String(decoding: received[2].bytes, as: UTF8.self), "third")
+    }
+
+    // MARK: - The cache file
+
+    /// The cache holds no absolute path: the name of a project folder of the
+    /// user is all it can show.
+    func testTheCacheHoldsNoAbsolutePath() async throws {
+        try session([reply(id: "a", request: "r1", input: 5)])
+        _ = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+
+        let cacheURL = paths.root.appendingPathComponent(UsageScanner.cacheFileName)
+        let bytes = try Data(contentsOf: cacheURL)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let files = try XCTUnwrap(object["files"] as? [String: Any])
+        XCTAssertEqual(Array(files.keys), ["work/projects/-proj-a/s1.jsonl"])
+        // The folder of the profile is nowhere in the file.
+        let text = try String(contentsOf: cacheURL, encoding: .utf8)
+        XCTAssertFalse(text.contains("homes"))
+        XCTAssertFalse(text.contains(paths.root.lastPathComponent))
+    }
+
+    /// The cache holds the names of the project folders of the user: only the
+    /// user may read it.
+    func testTheCacheFileIsOnlyReadableByTheUser() async throws {
+        try session([reply(id: "a", request: "r1", input: 5)])
+        _ = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+
+        let cacheURL = paths.root.appendingPathComponent(UsageScanner.cacheFileName)
+        let attributes = try FileManager.default.attributesOfItem(atPath: cacheURL.path)
+        let permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue
+        XCTAssertEqual(permissions, 0o600)
+    }
+
+    /// The cache is written while the scan runs: a scan that is stopped keeps
+    /// the work it has already done.
+    func testTheCacheIsWrittenWhileTheScanRuns() async throws {
+        for index in 0..<30 {
+            try session([reply(id: "m\(index)", request: "r\(index)", input: 1)], name: "f\(index).jsonl")
+        }
+        let counter = ReadCounter()
+        let scanner = UsageScanner(paths: paths, readLines: { url, body in
+            counter.record(url.lastPathComponent)
+            // The scan is stopped after 25 files.
+            if counter.count == 26 { throw CancellationError() }
+            try UsageScanner.streamLines(url, body)
+        })
+        do {
+            _ = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+            XCTFail("the scan must be stopped")
+        } catch is CancellationError {
+            // expected
+        }
+
+        let cacheURL = paths.root.appendingPathComponent(UsageScanner.cacheFileName)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cacheURL.path))
+        let bytes = try Data(contentsOf: cacheURL)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let files = try XCTUnwrap(object["files"] as? [String: Any])
+        XCTAssertEqual(files.count, 25)
+    }
+
+    // MARK: - Files that are not session files
+
+    /// A link is not followed: it could lead to a file outside of the folder of
+    /// the profile.
+    func testALinkedSessionFileIsNotRead() async throws {
+        let home = paths.home(for: "work")
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let outside = home.appendingPathComponent("elsewhere.jsonl")
+        try (reply(id: "a", request: "r1", input: 100) + "\n").write(to: outside, atomically: false, encoding: .utf8)
+        let folder = home.appendingPathComponent("projects/-proj-a", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: folder.appendingPathComponent("linked.jsonl"),
+            withDestinationURL: outside
+        )
+
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 0)
+        XCTAssertEqual(skippedFiles(result), 0)
+    }
+
+    /// A linked folder of sessions is not read either.
+    func testALinkedProjectsFolderIsNotRead() async throws {
+        let real = paths.root.appendingPathComponent("real-projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try (reply(id: "a", request: "r1", input: 100) + "\n")
+            .write(to: real.appendingPathComponent("s1.jsonl"), atomically: false, encoding: .utf8)
+        let home = paths.home(for: "work")
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: home.appendingPathComponent("projects"),
+            withDestinationURL: real
+        )
+
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 0)
+    }
+
+    /// A slug that is not a safe file name reads nothing.
+    func testAHostileSlugReadsNothing() async throws {
+        let outside = paths.root.appendingPathComponent("x/projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try (reply(id: "a", request: "r1", input: 100) + "\n")
+            .write(to: outside.appendingPathComponent("s1.jsonl"), atomically: false, encoding: .utf8)
+
+        let counter = ReadCounter()
+        let scanner = makeScanner(counter: counter)
+        let result = try await scanner.usage(for: profile(slug: "../x"), now: noon, calendar: utc())
+        XCTAssertEqual(result, .unavailable(.folderMissing))
+        XCTAssertEqual(counter.count, 0)
+    }
+
+    /// A folder that is named like a session file is not read.
+    func testAFolderNamedLikeASessionFileIsSkipped() async throws {
+        try session([reply(id: "a", request: "r1", input: 7)])
+        let folder = paths.home(for: "work").appendingPathComponent("projects/-proj-a/x.jsonl", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        XCTAssertEqual(skippedFiles(result), 0)
     }
 
     // MARK: - Availability
