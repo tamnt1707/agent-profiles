@@ -42,6 +42,8 @@ struct ModelComboField: View {
                 Image(systemName: "chevron.down")
             }
             .buttonStyle(.borderless)
+            // The list is not fetched while the check of the profiles runs.
+            .disabled(!model.canFetchModelList)
             .help(model.loc.t("editor.models.choose"))
             .accessibilityLabel(model.loc.t("editor.models.choose"))
         }
@@ -104,7 +106,8 @@ struct ModelOptionsView: View {
                     Button(model.loc.t("editor.models.refresh")) {
                         model.loadModelList(refresh: true)
                     }
-                    .disabled(model.isFetchingModels)
+                    // The list is not fetched while the check of the profiles runs.
+                    .disabled(!model.canFetchModelList)
                     if model.isFetchingModels {
                         ProgressView()
                             .controlSize(.small)

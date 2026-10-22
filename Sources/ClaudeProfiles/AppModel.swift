@@ -106,6 +106,12 @@ final class AppModel {
     /// `true` while the model list is being fetched.
     private(set) var isFetchingModels = false
 
+    /// `true` when the model list may be fetched: not while another fetch runs
+    /// and not while the check of the profiles runs.
+    var canFetchModelList: Bool {
+        ModelFetchGate.canFetch(isFetching: isFetchingModels, isCheckingHealth: isCheckingHealth)
+    }
+
     /// How far the running "Check all connections" has got.
     struct HealthProgress: Equatable {
         var done: Int
@@ -706,7 +712,9 @@ final class AppModel {
     /// reused unless `refresh` is set. Only the user's open or refresh calls this:
     /// never typing, never the launch of the app.
     func loadModelList(refresh: Bool = false) {
-        guard let draft, !isFetchingModels else { return }
+        guard let draft else { return }
+        // The list and the check of the profiles do not run at the same time.
+        guard canFetchModelList else { return }
         let key = ModelListCacheKey(baseURL: draft.baseURL, auth: draft.auth)
         if !refresh, let cache = modelListCache, cache.isReusable(for: key) { return }
         let apiKey: String
@@ -793,7 +801,9 @@ final class AppModel {
 
     /// Tests every profile one at a time with its stored key. Only runs after the user confirmed.
     func startHealthCheck() {
-        guard healthTask == nil, !isTestingConnection else { return }
+        // The check of the profiles and the fetch of the model list do not run
+        // at the same time.
+        guard healthTask == nil, !isTestingConnection, !isFetchingModels else { return }
         let profiles = data.profiles
         let checker = HealthChecker(keys: store.keys)
         healthProgress = HealthProgress(done: 0, total: profiles.count)
