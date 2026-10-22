@@ -211,7 +211,7 @@
 "menubar.openApp" = "Mở Claude Profiles";
 "menubar.settings" = "Cài đặt…";
 "menubar.quit" = "Thoát";
-"menubar.noKey" = "chưa có khóa";
+"menubar.noKey" = "chưa có key";
 "menubar.panel.message" = "Chọn thư mục để mở profile này.";
 "menubar.panel.prompt" = "Mở";
 
