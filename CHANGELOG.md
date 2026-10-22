@@ -4,6 +4,76 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.2.0] - 2026-10-22
+
+Three new things to see and use: a health dot for every profile, a menu bar launcher and token usage
+per profile. All the new settings are optional, and a `profiles.json` from 0.1.0 opens unchanged.
+
+### English
+
+**New**
+- **Health dots.** Every profile in the sidebar has a dot: ready, not tested, needs attention or a problem. Each state
+  has its own shape as well as its color, and a tooltip gives the reason. *Check all connections* tests the profiles one
+  at a time, only after you confirm (it sends one tiny request to each provider, about one token), shows its
+  progress and can be stopped. Nothing is ever sent in the background.
+- **Menu bar launcher.** Open any profile in one click from the menu bar, in its own folder. *Open in a folder…* lists
+  your profiles with their five most recent folders and lets you pick another one. A profile without a key is
+  shown dimmed. Turn it off in Settings > General (it is on by default).
+- **Token usage per profile.** A new *Usage* section (collapsed until you open it) shows Today, the last 7 days and
+  all time, with input, output and cache tokens, counted from the profile's own session history on your Mac.
+  Nothing leaves your computer and no conversation text is kept. You can enter a price per million tokens to see an
+  upper estimate of the cost. Counting can be stopped, and big histories are read quickly.
+
+**Safer**
+- A connection check can never send a key to the address of another profile, even if you save a profile while a
+  check is running.
+- A folder whose name contains a control character (a tab, a line break…) is refused for *Open in terminal*, the
+  menu bar and the working directory, because a terminal could act on it.
+- If the Keychain cannot be read, the profile shows "Could not read the Keychain" instead of a false "no key".
+- The updater's helper script now uses the system tools by their full path, so nothing on your PATH can change how
+  an update is installed.
+
+**Fixed**
+- The main window opens once: *Open Claude Profiles* in the menu bar brings the existing window forward.
+- A Save, Discard or Cancel question appears before a profile is switched with unsaved changes (already in 0.1.0)
+  and the recent folders no longer lose an entry when two profiles are opened quickly.
+
+**Good to know**
+- `profiles.json` gains optional fields (`recent_dirs`, `show_menu_bar` and the two price fields). If you go back to
+  0.1.0, it ignores them and removes them the next time it saves.
+
+### Tiếng Việt
+
+**Mới**
+- **Chấm trạng thái.** Mỗi profile ở cột bên có một chấm: sẵn sàng, chưa kiểm tra, cần chú ý hoặc có lỗi. Mỗi trạng thái có
+  hình dạng riêng ngoài màu, và chú thích cho biết lý do. *Kiểm tra tất cả kết nối* thử từng profile một, chỉ sau khi
+  bạn xác nhận (gửi một yêu cầu rất nhỏ tới mỗi nhà cung cấp, khoảng một token), có hiển thị tiến độ và dừng được.
+  Không có gì được gửi ngầm.
+- **Trình khởi chạy trên thanh menu.** Mở bất kỳ profile nào chỉ bằng một cú nhấp từ thanh menu, trong thư mục riêng của
+  nó. *Mở trong thư mục…* liệt kê các profile cùng năm thư mục gần nhất và cho bạn chọn thư mục khác. Profile chưa có
+  key được làm mờ. Tắt trong Cài đặt > Chung (mặc định đang bật).
+- **Thống kê token theo profile.** Mục *Usage* mới (thu gọn cho đến khi bạn mở) cho thấy Hôm nay, 7 ngày gần nhất và
+  tất cả, gồm token vào, ra và cache, đếm từ chính lịch sử phiên của profile ngay trên máy bạn. Không có gì rời khỏi
+  máy và không lưu nội dung hội thoại. Bạn có thể nhập đơn giá mỗi triệu token để xem ước tính chi phí cận trên. Có thể
+  dừng khi đang đếm, và lịch sử lớn được đọc nhanh.
+
+**An toàn hơn**
+- Việc kiểm tra kết nối không bao giờ gửi key sang địa chỉ của profile khác, kể cả khi bạn lưu một profile trong lúc đang
+  kiểm tra.
+- Thư mục có tên chứa ký tự điều khiển (tab, xuống dòng…) bị từ chối khi *Mở trong terminal*, ở thanh menu và ở thư mục
+  làm việc, vì terminal có thể thực hiện theo ký tự đó.
+- Nếu không đọc được Keychain, profile hiện "Không đọc được Keychain" thay vì báo sai là "chưa có key".
+- Script của bộ cập nhật giờ dùng các công cụ hệ thống bằng đường dẫn đầy đủ, nên không gì trong PATH của bạn thay đổi
+  được cách cài một bản cập nhật.
+
+**Đã sửa**
+- Cửa sổ chính chỉ mở một lần: *Mở Claude Profiles* ở thanh menu đưa cửa sổ có sẵn lên trước.
+- Thư mục gần đây không còn mất một mục khi mở nhanh hai profile liên tiếp.
+
+**Cần biết**
+- `profiles.json` có thêm các trường tùy chọn (`recent_dirs`, `show_menu_bar` và hai trường giá). Nếu quay lại 0.1.0, nó bỏ qua
+  các trường này và xóa chúng ở lần lưu kế tiếp.
+
 ## [0.1.0] - 2026-10-22
 
 First release. Claude Profiles is now a native macOS app written in Swift and
