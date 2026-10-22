@@ -108,10 +108,14 @@ final class AppModel {
 
     /// The token usage counted for each profile, by slug. Counted on first show and on Refresh.
     private(set) var usageResults: [String: UsageResult] = [:]
-    /// The slug whose usage is being counted, if any.
-    private(set) var usageLoadingSlug: String?
-    /// The count that is running, so that a newer one can replace it.
-    private var usageTask: Task<Void, Never>?
+    /// The slugs whose usage is being counted right now. Every profile has its
+    /// own count: the count of one profile does not stop the count of another.
+    private(set) var usageLoadingSlugs: Set<String> = []
+    /// A number per slug. Only the newest count of a slug is used, so a count
+    /// that was replaced or stopped never shows its numbers.
+    private var usageGenerations: [String: Int] = [:]
+    /// The running count of every profile, so that it can be stopped.
+    private var usageTasks: [String: Task<Void, Never>] = [:]
     /// Reads the session files of the profiles. Its cache lives in the data folder.
     private let usageScanner: UsageScanner
 
@@ -466,10 +470,13 @@ final class AppModel {
     /// Counts the usage of the saved profile again. The files are read off the main thread.
     func loadUsage() {
         guard let profile = currentProfile else { return }
-        usageTask?.cancel()
-        usageLoadingSlug = profile.slug
+        let slug = profile.slug
+        usageTasks[slug]?.cancel()
+        let generation = (usageGenerations[slug] ?? 0) + 1
+        usageGenerations[slug] = generation
+        usageLoadingSlugs.insert(slug)
         let scanner = usageScanner
-        usageTask = Task {
+        usageTasks[slug] = Task {
             let outcome: Result<UsageResult, Error>
             do {
                 outcome = .success(try await scanner.usage(for: profile))
@@ -478,14 +485,42 @@ final class AppModel {
             }
             // A newer count replaced this one, and that one owns the state now.
             guard !Task.isCancelled else { return }
-            usageLoadingSlug = nil
+            guard usageGenerations[slug] == generation else { return }
+            usageLoadingSlugs.remove(slug)
+            usageTasks[slug] = nil
+            // The profile may be gone (deleted or renamed) while the count ran.
+            guard data.profiles.contains(where: { $0.slug == slug }) else {
+                usageResults[slug] = nil
+                return
+            }
             switch outcome {
             case .success(let result):
-                usageResults[profile.slug] = result
+                usageResults[slug] = result
             case .failure(let error):
                 report(error)
             }
         }
+    }
+
+    /// Stops the count of the profile that is open.
+    func stopUsage() {
+        guard let slug = currentProfile?.slug else { return }
+        cancelUsage(for: slug)
+    }
+
+    /// `true` while the usage of the profile is being counted.
+    func isUsageLoading(_ slug: String) -> Bool {
+        usageLoadingSlugs.contains(slug)
+    }
+
+    /// Stops the count of a profile and forgets its numbers. A count that is
+    /// stopped must not show its numbers later.
+    private func cancelUsage(for slug: String) {
+        usageTasks[slug]?.cancel()
+        usageTasks[slug] = nil
+        usageLoadingSlugs.remove(slug)
+        usageGenerations[slug] = (usageGenerations[slug] ?? 0) + 1
+        usageResults[slug] = nil
     }
 
     /// A count stays valid while the folder of the profile and its isolation stay the same.
@@ -495,7 +530,7 @@ final class AppModel {
             return
         }
         guard previous.slug != saved.slug || previous.isolate != saved.isolate else { return }
-        usageResults[previous.slug] = nil
+        cancelUsage(for: previous.slug)
         usageResults[saved.slug] = nil
     }
 
@@ -592,7 +627,9 @@ final class AppModel {
         // The entry always leaves the list and the data file.
         var failures = removal.failures
         data.profiles.remove(at: index)
-        usageResults[profile.slug] = nil
+        // The numbers of a profile that is gone are gone with it: a profile
+        // that is added again with the same name starts at zero.
+        cancelUsage(for: profile.slug)
         do {
             try store.save(data)
         } catch {

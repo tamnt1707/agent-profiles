@@ -273,7 +273,7 @@ struct ProfileEditorView: View {
             Text(model.loc.t("editor.usage.noFolder"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
-        } else if result == nil && model.usageLoadingSlug != slug {
+        } else if result == nil && !model.isUsageLoading(slug) {
             Text(model.loc.t("editor.usage.notLoaded"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -292,13 +292,17 @@ struct ProfileEditorView: View {
         }
 
         HStack(spacing: 8) {
-            Button(model.loc.t("editor.usage.refresh")) {
-                model.loadUsage()
-            }
-            .disabled(model.usageLoadingSlug != nil)
-            if model.usageLoadingSlug == slug {
+            if model.isUsageLoading(slug) {
+                // The count runs until it is done or until it is stopped.
+                Button(model.loc.t("editor.usage.stop")) {
+                    model.stopUsage()
+                }
                 ProgressView()
                     .controlSize(.small)
+            } else {
+                Button(model.loc.t("editor.usage.refresh")) {
+                    model.loadUsage()
+                }
             }
         }
 
@@ -332,6 +336,10 @@ struct ProfileEditorView: View {
         }
 
         Text(model.loc.t("editor.usage.note"))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+
+        Text(model.loc.t("editor.usage.cacheNote"))
             .font(.callout)
             .foregroundStyle(.secondary)
     }

@@ -232,6 +232,7 @@
 "editor.usage.week" = "Last 7 days";
 "editor.usage.allTime" = "All time";
 "editor.usage.refresh" = "Refresh";
+"editor.usage.stop" = "Stop";
 "editor.usage.detail" = "Input %@ · Output %@ · Cache read %@ · Cache written %@";
 "editor.usage.note" = "Numbers come from what the provider reports and can differ from your bill. Sessions that were resumed or copied can be counted more than once.";
 "editor.usage.unsaved" = "Save the profile to count its usage.";
@@ -244,6 +245,7 @@
 "editor.usage.priceInput" = "Input (USD)";
 "editor.usage.priceOutput" = "Output (USD)";
 "editor.usage.priceHelp" = "Cache reads and writes are priced as input tokens. The estimate shows only when both prices are set.";
+"editor.usage.cacheNote" = "The numbers are kept in a cache file of this app, so that the next count is faster. It holds no text of your messages.";
 "error.invalidPrice" = "Prices must be a number of zero or more.";
 "probe.ok" = "Connected, %d ms";
 "probe.ok.model" = "Connected, %d ms (model %@)";

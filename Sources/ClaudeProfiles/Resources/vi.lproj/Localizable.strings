@@ -232,6 +232,7 @@
 "editor.usage.week" = "7 ngày qua";
 "editor.usage.allTime" = "Toàn bộ";
 "editor.usage.refresh" = "Làm mới";
+"editor.usage.stop" = "Dừng";
 "editor.usage.detail" = "Đầu vào %@ · Đầu ra %@ · Đọc cache %@ · Ghi cache %@";
 "editor.usage.note" = "Số liệu lấy từ những gì nhà cung cấp báo cáo và có thể khác với hóa đơn của bạn. Phiên làm việc được tiếp tục hoặc sao chép có thể bị đếm nhiều lần.";
 "editor.usage.unsaved" = "Hãy lưu profile để đếm mức sử dụng.";
@@ -244,6 +245,7 @@
 "editor.usage.priceInput" = "Đầu vào (USD)";
 "editor.usage.priceOutput" = "Đầu ra (USD)";
 "editor.usage.priceHelp" = "Token đọc và ghi cache được tính theo giá đầu vào. Chỉ hiện ước tính khi đã nhập đủ cả hai giá.";
+"editor.usage.cacheNote" = "Các con số được giữ trong một tệp cache của ứng dụng, nên lần đếm sau sẽ nhanh hơn. Tệp này không chứa nội dung tin nhắn của bạn.";
 "error.invalidPrice" = "Giá phải là một số từ 0 trở lên.";
 "probe.ok" = "Đã kết nối, %d ms";
 "probe.ok.model" = "Đã kết nối, %d ms (model %@)";
