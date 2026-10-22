@@ -147,6 +147,8 @@ fi
 
 if [[ ":$PATH:" != *":$HOME/.claude-profiles/bin:"* ]]; then
   echo ""
-  echo "Để gọi claude-<tên-profile> từ mọi terminal, chạy một lần:"
-  echo "  echo 'export PATH=\"\$HOME/.claude-profiles/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+  echo "Để gọi claude-<tên-profile> từ mọi terminal: mở Claude Profiles, lưu một profile,"
+  echo "rồi chọn Thêm khi app hỏi về lệnh trong terminal (hoặc Cài đặt > Lệnh trong terminal)."
+  # Fallback only for a shell the app does not edit (nushell, csh, ...): add this line by hand.
+  # export PATH="$HOME/.claude-profiles/bin${PATH:+:$PATH}"
 fi
