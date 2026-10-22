@@ -421,7 +421,10 @@ struct ProfileEditorView: View {
     private func price(_ keyPath: WritableKeyPath<Profile, Double?>) -> Binding<Double?> {
         Binding(
             get: { model.draft?[keyPath: keyPath] },
-            set: { model.draft?[keyPath: keyPath] = $0 }
+            set: { value in
+                guard SettingsChange.isDifferent(model.draft?[keyPath: keyPath], value) else { return }
+                model.draft?[keyPath: keyPath] = value
+            }
         )
     }
 
@@ -555,21 +558,30 @@ struct ProfileEditorView: View {
     private func text(_ keyPath: WritableKeyPath<Profile, String>) -> Binding<String> {
         Binding(
             get: { model.draft?[keyPath: keyPath] ?? "" },
-            set: { model.draft?[keyPath: keyPath] = $0 }
+            set: { value in
+                guard SettingsChange.isDifferent(model.draft?[keyPath: keyPath], value) else { return }
+                model.draft?[keyPath: keyPath] = value
+            }
         )
     }
 
     private func bool(_ keyPath: WritableKeyPath<Profile, Bool>) -> Binding<Bool> {
         Binding(
             get: { model.draft?[keyPath: keyPath] ?? false },
-            set: { model.draft?[keyPath: keyPath] = $0 }
+            set: { value in
+                guard SettingsChange.isDifferent(model.draft?[keyPath: keyPath], value) else { return }
+                model.draft?[keyPath: keyPath] = value
+            }
         )
     }
 
     private func authBinding() -> Binding<AuthKind> {
         Binding(
             get: { model.draft?.auth ?? .bearer },
-            set: { model.draft?.auth = $0 }
+            set: { value in
+                guard SettingsChange.isDifferent(model.draft?.auth, value) else { return }
+                model.draft?.auth = value
+            }
         )
     }
 

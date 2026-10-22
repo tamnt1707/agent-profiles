@@ -62,7 +62,10 @@ struct ModelComboField: View {
     private var isPresenting: Binding<Bool> {
         Binding(
             get: { popover != nil },
-            set: { if !$0 { popover = nil } }
+            set: { shown in
+                guard !shown, popover != nil else { return }
+                popover = nil
+            }
         )
     }
 

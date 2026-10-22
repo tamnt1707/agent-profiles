@@ -109,7 +109,13 @@ struct SettingsView: View {
         .onAppear { model.refreshPathStatus() }
         .alert(
             model.loc.t("pathSetup.remove.title", shellToRemove?.displayName ?? ""),
-            isPresented: Binding(get: { shellToRemove != nil }, set: { if !$0 { shellToRemove = nil } })
+            isPresented: Binding(
+                get: { shellToRemove != nil },
+                set: { shown in
+                    guard !shown, shellToRemove != nil else { return }
+                    shellToRemove = nil
+                }
+            )
         ) {
             Button(model.loc.t("pathSetup.remove"), role: .destructive) {
                 if let shell = shellToRemove {

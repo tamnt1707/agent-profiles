@@ -454,6 +454,7 @@ final class AppModel {
 
     /// The name of the profile changed. In auto mode the command follows it.
     func setName(_ name: String) {
+        guard SettingsChange.isDifferent(draft?.name, name) else { return }
         draft?.name = name
         command.setName(name)
         syncSlug()
@@ -461,6 +462,7 @@ final class AppModel {
 
     /// The user typed in the command field: the command becomes custom.
     func setCommandInput(_ input: String) {
+        guard SettingsChange.isDifferent(command.input, input) else { return }
         command.setInput(input)
         syncSlug()
     }
@@ -1739,7 +1741,12 @@ final class AppModel {
     // MARK: - Settings
 
     /// Switches the language and rewrites every launcher script.
+    ///
+    /// A value that is already the stored one is left alone: SwiftUI writes a
+    /// binding back with the value it already has, and writing it again would
+    /// change the model, rewrite the scripts and ask for another pass.
     func setLanguage(_ language: AppLanguage) {
+        guard SettingsChange.isDifferent(data.language, language) else { return }
         loc.language = language
         data.language = language
         persistSettings()
@@ -1748,6 +1755,7 @@ final class AppModel {
 
     /// Switches the appearance.
     func setAppearance(_ appearance: AppearanceMode) {
+        guard SettingsChange.isDifferent(data.appearance, appearance) else { return }
         data.appearance = appearance
         applyAppearance()
         persistSettings()
@@ -1755,18 +1763,26 @@ final class AppModel {
 
     /// Switches the terminal application.
     func setTerminal(_ terminal: TerminalApp) {
+        guard SettingsChange.isDifferent(data.terminal, terminal) else { return }
         data.terminal = terminal
         persistSettings()
     }
 
     /// Switches the automatic check of a new version on or off.
     func setAutoCheckUpdates(_ enabled: Bool) {
+        guard SettingsChange.isDifferent(data.autoCheckUpdates, enabled) else { return }
         data.autoCheckUpdates = enabled
         persistSettings()
     }
 
     /// Shows or hides the launcher in the menu bar.
+    ///
+    /// The launcher is inserted in the menu bar by a binding, so SwiftUI asks
+    /// for the value on every pass of the scene. Writing the value that is
+    /// already there would save `profiles.json` again and again, and the app
+    /// would burn its CPU while the window is open.
     func setShowMenuBar(_ show: Bool) {
+        guard SettingsChange.isDifferent(data.showMenuBar, show) else { return }
         data.showMenuBar = show
         persistSettings()
     }
