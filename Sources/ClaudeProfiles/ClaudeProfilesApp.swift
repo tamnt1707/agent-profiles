@@ -34,7 +34,9 @@ struct ClaudeProfilesApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(id: MenuBarLauncherView.mainWindowID) {
+        // A single window: opening it again brings the same window forward
+        // instead of making a second one that would share the draft.
+        Window(Text(model.loc.t("app.title")), id: MenuBarLauncherView.mainWindowID) {
             ContentView(model: model)
                 .frame(minWidth: 800, minHeight: 480)
                 .preferredColorScheme(model.colorScheme)
