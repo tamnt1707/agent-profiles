@@ -662,9 +662,9 @@ enum JSONText {
         if data.pathPromptDeclined {
             out += ",\n  \"path_prompt_declined\": true"
         }
-        if !data.showMenuBar {
-            out += ",\n  \"show_menu_bar\": false"
-        }
+        // The rule of the field is in one place: it is written only when the
+        // menu bar is turned off.
+        out += MenuBarSetting.json(data.showMenuBar)
         if let lastUpdateCheck = data.lastUpdateCheck {
             out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"
         }

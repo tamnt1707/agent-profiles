@@ -206,6 +206,7 @@
 "menubar.section" = "Thanh menu";
 "menubar.show" = "Hiện trên thanh menu";
 "menubar.openInFolder" = "Mở trong thư mục…";
+"menubar.chooseFolder" = "Chọn thư mục…";
 "menubar.recentFolders" = "Thư mục gần đây";
 "menubar.openApp" = "Mở Claude Profiles";
 "menubar.settings" = "Cài đặt…";

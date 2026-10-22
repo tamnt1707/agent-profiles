@@ -20,11 +20,11 @@ struct MenuBarLauncherView: View {
             }
             Divider()
             Button(model.loc.t("menubar.openApp")) {
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 openWindow(id: Self.mainWindowID)
             }
             Button(model.loc.t("menubar.settings")) {
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 openSettings()
             }
             Divider()
@@ -32,34 +32,50 @@ struct MenuBarLauncherView: View {
                 NSApp.terminate(nil)
             }
         }
-        // The key lookup happens here, once per opening of the menu.
-        .onAppear { model.refreshProfilesWithKey() }
+        // The keys and the folders are looked up here, once per opening of the
+        // menu, and not while the menu is drawn.
+        .onAppear { model.prepareMenuBar() }
     }
 
     @ViewBuilder
     private func entryView(_ entry: MenuBarModel.Entry) -> some View {
         switch entry {
         case .profile(let profile):
-            Menu {
-                Button(model.loc.t("actions.openTerminal")) {
-                    model.openFromMenu(slug: profile.slug, folder: nil)
-                }
-                if !profile.recentFolders.isEmpty {
-                    Section(model.loc.t("menubar.recentFolders")) {
-                        ForEach(profile.recentFolders, id: \.path) { folder in
-                            Button(folder.display) {
-                                model.openFromMenu(slug: profile.slug, folder: folder.path)
-                            }
-                        }
-                    }
-                }
-                Button(model.loc.t("menubar.openInFolder")) {
-                    chooseFolder(for: profile.slug)
-                }
+            // One click: the profile is opened in its own working directory.
+            Button {
+                model.openFromMenu(slug: profile.slug, folder: nil)
             } label: {
                 profileLabel(profile)
             }
             .disabled(!profile.isEnabled)
+
+        case .openInFolder(let menu):
+            // The submenu with the profiles and their folders is a group of
+            // its own.
+            Divider()
+            Menu {
+                ForEach(menu.profiles, id: \.slug) { profile in
+                    Menu {
+                        Section(model.loc.t("menubar.recentFolders")) {
+                            ForEach(profile.recentFolders, id: \.path) { folder in
+                                Button {
+                                    model.openFromMenu(slug: profile.slug, folder: folder.path)
+                                } label: {
+                                    Text(verbatim: folder.display)
+                                }
+                            }
+                        }
+                        Button(model.loc.t("menubar.chooseFolder")) {
+                            chooseFolder(for: profile.slug)
+                        }
+                    } label: {
+                        Text(profile.name)
+                    }
+                    .disabled(!profile.isEnabled)
+                }
+            } label: {
+                Text(menu.title)
+            }
 
         case .noProfiles:
             Button(model.loc.t("sidebar.empty.title")) {}
@@ -74,9 +90,9 @@ struct MenuBarLauncherView: View {
     /// The name, then the command in secondary style. A profile without its key
     /// gets the "no key" hint.
     private func profileLabel(_ profile: MenuBarModel.ProfileEntry) -> Text {
-        var label = Text(profile.name) + Text("  \(profile.command)").foregroundStyle(.secondary)
+        var label = Text(profile.name) + Text(verbatim: "  \(profile.command)").foregroundStyle(.secondary)
         if profile.hint == .noKey {
-            label = label + Text("  — \(model.loc.t("menubar.noKey"))").foregroundStyle(.secondary)
+            label = label + Text(verbatim: "  — \(model.loc.t("menubar.noKey"))").foregroundStyle(.secondary)
         }
         return label
     }
@@ -90,8 +106,14 @@ struct MenuBarLauncherView: View {
         panel.canCreateDirectories = true
         panel.message = model.loc.t("menubar.panel.message")
         panel.prompt = model.loc.t("menubar.panel.prompt")
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        // A folder with a control character is refused: the terminal would act
+        // on it before the shell reads the quotes.
+        guard FolderPathSafety.isSafe(url.path) else {
+            model.reportUnsafeFolder(url.path)
+            return
+        }
         model.openFromMenu(slug: slug, folder: url.path)
     }
 }

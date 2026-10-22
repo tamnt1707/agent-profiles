@@ -206,6 +206,7 @@
 "menubar.section" = "Menu bar";
 "menubar.show" = "Show in the menu bar";
 "menubar.openInFolder" = "Open in a folder…";
+"menubar.chooseFolder" = "Choose a folder…";
 "menubar.recentFolders" = "Recent folders";
 "menubar.openApp" = "Open Claude Profiles";
 "menubar.settings" = "Settings…";

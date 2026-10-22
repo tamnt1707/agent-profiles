@@ -226,7 +226,7 @@ public struct AppData: Codable, Equatable, Sendable {
         autoCheckUpdates = (try? c.decode(Bool.self, forKey: .autoCheckUpdates)) ?? true
         lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
         pathPromptDeclined = (try? c.decode(Bool.self, forKey: .pathPromptDeclined)) ?? false
-        showMenuBar = (try? c.decode(Bool.self, forKey: .showMenuBar)) ?? true
+        showMenuBar = MenuBarSetting.value(stored: try? c.decode(Bool.self, forKey: .showMenuBar))
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
