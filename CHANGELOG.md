@@ -33,11 +33,6 @@ per profile. All the new settings are optional, and a `profiles.json` from 0.1.0
 - The updater's helper script now uses the system tools by their full path, so nothing on your PATH can change how
   an update is installed.
 
-**Fixed**
-- The main window opens once: *Open Claude Profiles* in the menu bar brings the existing window forward.
-- A Save, Discard or Cancel question appears before a profile is switched with unsaved changes (already in 0.1.0)
-  and the recent folders no longer lose an entry when two profiles are opened quickly.
-
 **Good to know**
 - `profiles.json` gains optional fields (`recent_dirs`, `show_menu_bar` and the two price fields). If you go back to
   0.1.0, it ignores them and removes them the next time it saves.
@@ -65,10 +60,6 @@ per profile. All the new settings are optional, and a `profiles.json` from 0.1.0
 - Nếu không đọc được Keychain, profile hiện "Không đọc được Keychain" thay vì báo sai là "chưa có key".
 - Script của bộ cập nhật giờ dùng các công cụ hệ thống bằng đường dẫn đầy đủ, nên không gì trong PATH của bạn thay đổi
   được cách cài một bản cập nhật.
-
-**Đã sửa**
-- Cửa sổ chính chỉ mở một lần: *Mở Claude Profiles* ở thanh menu đưa cửa sổ có sẵn lên trước.
-- Thư mục gần đây không còn mất một mục khi mở nhanh hai profile liên tiếp.
 
 **Cần biết**
 - `profiles.json` có thêm các trường tùy chọn (`recent_dirs`, `show_menu_bar` và hai trường giá). Nếu quay lại 0.1.0, nó bỏ qua
