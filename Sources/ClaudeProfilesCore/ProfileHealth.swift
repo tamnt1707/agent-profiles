@@ -6,7 +6,7 @@ public enum HealthState: String, Equatable, Sendable, CaseIterable {
     case ready
     /// Grey: no problem is known, but no recent test succeeded.
     case untested
-    /// Yellow: the last test was rate limited, or answered with a warning.
+    /// Orange: the last test was rate limited, or answered with a warning.
     case attention
     /// Red: a key is needed and none is stored, or the last test failed.
     case problem
@@ -85,7 +85,13 @@ public enum ProfileHealth {
 ///
 /// A result belongs to the Base URL and the auth kind it was made with: when
 /// either one changes, the result is not returned. A changed key is handled by
-/// `forget(slug:)`, which the app calls on save.
+/// `profileSaved(old:new:typedKey:)`, which the app calls on save.
+///
+/// Every slug also has a generation. It rises when the settings of the profile
+/// change: a new key, a new Base URL, a new auth kind, a new name or a delete.
+/// A check that started before the change must not write its answer into the
+/// dot of the new settings, so an answer always says which generation it was
+/// made for.
 public struct HealthBook: Equatable, Sendable {
     private struct Entry: Equatable, Sendable {
         var baseURL: String
@@ -94,16 +100,42 @@ public struct HealthBook: Equatable, Sendable {
     }
 
     private var entries: [String: Entry] = [:]
+    private var generations: [String: Int] = [:]
 
     public init() {}
 
+    /// The generation of a slug. It is 0 for a profile that never changed.
+    public func generation(for slug: String) -> Int {
+        generations[slug] ?? 0
+    }
+
+    /// Marks the settings of the profile as changed. Every answer that was
+    /// made for the old settings is refused from now on.
+    public mutating func bump(slug: String) {
+        generations[slug, default: 0] += 1
+    }
+
     /// Keeps the outcome of a test of `profile`, made at `date`.
-    public mutating func record(_ outcome: ProbeOutcome, at date: Date, for profile: Profile) {
+    ///
+    /// The result is kept only when the profile still exists (`profile` is
+    /// `nil` when it is gone) and when the generation of its slug is still the
+    /// one the test was made for. A test of an older setting describes
+    /// something else, so it is dropped and `false` is returned.
+    @discardableResult
+    public mutating func record(
+        _ outcome: ProbeOutcome,
+        at date: Date,
+        for profile: Profile?,
+        generation: Int
+    ) -> Bool {
+        guard let profile else { return false }
+        guard self.generation(for: profile.slug) == generation else { return false }
         entries[profile.slug] = Entry(
             baseURL: profile.baseURL,
             auth: profile.auth,
             test: TestRecord(outcome: outcome, testedAt: date)
         )
+        return true
     }
 
     /// The last test of `profile`, or `nil` when none was kept or its Base URL or auth kind changed since.
@@ -118,5 +150,45 @@ public struct HealthBook: Equatable, Sendable {
     /// Drops the result of the profile with this slug (after a key change, a rename or a delete).
     public mutating func forget(slug: String) {
         entries[slug] = nil
+    }
+
+    /// The profile was saved with these settings.
+    ///
+    /// The result of the old settings is dropped and the generation rises when
+    /// the settings changed: a typed key, a new Base URL, a new auth kind or a
+    /// new name. A rename moves the old name too.
+    public mutating func profileSaved(old: Profile?, new: Profile, typedKey: String) {
+        if let old, old.slug != new.slug {
+            forget(slug: old.slug)
+            bump(slug: old.slug)
+        }
+        if HealthInvalidation.shouldForget(old: old, new: new, typedKey: typedKey) {
+            forget(slug: new.slug)
+            bump(slug: new.slug)
+        }
+    }
+
+    /// The profile is gone.
+    ///
+    /// The result is dropped and the generation rises, so an answer of a
+    /// running check cannot come back for it, not even for a profile that is
+    /// added again with the same name.
+    public mutating func profileDeleted(slug: String) {
+        forget(slug: slug)
+        bump(slug: slug)
+    }
+
+    /// `true` when the result of the editor's "Test connection" may go into the dot.
+    ///
+    /// The test is about the saved profile only when no key was typed: a typed
+    /// key is not stored yet, so the test says nothing about the saved key.
+    /// The Base URL and the auth kind of the draft must be the ones of the
+    /// saved profile too, otherwise the test was made against another
+    /// provider. A profile that was never saved has no saved settings that
+    /// the test could describe.
+    public static func canRecordEditorTest(draft: Profile, saved: Profile?, typedKey: String) -> Bool {
+        guard let saved else { return false }
+        guard typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return draft.baseURL == saved.baseURL && draft.auth == saved.auth
     }
 }

@@ -76,6 +76,21 @@ final class HealthCheckerTests: XCTestCase {
         return keys
     }
 
+    /// Runs a check over profiles that do not change while it runs: the
+    /// profile of a slug is the one of the list and no generation ever moves.
+    @MainActor
+    private func runCheck(
+        _ checker: HealthChecker,
+        profiles: [Profile],
+        onStep: (HealthCheckStep) -> Void
+    ) async {
+        await checker.run(
+            profiles: profiles,
+            currentProfile: { slug in profiles.first { $0.slug == slug } },
+            generation: { _ in 0 }
+        ) { onStep($0) }
+    }
+
     // MARK: - Sequential
 
     @MainActor
@@ -85,7 +100,7 @@ final class HealthCheckerTests: XCTestCase {
         let checker = HealthChecker(keys: keys, probe: slowProbe(probes), now: { self.fixedNow })
         var steps: [HealthCheckStep] = []
 
-        await checker.run(profiles: [profile("a"), profile("b"), profile("c")]) { steps.append($0) }
+        await runCheck(checker, profiles: [profile("a"), profile("b"), profile("c")]) { steps.append($0) }
 
         XCTAssertEqual(probes.maximumActive, 1, "two requests were in flight at once")
         XCTAssertEqual(probes.calls.map { $0.slug }, ["a", "b", "c"])
@@ -105,7 +120,7 @@ final class HealthCheckerTests: XCTestCase {
         let checker = HealthChecker(keys: keys, probe: slowProbe(probes), now: { self.fixedNow })
         var steps: [HealthCheckStep] = []
 
-        await checker.run(profiles: [profile("a"), profile("b"), profile("c", auth: .none)]) { steps.append($0) }
+        await runCheck(checker, profiles: [profile("a"), profile("b"), profile("c", auth: .none)]) { steps.append($0) }
 
         XCTAssertEqual(probes.calls.map { $0.slug }, ["a", "c"], "the profile without a key was probed")
         XCTAssertEqual(steps.map(\.slugValue), ["a", "b", "c"])
@@ -118,7 +133,7 @@ final class HealthCheckerTests: XCTestCase {
         let probes = Probes()
         let checker = HealthChecker(keys: keys, probe: slowProbe(probes), now: { self.fixedNow })
 
-        await checker.run(profiles: [profile("a"), profile("c", auth: .none)]) { _ in }
+        await runCheck(checker, profiles: [profile("a"), profile("c", auth: .none)]) { _ in }
 
         XCTAssertEqual(probes.calls.count, 2)
         XCTAssertEqual(probes.calls[0].key, "sk-a")
@@ -135,7 +150,7 @@ final class HealthCheckerTests: XCTestCase {
         )
         var steps: [HealthCheckStep] = []
 
-        await checker.run(profiles: [profile("a")]) { steps.append($0) }
+        await runCheck(checker, profiles: [profile("a")]) { steps.append($0) }
 
         XCTAssertFalse(String(describing: steps).contains(secret))
         XCTAssertEqual(steps, [.tested(slug: "a", outcome: .unauthorized, at: fixedNow)])
@@ -151,8 +166,29 @@ final class HealthCheckerTests: XCTestCase {
         )
         var steps: [HealthCheckStep] = []
 
-        await checker.run(profiles: [profile("a", auth: .none)]) { steps.append($0) }
+        await runCheck(checker, profiles: [profile("a", auth: .none)]) { steps.append($0) }
 
+        XCTAssertEqual(steps, [.tested(slug: "a", outcome: .network(.other), at: fixedNow)])
+    }
+
+    @MainActor
+    func testTheTextOfAThrownErrorNeverReachesAStep() async throws {
+        struct Boom: Error, CustomStringConvertible {
+            var description: String { "the key is sk-SECRET-123 and the host is api.example.com" }
+        }
+        let checker = HealthChecker(
+            keys: InMemoryKeyStore(),
+            probe: { _, _ in throw Boom() },
+            now: { self.fixedNow }
+        )
+        var steps: [HealthCheckStep] = []
+
+        await runCheck(checker, profiles: [profile("a", auth: .none)]) { steps.append($0) }
+
+        let text = String(describing: steps)
+        XCTAssertFalse(text.contains("sk-SECRET-123"), "the key leaked into a step: \(text)")
+        XCTAssertFalse(text.contains("api.example.com"), "the text of the error leaked into a step: \(text)")
+        XCTAssertFalse(text.contains("Boom"), "the name of the error leaked into a step: \(text)")
         XCTAssertEqual(steps, [.tested(slug: "a", outcome: .network(.other), at: fixedNow)])
     }
 
@@ -172,7 +208,7 @@ final class HealthCheckerTests: XCTestCase {
         }, now: { self.fixedNow })
         let steps = Steps()
 
-        let task = Task { await checker.run(profiles: [self.profile("a"), self.profile("b"), self.profile("c")]) { steps.append($0) } }
+        let task = Task { await self.runCheck(checker, profiles: [self.profile("a"), self.profile("b"), self.profile("c")]) { steps.append($0) } }
         box.task = task
         await task.value
 
@@ -185,7 +221,7 @@ final class HealthCheckerTests: XCTestCase {
         let keys = try keyStore(["a": "sk-a"])
         let probes = Probes()
         let checker = HealthChecker(keys: keys, probe: slowProbe(probes), now: { self.fixedNow })
-        let task = Task { await checker.run(profiles: [self.profile("a")]) { _ in } }
+        let task = Task { await self.runCheck(checker, profiles: [self.profile("a")]) { _ in } }
         task.cancel()
         await task.value
         XCTAssertEqual(probes.calls.count, 0)
@@ -209,7 +245,7 @@ final class HealthCheckerTests: XCTestCase {
             now: { self.fixedNow }
         )
         var steps: [HealthCheckStep] = []
-        await checker.run(profiles: [profile]) { steps.append($0) }
+        await runCheck(checker, profiles: [profile]) { steps.append($0) }
         let requests = StubURLProtocol.requests.count
 
         guard case .tested(_, let outcome, let at)? = steps.first else {

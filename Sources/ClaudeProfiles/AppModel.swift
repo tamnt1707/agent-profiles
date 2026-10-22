@@ -115,6 +115,8 @@ final class AppModel {
     /// The last test of each profile, kept for this session only.
     private(set) var health = HealthBook()
     /// Whether a key is stored, per profile slug. Only existence is read, never the secret.
+    /// A slug that is not in the map has an unknown presence: the Keychain could
+    /// not be read, so nothing is said about its key.
     private(set) var storedKeys: [String: Bool] = [:]
     /// The check of all profiles while it runs.
     private var healthTask: Task<Void, Never>?
@@ -419,7 +421,8 @@ final class AppModel {
     func save() -> Bool {
         guard var draft else { return false }
         let previousProfile = currentProfile
-        let typedKey = !keyInput.isEmpty
+        // The key the user typed, before the field is cleared by the save.
+        let typedKey = keyInput
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         command.name = draft.name
         if command.mode == .auto {
@@ -449,12 +452,7 @@ final class AppModel {
             keyInput = ""
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
             // A typed key, a new Base URL or auth kind, or a new slug makes the last test describe something else.
-            if let previousProfile, previousProfile.slug != draft.slug {
-                health.forget(slug: previousProfile.slug)
-            }
-            if typedKey || previousProfile?.baseURL != draft.baseURL || previousProfile?.auth != draft.auth {
-                health.forget(slug: draft.slug)
-            }
+            health.profileSaved(old: previousProfile, new: draft, typedKey: typedKey)
             refreshStoredKeys()
 
             do {
@@ -567,7 +565,9 @@ final class AppModel {
         // The entry always leaves the list and the data file.
         var failures = removal.failures
         data.profiles.remove(at: index)
-        health.forget(slug: profile.slug)
+        // The profile is gone: an answer of a running check must not come back
+        // for it, not even when a profile with the same name is added again.
+        health.profileDeleted(slug: profile.slug)
         do {
             try store.save(data)
         } catch {
@@ -669,6 +669,11 @@ final class AppModel {
             report(error)
             return
         }
+        // The settings of the test are the ones of this moment: the answer
+        // belongs to them and to no other.
+        let saved = currentProfile
+        let typedKey = keyInput
+        let generation = health.generation(for: draft.slug)
         isTestingConnection = true
         connectionReport = nil
         let token = UUID()
@@ -678,9 +683,12 @@ final class AppModel {
             guard let self, !Task.isCancelled, self.connectionToken == token else { return }
             self.isTestingConnection = false
             self.connectionReport = result
-            // The result also updates the dot of the profile, when it is in the list.
-            if let result, self.draftIndex != nil {
-                self.health.record(result.outcome, at: Date(), for: draft)
+            // The result also updates the dot of the profile, when it is in the
+            // list and the test was made with the saved settings: a typed, not
+            // yet stored key says nothing about the saved one.
+            if let result,
+               HealthBook.canRecordEditorTest(draft: draft, saved: saved, typedKey: typedKey) {
+                self.health.record(result.outcome, at: Date(), for: draft, generation: generation)
             }
         }
     }
@@ -740,27 +748,46 @@ final class AppModel {
     /// Reads which profiles have a key stored. Only existence is asked for: no
     /// secret is read and no request is sent. Runs on launch, on save, on delete
     /// and when the window becomes active.
+    ///
+    /// The Keychain is read off the main actor, so a long list of profiles does
+    /// not freeze the window. A read that fails keeps the value that was known
+    /// before: a Keychain that cannot be read does not mean that the key is gone.
     func refreshStoredKeys() {
-        var presence: [String: Bool] = [:]
-        for profile in data.profiles {
-            presence[profile.slug] = (try? store.keys.hasKey(profile.slug)) ?? false
+        let slugs = data.profiles.map(\.slug)
+        let keys = store.keys
+        Task { [weak self] in
+            let read = await KeyPresence.read(slugs: slugs, keys: keys)
+            guard let self else { return }
+            self.storedKeys = KeyPresence.merge(
+                slugs: slugs,
+                previous: self.storedKeys,
+                read: read
+            )
         }
-        storedKeys = presence
     }
 
     /// The health of a profile at `now`, from its stored key and its last test in this session.
     func healthStatus(for profile: Profile, now: Date) -> HealthStatus {
-        ProfileHealth.evaluate(
+        // A profile whose key presence is unknown (the Keychain could not be
+        // read) is not shown as a missing key: that would be a wrong red.
+        let hasKey = storedKeys[profile.slug] ?? true
+        return ProfileHealth.evaluate(
             profile: profile,
-            hasKey: storedKeys[profile.slug] ?? false,
+            hasKey: hasKey,
             lastTest: health.lastTest(for: profile),
             now: now
         )
     }
 
+    /// `true` when "Check all connections" can start. The same rule for the
+    /// button of the sidebar and for the item of the Profile menu.
+    var canCheckAllConnections: Bool {
+        !data.profiles.isEmpty && !isCheckingHealth && !isTestingConnection && !isFetchingModels
+    }
+
     /// Asks before the first request of "Check all connections".
     func requestHealthCheck() {
-        guard !isCheckingHealth, !isTestingConnection, !data.profiles.isEmpty else { return }
+        guard canCheckAllConnections else { return }
         isConfirmingHealthCheck = true
     }
 
@@ -771,10 +798,24 @@ final class AppModel {
         let checker = HealthChecker(keys: store.keys)
         healthProgress = HealthProgress(done: 0, total: profiles.count)
         healthTask = Task { [weak self] in
-            await checker.run(profiles: profiles) { step in
-                self?.applyHealthStep(step, profiles: profiles)
+            guard let self else { return }
+            // The generations of the run: an answer of an older setting is
+            // refused instead of landing in the dot of the new one.
+            let captured = Dictionary(uniqueKeysWithValues: profiles.map {
+                ($0.slug, self.health.generation(for: $0.slug))
+            })
+            await checker.run(
+                profiles: profiles,
+                currentProfile: { [weak self] slug in
+                    self?.data.profiles.first { $0.slug == slug }
+                },
+                generation: { [weak self] slug in
+                    self?.health.generation(for: slug) ?? 0
+                }
+            ) { step in
+                self.applyHealthStep(step, captured: captured)
             }
-            self?.finishHealthCheck()
+            self.finishHealthCheck()
         }
     }
 
@@ -783,11 +824,15 @@ final class AppModel {
         healthTask?.cancel()
     }
 
-    private func applyHealthStep(_ step: HealthCheckStep, profiles: [Profile]) {
+    private func applyHealthStep(_ step: HealthCheckStep, captured: [String: Int]) {
         switch step {
         case .tested(let slug, let outcome, let at):
-            if let profile = profiles.first(where: { $0.slug == slug }) {
-                health.record(outcome, at: at, for: profile)
+            // The profile must still be there and its settings must be the
+            // ones the answer was made for: an answer of an older key or of
+            // an older URL never reaches the dot of the new settings.
+            if let profile = data.profiles.first(where: { $0.slug == slug }),
+               let generation = captured[slug] {
+                health.record(outcome, at: at, for: profile, generation: generation)
             }
         case .skipped:
             break

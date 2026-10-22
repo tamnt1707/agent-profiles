@@ -3,7 +3,7 @@ import XCTest
 
 /// A key store whose writes and deletes can be made to fail. It logs every write,
 /// so a test can check which secret was written where.
-final class FlakyKeyStore: KeyStore {
+final class FlakyKeyStore: KeyStore, @unchecked Sendable {
     let inner = InMemoryKeyStore()
     var failingWrites: Set<String> = []
     var failingDeletes: Set<String> = []

@@ -160,19 +160,19 @@ final class ProfileHealthTests: XCTestCase {
     func testRecordedResultIsReturnedForTheSameProfile() {
         var book = HealthBook()
         let profile = profile()
-        book.record(.ok(latencyMs: 5, model: nil), at: now, for: profile)
+        record(.ok(latencyMs: 5, model: nil), in: &book, for: profile)
         XCTAssertEqual(book.lastTest(for: profile), TestRecord(outcome: .ok(latencyMs: 5, model: nil), testedAt: now))
     }
 
     func testChangedBaseURLClearsTheResult() {
         var book = HealthBook()
-        book.record(.ok(latencyMs: 5, model: nil), at: now, for: profile(baseURL: "https://a.example.com"))
+        record(.ok(latencyMs: 5, model: nil), in: &book, for: profile(baseURL: "https://a.example.com"))
         XCTAssertNil(book.lastTest(for: profile(baseURL: "https://b.example.com")))
     }
 
     func testChangedAuthKindClearsTheResult() {
         var book = HealthBook()
-        book.record(.ok(latencyMs: 5, model: nil), at: now, for: profile(auth: .bearer))
+        record(.ok(latencyMs: 5, model: nil), in: &book, for: profile(auth: .bearer))
         XCTAssertNil(book.lastTest(for: profile(auth: .apiKey)))
     }
 
@@ -180,8 +180,8 @@ final class ProfileHealthTests: XCTestCase {
         var book = HealthBook()
         let first = Profile(name: "A", slug: "a", baseURL: "https://x.example.com", auth: .bearer)
         let second = Profile(name: "B", slug: "b", baseURL: "https://x.example.com", auth: .bearer)
-        book.record(.ok(latencyMs: 5, model: nil), at: now, for: first)
-        book.record(.ok(latencyMs: 5, model: nil), at: now, for: second)
+        record(.ok(latencyMs: 5, model: nil), in: &book, for: first)
+        record(.ok(latencyMs: 5, model: nil), in: &book, for: second)
         book.forget(slug: "a")
         XCTAssertNil(book.lastTest(for: first))
         XCTAssertNotNil(book.lastTest(for: second))
@@ -190,8 +190,18 @@ final class ProfileHealthTests: XCTestCase {
     func testRecordingAgainReplacesTheResult() {
         var book = HealthBook()
         let profile = profile()
-        book.record(.unauthorized, at: now, for: profile)
-        book.record(.ok(latencyMs: 5, model: nil), at: now.addingTimeInterval(1), for: profile)
+        record(.unauthorized, in: &book, for: profile)
+        record(.ok(latencyMs: 5, model: nil), in: &book, for: profile, at: now.addingTimeInterval(1))
         XCTAssertEqual(book.lastTest(for: profile)?.outcome, .ok(latencyMs: 5, model: nil))
+    }
+
+    /// Records a result for the generation the profile has right now.
+    private func record(
+        _ outcome: ProbeOutcome,
+        in book: inout HealthBook,
+        for profile: Profile,
+        at date: Date? = nil
+    ) {
+        book.record(outcome, at: date ?? now, for: profile, generation: book.generation(for: profile.slug))
     }
 }

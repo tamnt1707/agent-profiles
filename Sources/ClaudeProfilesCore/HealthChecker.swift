@@ -35,27 +35,66 @@ public final class HealthChecker {
     /// Tests the profiles in order. `onStep` is called as each one finishes.
     ///
     /// A profile that needs a key with none stored is skipped without any
-    /// request. The run stops before the next profile once the task is
-    /// cancelled, and a request in flight is cancelled with it.
-    public func run(profiles: [Profile], onStep: (HealthCheckStep) -> Void) async {
+    /// request. So is a profile whose settings changed while the run was
+    /// going: the answer of the old settings must not reach the new ones, and
+    /// a key must never travel to the URL of another provider.
+    /// The run stops before the next profile once the task is cancelled, and a
+    /// request in flight is cancelled with it.
+    ///
+    /// - Parameters:
+    ///   - profiles: the profiles to test, in order.
+    ///   - currentProfile: the profile of a slug right now, `nil` when it is gone.
+    ///   - generation: the generation of a slug right now.
+    ///   - onStep: called as each profile finishes.
+    public func run(
+        profiles: [Profile],
+        currentProfile: (String) -> Profile?,
+        generation: (String) -> Int,
+        onStep: (HealthCheckStep) -> Void
+    ) async {
+        // The generations of the whole run are taken at its start: a change
+        // during the run has to be seen, not only a change before the turn of
+        // a profile.
+        var captured: [String: Int] = [:]
+        for profile in profiles {
+            captured[profile.slug] = generation(profile.slug)
+        }
+
         for profile in profiles {
             guard !Task.isCancelled else { return }
 
+            // The profile of this turn is read again: the one of the list may
+            // be gone, or may describe other settings by now.
+            guard let fresh = currentProfile(profile.slug) else {
+                onStep(.skipped(slug: profile.slug))
+                continue
+            }
+            guard generation(fresh.slug) == captured[profile.slug] else {
+                // The settings changed while the run was going: nothing is sent.
+                onStep(.skipped(slug: profile.slug))
+                continue
+            }
+
+            // The key and the URL come from the same, fresh profile: a request
+            // never carries the key of one provider to the URL of another.
             let key = (try? ConnectionProbe.key(
-                typed: "", auth: profile.auth, account: profile.slug, keys: keys
+                typed: "", auth: fresh.auth, account: fresh.slug, keys: keys
             )) ?? ""
-            if profile.auth != .none && key.isEmpty {
+            if fresh.auth != .none && key.isEmpty {
                 onStep(.skipped(slug: profile.slug))
                 continue
             }
 
             do {
-                let report = try await probe(profile, key)
+                let report = try await probe(fresh, key)
                 guard !Task.isCancelled else { return }
-                onStep(.tested(slug: profile.slug, outcome: report.outcome, at: now()))
+                onStep(.tested(slug: fresh.slug, outcome: report.outcome, at: now()))
             } catch {
                 if error is CancellationError || Task.isCancelled { return }
-                onStep(.tested(slug: profile.slug, outcome: .network(.other), at: now()))
+                // Every other error is a network problem. The text of the error
+                // is not kept: it could hold the key or something of the
+                // provider, and the dot only shows the kind of the problem.
+                onStep(.tested(slug: fresh.slug, outcome: .network(.other), at: now()))
             }
         }
     }
