@@ -56,14 +56,17 @@ public struct MenuLaunchPlan: Equatable, Sendable {
         return recent.paths
     }
 
-    /// Runs the launch and returns the recent folders of the profile.
+    /// Runs the launch and remembers the folder when it worked.
     ///
-    /// The folder is remembered only when the launch worked: a launch that
-    /// failed throws, and no new list is handed out. The caller therefore
-    /// cannot record a folder for a terminal that never opened.
-    @discardableResult
-    public func run(stored: [String], launch: () async throws -> Void) async throws -> [String] {
+    /// The folder is remembered only after the launch worked: `remember` is
+    /// not called at all when the launch fails. A folder of a terminal that
+    /// never opened is therefore never remembered.
+    public func run(
+        stored: [String],
+        launch: () async throws -> Void,
+        remember: ([String]) -> Void
+    ) async throws {
         try await launch()
-        return recentFoldersAfterSuccess(stored: stored)
+        remember(recentFoldersAfterSuccess(stored: stored))
     }
 }

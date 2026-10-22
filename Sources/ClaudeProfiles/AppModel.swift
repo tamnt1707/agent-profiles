@@ -505,16 +505,21 @@ final class AppModel {
         Task {
             do {
                 let stored = data.profiles.first(where: { $0.slug == plan.slug })?.recentDirs ?? []
-                let folders = try await plan.run(stored: stored) {
-                    try await Launcher.launchInBackground(
-                        profile: profile,
-                        terminal: terminal,
-                        paths: paths,
-                        workdirOverride: plan.folder
-                    )
-                }
-                // The folder is remembered only now, after the launch worked.
-                remember(folders, for: plan.slug)
+                try await plan.run(
+                    stored: stored,
+                    launch: {
+                        try await Launcher.launchInBackground(
+                            profile: profile,
+                            terminal: terminal,
+                            paths: paths,
+                            workdirOverride: plan.folder
+                        )
+                    },
+                    remember: { folders in
+                        // The folder is remembered only now, after the launch worked.
+                        remember(folders, for: plan.slug)
+                    }
+                )
                 status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, profile.name))
             } catch {
                 menuBarError = (error as? ProfileError)?.localizedMessage(loc) ?? loc.t("error.generic")

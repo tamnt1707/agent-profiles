@@ -56,35 +56,45 @@ final class MenuLaunchPlanTests: XCTestCase {
 
     // MARK: - Only after a successful launch
 
-    /// A launch that failed throws, and no new list is handed out: the folder
-    /// of a terminal that never opened is not remembered.
+    /// A launch that failed throws, and nothing is remembered: the folder of a
+    /// terminal that never opened is not a folder the user works in.
     func testAFailedLaunchRemembersNothing() async {
         let plan = MenuLaunchPlan.folder("work", "/tmp/new")
+        var remembered: [String] = []
         var launched = false
         do {
-            _ = try await plan.run(stored: ["/tmp/old"]) {
+            try await plan.run(stored: ["/tmp/old"], launch: {
                 launched = true
                 throw ProfileError.launcherFailed("boom")
-            }
+            }, remember: { folders in
+                remembered = folders
+            })
             XCTFail("the failed launch did not throw")
         } catch {
             XCTAssertEqual(error as? ProfileError, .launcherFailed("boom"))
         }
         XCTAssertTrue(launched, "the launch was not even tried")
+        XCTAssertEqual(remembered, [], "the folder was remembered although the launch failed")
     }
 
-    /// A launch that worked hands out the new list.
+    /// A launch that worked hands the new list to the remember step.
     func testASuccessfulLaunchHandsOutTheNewList() async throws {
         let plan = MenuLaunchPlan.folder("work", "/tmp/new")
-        let folders = try await plan.run(stored: ["/tmp/old"]) {}
-        XCTAssertEqual(folders, ["/tmp/new", "/tmp/old"])
+        var remembered: [String] = []
+        try await plan.run(stored: ["/tmp/old"], launch: {}, remember: { folders in
+            remembered = folders
+        })
+        XCTAssertEqual(remembered, ["/tmp/new", "/tmp/old"])
     }
 
     /// A launch of the profile itself hands out the list unchanged.
     func testASuccessfulLaunchOfTheProfileHandsOutTheSameList() async throws {
         let plan = MenuLaunchPlan.profile("work")
-        let folders = try await plan.run(stored: ["/tmp/old"]) {}
-        XCTAssertEqual(folders, ["/tmp/old"])
+        var remembered: [String] = []
+        try await plan.run(stored: ["/tmp/old"], launch: {}, remember: { folders in
+            remembered = folders
+        })
+        XCTAssertEqual(remembered, ["/tmp/old"])
     }
 
     /// A folder with a control character never enters the list, even when the
