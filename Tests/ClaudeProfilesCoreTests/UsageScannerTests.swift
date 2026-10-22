@@ -110,11 +110,20 @@ final class UsageScannerTests: XCTestCase {
     }
 
     private func summary(_ result: UsageResult, file: StaticString = #filePath, line: UInt = #line) -> UsageSummary {
-        guard case .available(let summary) = result else {
+        guard case .available(let summary, _) = result else {
             XCTFail("expected usage, got \(result)", file: file, line: line)
             return UsageSummary()
         }
         return summary
+    }
+
+    /// The number of files that could not be read during the last count.
+    private func skippedFiles(_ result: UsageResult, file: StaticString = #filePath, line: UInt = #line) -> Int {
+        guard case .available(_, let skipped) = result else {
+            XCTFail("expected usage, got \(result)", file: file, line: line)
+            return 0
+        }
+        return skipped
     }
 
     // MARK: - Totals and files
@@ -144,7 +153,7 @@ final class UsageScannerTests: XCTestCase {
     func testAnEmptyProjectsFolderGivesZeros() async throws {
         try FileManager.default.createDirectory(at: paths.home(for: "work"), withIntermediateDirectories: true)
         let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
-        XCTAssertEqual(result, .available(UsageSummary()))
+        XCTAssertEqual(result, .available(UsageSummary(), skippedFiles: 0))
     }
 
     // MARK: - De-duplication
@@ -450,6 +459,58 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertEqual(inHanoi.today.input, 3)
         let inUTC = summary(try await scanner.usage(for: profile(), now: now, calendar: utc()))
         XCTAssertEqual(inUTC.today.input, 0)
+    }
+
+    // MARK: - Files that cannot be read
+
+    /// A file that cannot be read is skipped: the other files are counted and
+    /// the number of skipped files is reported.
+    func testAFileThatCannotBeReadIsSkippedAndTheRestIsCounted() async throws {
+        let locked = try session([reply(id: "a", request: "r1", input: 100)], name: "locked.jsonl")
+        try session([reply(id: "b", request: "r2", input: 7)], name: "open.jsonl")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: locked.path)
+        }
+        try XCTSkipIf(FileManager.default.isReadableFile(atPath: locked.path),
+                      "the file is still readable: the test cannot lock it")
+
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        XCTAssertEqual(skippedFiles(result), 1)
+    }
+
+    /// A file that is deleted between the listing and the reading is skipped
+    /// as well. The name of the file never reaches the result.
+    func testAFileThatDisappearsDuringTheScanIsSkipped() async throws {
+        try session([reply(id: "a", request: "r1", input: 100)], name: "gone.jsonl")
+        try session([reply(id: "b", request: "r2", input: 7)], name: "kept.jsonl")
+        let scanner = UsageScanner(paths: paths, readLines: { url, body in
+            if url.lastPathComponent == "gone.jsonl" {
+                throw ProfileError.ioFailed("/Users/somebody/project/gone.jsonl")
+            }
+            try UsageScanner.streamLines(url, body)
+        })
+
+        let result = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        XCTAssertEqual(skippedFiles(result), 1)
+        // The result holds no text at all, so no path can be in it.
+        XCTAssertFalse(String(describing: result).contains("gone.jsonl"))
+        XCTAssertFalse(String(describing: result).contains("/Users/"))
+    }
+
+    /// A file that cannot be read is tried again at the next count.
+    func testAFileThatCannotBeReadIsTriedAgain() async throws {
+        try session([reply(id: "a", request: "r1", input: 100)], name: "gone.jsonl")
+        let scanner = UsageScanner(paths: paths, readLines: { _, _ in
+            throw ProfileError.ioFailed("/Users/somebody/project/gone.jsonl")
+        })
+
+        let first = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(skippedFiles(first), 1)
+        let second = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(skippedFiles(second), 1)
     }
 
     // MARK: - Availability

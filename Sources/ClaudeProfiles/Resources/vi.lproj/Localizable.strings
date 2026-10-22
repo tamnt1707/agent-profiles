@@ -238,6 +238,7 @@
 "editor.usage.notIsolated" = "Cần một cấu hình Claude riêng để đếm mức sử dụng. Hãy bật \"Tách riêng cấu hình Claude cho profile này\" để đếm.";
 "editor.usage.noFolder" = "Chưa có dữ liệu: thư mục cấu hình của profile này chưa tồn tại.";
 "editor.usage.notLoaded" = "Nhấn Làm mới để đếm mức sử dụng của profile này.";
+"editor.usage.skippedFiles" = "Không đọc được %@ tệp.";
 "editor.usage.cost" = "Chi phí ước tính (toàn bộ): %@";
 "editor.usage.prices" = "Giá trên mỗi triệu token";
 "editor.usage.priceInput" = "Đầu vào (USD)";

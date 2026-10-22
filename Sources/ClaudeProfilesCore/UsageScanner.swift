@@ -47,6 +47,7 @@ public actor UsageScanner {
 
         var summary = UsageSummary()
         var changed = false
+        var skippedFiles = 0
         var seen = Set<String>()
         for file in Self.sessionFiles(in: home.appendingPathComponent("projects", isDirectory: true)) {
             try Task.checkCancellation()
@@ -55,7 +56,20 @@ public actor UsageScanner {
             if let cached = cache[file.path], cached.size == file.size, cached.modified == file.modified, cached.zone == zone {
                 entry = cached
             } else {
-                entry = try scan(file, zone: zone, calendar: calendar)
+                do {
+                    entry = try scan(file, zone: zone, calendar: calendar)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // The file cannot be read: it is skipped and the other
+                    // files are counted as before.
+                    skippedFiles += 1
+                    if cache[file.path] != nil {
+                        cache[file.path] = nil
+                        changed = true
+                    }
+                    continue
+                }
                 cache[file.path] = entry
                 changed = true
             }
@@ -81,7 +95,7 @@ public actor UsageScanner {
         if changed {
             saveCache()
         }
-        return .available(summary)
+        return .available(summary, skippedFiles: skippedFiles)
     }
 
     // MARK: - Reading one file
@@ -118,10 +132,15 @@ public actor UsageScanner {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            throw ProfileError.ioFailed(file.path)
+            // The name of the file is never in the error: it holds the name of
+            // a project folder of the user.
+            throw UnreadableFile()
         }
         return entry
     }
+
+    /// A file that could not be read. It says nothing about the file itself.
+    private struct UnreadableFile: Error {}
 
     /// The fields of a transcript line that the scanner needs. Every other key is skipped by the decoder.
     private struct Record: Decodable {

@@ -84,7 +84,8 @@ public enum UsageUnavailableReason: Equatable, Sendable {
 
 /// The outcome of counting the usage of one profile.
 public enum UsageResult: Equatable, Sendable {
-    case available(UsageSummary)
+    /// The usage, and the number of files that could not be read.
+    case available(UsageSummary, skippedFiles: Int)
     case unavailable(UsageUnavailableReason)
 }
 

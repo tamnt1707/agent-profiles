@@ -283,6 +283,14 @@ struct ProfileEditorView: View {
         usageRow(model.loc.t("editor.usage.week"), summary?.last7Days)
         usageRow(model.loc.t("editor.usage.allTime"), summary?.allTime)
 
+        // The files that could not be read are counted, never named.
+        let skipped = skippedFiles(of: result)
+        if skipped > 0 {
+            Text(model.loc.t("editor.usage.skippedFiles", skipped))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+
         HStack(spacing: 8) {
             Button(model.loc.t("editor.usage.refresh")) {
                 model.loadUsage()
@@ -349,8 +357,14 @@ struct ProfileEditorView: View {
     }
 
     private func usageSummary(of result: UsageResult?) -> UsageSummary? {
-        guard case .available(let summary)? = result else { return nil }
+        guard case .available(let summary, _)? = result else { return nil }
         return summary
+    }
+
+    /// The number of files that could not be read during the last count.
+    private func skippedFiles(of result: UsageResult?) -> Int {
+        guard case .available(_, let skipped)? = result else { return 0 }
+        return skipped
     }
 
     private func price(_ keyPath: WritableKeyPath<Profile, Double?>) -> Binding<Double?> {
