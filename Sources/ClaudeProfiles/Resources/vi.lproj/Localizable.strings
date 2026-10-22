@@ -12,7 +12,7 @@
 "sidebar.health.stateAttention" = "Cần chú ý";
 "sidebar.health.stateProblem" = "Có lỗi";
 "sidebar.health.a11y" = "Trạng thái kết nối: %@. %@";
-"sidebar.health.noKey" = "Chưa lưu khóa";
+"sidebar.health.noKey" = "Chưa lưu key";
 "sidebar.health.connectedNow" = "Đã kết nối vừa xong";
 "sidebar.health.connectedOne" = "Đã kết nối 1 phút trước";
 "sidebar.health.connectedMany" = "Đã kết nối %d phút trước";
@@ -25,7 +25,7 @@
 "sidebar.checkAll.progress" = "%d/%d đã kiểm tra";
 "sidebar.checkAll.stop" = "Dừng";
 "sidebar.checkAll.confirm.title" = "Kiểm tra tất cả kết nối?";
-"sidebar.checkAll.confirm.message" = "Lệnh này gửi một yêu cầu rất nhỏ (khoảng một token) tới từng nhà cung cấp.";
+"sidebar.checkAll.confirm.message" = "Thao tác này gửi một yêu cầu rất nhỏ (khoảng một token) tới từng nhà cung cấp.";
 "sidebar.checkAll.confirm.check" = "Kiểm tra";
 
 /* Phần chi tiết */

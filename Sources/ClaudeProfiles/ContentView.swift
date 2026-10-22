@@ -77,7 +77,11 @@ struct ContentView: View {
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            CheckAllBar(model: model)
+            // The bar is only there when there is something to check: no
+            // disabled button over the empty state.
+            if !model.data.profiles.isEmpty {
+                CheckAllBar(model: model)
+            }
         }
         // The question is asked before any request: one tiny request per provider.
         .alert(model.loc.t("sidebar.checkAll.confirm.title"), isPresented: $model.isConfirmingHealthCheck) {

@@ -50,7 +50,7 @@ extension HealthState {
         switch self {
         case .ready: return Color(nsColor: .systemGreen)
         case .untested: return Color(nsColor: .secondaryLabelColor)
-        case .attention: return Color(nsColor: .systemYellow)
+        case .attention: return Color(nsColor: .systemOrange)
         case .problem: return Color(nsColor: .systemRed)
         }
     }
@@ -89,7 +89,7 @@ struct CheckAllBar: View {
                 Button(model.loc.t("sidebar.checkAll.stop")) { model.stopHealthCheck() }
             } else {
                 Button(model.loc.t("sidebar.checkAll")) { model.requestHealthCheck() }
-                    .disabled(model.data.profiles.isEmpty || model.isTestingConnection)
+                    .disabled(!model.canCheckAllConnections)
                 Spacer(minLength: 0)
             }
         }

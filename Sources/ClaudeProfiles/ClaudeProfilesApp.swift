@@ -97,7 +97,7 @@ struct AppCommands: Commands {
             Divider()
 
             Button(model.loc.t("sidebar.checkAll.menu")) { model.requestHealthCheck() }
-                .disabled(model.data.profiles.isEmpty || model.isCheckingHealth)
+                .disabled(!model.canCheckAllConnections)
 
             Divider()
 
