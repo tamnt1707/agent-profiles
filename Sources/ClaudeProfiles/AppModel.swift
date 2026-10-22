@@ -120,10 +120,10 @@ final class AppModel {
 
     /// The last test of each profile, kept for this session only.
     private(set) var health = HealthBook()
-    /// Whether a key is stored, per profile slug. Only existence is read, never the secret.
-    /// A slug that is not in the map has an unknown presence: the Keychain could
-    /// not be read, so nothing is said about its key.
-    private(set) var storedKeys: [String: Bool] = [:]
+    /// What is known about the key of each profile: stored, missing, or the
+    /// Keychain could not be read. A slug that is not in the map was never
+    /// read: its presence is unknown.
+    private(set) var keyPresence = KeyPresenceBook()
     /// The check of all profiles while it runs.
     private var healthTask: Task<Void, Never>?
     /// The progress of the running check, `nil` when none runs.
@@ -758,18 +758,20 @@ final class AppModel {
     /// and when the window becomes active.
     ///
     /// The Keychain is read off the main actor, so a long list of profiles does
-    /// not freeze the window. A read that fails keeps the value that was known
-    /// before: a Keychain that cannot be read does not mean that the key is gone.
+    /// not freeze the window. Every read gets a number: a read that comes back
+    /// late after a newer one is dropped, so it cannot overwrite the newer one.
     func refreshStoredKeys() {
         let slugs = data.profiles.map(\.slug)
         let keys = store.keys
+        let sequence = keyPresence.nextSequence()
         Task { [weak self] in
             let read = await KeyPresence.read(slugs: slugs, keys: keys)
             guard let self else { return }
-            self.storedKeys = KeyPresence.merge(
-                slugs: slugs,
-                previous: self.storedKeys,
-                read: read
+            // The profiles of this moment: a profile that is gone is not kept.
+            self.keyPresence.merge(
+                slugs: self.data.profiles.map(\.slug),
+                read: read,
+                sequence: sequence
             )
         }
     }
@@ -778,7 +780,7 @@ final class AppModel {
     func healthStatus(for profile: Profile, now: Date) -> HealthStatus {
         // A profile whose key presence is unknown (the Keychain could not be
         // read) is not shown as a missing key: that would be a wrong red.
-        let hasKey = storedKeys[profile.slug] ?? true
+        let hasKey = keyPresence.state(for: profile.slug) != .missing
         return ProfileHealth.evaluate(
             profile: profile,
             hasKey: hasKey,

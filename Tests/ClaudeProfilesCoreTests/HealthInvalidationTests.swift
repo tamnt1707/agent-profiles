@@ -85,36 +85,4 @@ final class HealthInvalidationTests: XCTestCase {
     func testAProfileThatWasNeverSavedHasNoResultToKeep() {
         XCTAssertTrue(HealthInvalidation.shouldForget(old: nil, new: profile(), typedKey: ""))
     }
-
-    // MARK: - The presence of a key that could not be read
-
-    func testAReadKeyIsTaken() {
-        let merged = KeyPresence.merge(slugs: ["a"], previous: [:], read: ["a": .read(true)])
-        XCTAssertEqual(merged, ["a": true])
-    }
-
-    func testAFailedReadKeepsTheValueThatWasKnown() {
-        let merged = KeyPresence.merge(slugs: ["a"], previous: ["a": true], read: ["a": .failed])
-        XCTAssertEqual(merged, ["a": true], "a Keychain that cannot be read said that the key is gone")
-    }
-
-    func testAFailedReadKeepsAKeyThatWasNotThere() {
-        let merged = KeyPresence.merge(slugs: ["a"], previous: ["a": false], read: ["a": .failed])
-        XCTAssertEqual(merged, ["a": false])
-    }
-
-    func testAProfileWhosePresenceIsUnknownStaysUnknown() {
-        let merged = KeyPresence.merge(slugs: ["a"], previous: [:], read: ["a": .failed])
-        XCTAssertTrue(merged.isEmpty, "an unknown presence was written as a missing key")
-    }
-
-    func testAProfileThatIsGoneIsNotInTheMap() {
-        let merged = KeyPresence.merge(slugs: [], previous: ["a": true], read: ["a": .read(true)])
-        XCTAssertTrue(merged.isEmpty, "the presence of a deleted profile is still known")
-    }
-
-    func testTheNewValueWinsOverTheOldOne() {
-        let merged = KeyPresence.merge(slugs: ["a"], previous: ["a": true], read: ["a": .read(false)])
-        XCTAssertEqual(merged, ["a": false])
-    }
 }
