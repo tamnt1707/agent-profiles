@@ -57,6 +57,9 @@ public struct Profile: Codable, Equatable, Sendable {
     public var isolate: Bool
     /// When isolated, symlink `CLAUDE.md` / `skills` / `commands` / `agents` from `~/.claude`.
     public var shareFromDefault: Bool
+    /// Folders this profile was opened in from the menu bar, newest first, absolute.
+    /// Optional on disk: an empty list is not written.
+    public var recentDirs: [String]
 
     public init(
         name: String = "",
@@ -70,7 +73,8 @@ public struct Profile: Codable, Equatable, Sendable {
         extraEnv: String = "",
         workdir: String = "",
         isolate: Bool = false,
-        shareFromDefault: Bool = false
+        shareFromDefault: Bool = false,
+        recentDirs: [String] = []
     ) {
         self.name = name
         self.slug = slug
@@ -84,6 +88,7 @@ public struct Profile: Codable, Equatable, Sendable {
         self.workdir = workdir
         self.isolate = isolate
         self.shareFromDefault = shareFromDefault
+        self.recentDirs = recentDirs
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -99,6 +104,7 @@ public struct Profile: Codable, Equatable, Sendable {
         case workdir
         case isolate
         case shareFromDefault = "share_from_default"
+        case recentDirs = "recent_dirs"
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,6 +125,9 @@ public struct Profile: Codable, Equatable, Sendable {
         workdir = try c.decodeIfPresent(String.self, forKey: .workdir) ?? ""
         isolate = try c.decodeIfPresent(Bool.self, forKey: .isolate) ?? false
         shareFromDefault = try c.decodeIfPresent(Bool.self, forKey: .shareFromDefault) ?? false
+        // Lenient: the list is a convenience, so a malformed value is dropped
+        // instead of failing the whole profile list.
+        recentDirs = (try? c.decodeIfPresent([String].self, forKey: .recentDirs)) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -135,6 +144,10 @@ public struct Profile: Codable, Equatable, Sendable {
         try c.encode(workdir, forKey: .workdir)
         try c.encode(isolate, forKey: .isolate)
         try c.encode(shareFromDefault, forKey: .shareFromDefault)
+        // Written only when there is something, so an old file stays as it was.
+        if !recentDirs.isEmpty {
+            try c.encode(recentDirs, forKey: .recentDirs)
+        }
     }
 }
 
@@ -152,6 +165,8 @@ public struct AppData: Codable, Equatable, Sendable {
     public var lastUpdateCheck: Date?
     /// The user chose "Don't ask again" for the PATH setup of the shell.
     public var pathPromptDeclined: Bool
+    /// Show the launcher in the menu bar. On by default; only written when off.
+    public var showMenuBar: Bool
 
     public init(
         terminal: TerminalApp = .terminal,
@@ -160,7 +175,8 @@ public struct AppData: Codable, Equatable, Sendable {
         appearance: AppearanceMode = .system,
         autoCheckUpdates: Bool = true,
         lastUpdateCheck: Date? = nil,
-        pathPromptDeclined: Bool = false
+        pathPromptDeclined: Bool = false,
+        showMenuBar: Bool = true
     ) {
         self.terminal = terminal
         self.profiles = profiles
@@ -169,6 +185,7 @@ public struct AppData: Codable, Equatable, Sendable {
         self.autoCheckUpdates = autoCheckUpdates
         self.lastUpdateCheck = lastUpdateCheck
         self.pathPromptDeclined = pathPromptDeclined
+        self.showMenuBar = showMenuBar
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -179,6 +196,7 @@ public struct AppData: Codable, Equatable, Sendable {
         case autoCheckUpdates = "auto_check_updates"
         case lastUpdateCheck = "last_update_check"
         case pathPromptDeclined = "path_prompt_declined"
+        case showMenuBar = "show_menu_bar"
     }
 
     public init(from decoder: Decoder) throws {
@@ -200,6 +218,7 @@ public struct AppData: Codable, Equatable, Sendable {
         autoCheckUpdates = (try? c.decode(Bool.self, forKey: .autoCheckUpdates)) ?? true
         lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
         pathPromptDeclined = (try? c.decode(Bool.self, forKey: .pathPromptDeclined)) ?? false
+        showMenuBar = (try? c.decode(Bool.self, forKey: .showMenuBar)) ?? true
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
@@ -235,6 +254,9 @@ public struct AppData: Codable, Equatable, Sendable {
         // Written only when set, so a file without it stays as the old app wrote it.
         if pathPromptDeclined {
             try c.encode(true, forKey: .pathPromptDeclined)
+        }
+        if !showMenuBar {
+            try c.encode(false, forKey: .showMenuBar)
         }
     }
 }
