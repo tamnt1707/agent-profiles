@@ -504,6 +504,83 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertEqual(inUTC.today.input, 0)
     }
 
+    // MARK: - The profiles that are gone
+
+    /// The entries of a profile that does not exist any more leave the cache.
+    ///
+    /// The cache holds the name of a project folder of the user, so the
+    /// entries of a profile that was deleted must not stay in it.
+    func testTheEntriesOfAProfileThatIsGoneLeaveTheCache() async throws {
+        try session([reply(id: "a", request: "r1", input: 1)], slug: "work", name: "one.jsonl")
+        try session([reply(id: "b", request: "r2", input: 2)], slug: "other", name: "two.jsonl")
+        let scanner = makeScanner()
+
+        // Both profiles are counted: their entries are in the cache.
+        _ = try await scanner.usage(
+            for: profile(slug: "work"),
+            knownSlugs: ["work", "other"],
+            now: noon,
+            calendar: utc()
+        )
+        _ = try await scanner.usage(
+            for: profile(slug: "other"),
+            knownSlugs: ["work", "other"],
+            now: noon,
+            calendar: utc()
+        )
+        XCTAssertEqual(try cachedFiles(), [
+            "work/projects/-proj-a/one.jsonl",
+            "other/projects/-proj-a/two.jsonl",
+        ])
+
+        // The profile "other" was deleted: its entries leave the cache at the
+        // start of the next count.
+        _ = try await scanner.usage(
+            for: profile(slug: "work"),
+            knownSlugs: ["work"],
+            now: noon,
+            calendar: utc()
+        )
+        XCTAssertEqual(try cachedFiles(), ["work/projects/-proj-a/one.jsonl"])
+    }
+
+    /// A count that does not know the profiles keeps every entry.
+    func testACountThatDoesNotKnowTheProfilesKeepsEveryEntry() async throws {
+        try session([reply(id: "a", request: "r1", input: 1)], slug: "work", name: "one.jsonl")
+        try session([reply(id: "b", request: "r2", input: 2)], slug: "other", name: "two.jsonl")
+        let scanner = makeScanner()
+
+        _ = try await scanner.usage(for: profile(slug: "work"), now: noon, calendar: utc())
+        _ = try await scanner.usage(for: profile(slug: "other"), now: noon, calendar: utc())
+
+        XCTAssertEqual(try cachedFiles(), [
+            "work/projects/-proj-a/one.jsonl",
+            "other/projects/-proj-a/two.jsonl",
+        ])
+    }
+
+    /// The rule that decides which entries leave the cache.
+    func testTheEntriesOfAProfileThatIsNotKnownAreStale() {
+        let keys = ["work/projects/-proj-a/one.jsonl", "other/projects/-proj-a/two.jsonl"]
+
+        XCTAssertEqual(
+            UsageScanner.staleKeys(in: keys, knownSlugs: ["work"]),
+            ["other/projects/-proj-a/two.jsonl"]
+        )
+        XCTAssertEqual(UsageScanner.staleKeys(in: keys, knownSlugs: ["work", "other"]), [])
+        XCTAssertEqual(UsageScanner.staleKeys(in: keys, knownSlugs: []), Set(keys))
+    }
+
+    /// A key that is not ours cannot belong to a profile: it leaves the cache.
+    func testAKeyThatIsNotOursIsStale() {
+        XCTAssertEqual(
+            UsageScanner.staleKeys(in: ["not-a-key"], knownSlugs: ["work"]),
+            ["not-a-key"]
+        )
+        XCTAssertEqual(UsageScanner.slug(ofKey: "work/projects/-proj-a/one.jsonl"), "work")
+        XCTAssertNil(UsageScanner.slug(ofKey: "not-a-key"))
+    }
+
     // MARK: - Files that cannot be read
 
     /// A file that cannot be read is skipped: the other files are counted and

@@ -69,6 +69,15 @@ public struct MenuFolderState: Equatable, Sendable {
         folders = merged
         return true
     }
+
+    /// Forgets the folders of a profile that is gone.
+    ///
+    /// A profile that was deleted or renamed keeps nothing: its folders must
+    /// not be shown any more, and they must not be used for a profile that has
+    /// the same name later.
+    public mutating func forget(slug: String) {
+        folders[slug] = nil
+    }
 }
 
 /// The launches that are on their way.

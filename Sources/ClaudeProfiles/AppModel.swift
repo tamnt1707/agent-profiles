@@ -543,6 +543,10 @@ final class AppModel {
             refreshMenuBarFolders()
             // The counted tokens of the old settings are gone with them.
             forgetUsage(before: previousProfile, after: draft)
+            // A profile that was renamed leaves nothing behind in the menu.
+            if let previousProfile, previousProfile.slug != draft.slug {
+                forgetMenuBarState(for: previousProfile.slug)
+            }
 
             do {
                 try store.save(data)
@@ -578,10 +582,13 @@ final class AppModel {
         usageGenerations[slug] = generation
         usageScanStates.start(slug)
         let scanner = usageScanner
+        // The profiles that exist: the entries of the cache of a profile that
+        // is gone leave the cache at the start of the next count.
+        let knownSlugs = Set(data.profiles.map(\.slug))
         usageTasks[slug] = Task {
             let outcome: Result<UsageResult, Error>
             do {
-                outcome = .success(try await scanner.usage(for: profile))
+                outcome = .success(try await scanner.usage(for: profile, knownSlugs: knownSlugs))
             } catch {
                 outcome = .failure(error)
             }
@@ -751,6 +758,17 @@ final class AppModel {
         let error = ProfileError.unsafeFolderToOpen(path)
         menuBarError = error.localizedMessage(loc)
         report(error)
+    }
+
+    /// Forgets what the menu bar knows about a profile that is gone.
+    ///
+    /// A profile that was deleted or renamed leaves nothing behind: the check
+    /// of its folders is of a profile that does not exist any more, and its
+    /// answer must not be used for a profile that has the same name later.
+    private func forgetMenuBarState(for slug: String) {
+        slowFolderChecks[slug] = nil
+        menuBarFolders[slug] = nil
+        menuFolderState.forget(slug: slug)
     }
 
     /// The entries of the menu bar menu, built from the saved profiles.
@@ -1019,6 +1037,7 @@ final class AppModel {
         hasStoredKey = false
         // The profile is gone: the menu must not show it any more. The keys
         // were looked at again above, with the one read of the Keychain.
+        forgetMenuBarState(for: profile.slug)
         refreshMenuBarFolders()
         if let first = data.profiles.first {
             select(first)

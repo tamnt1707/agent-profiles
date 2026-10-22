@@ -73,9 +73,18 @@ public actor UsageScanner {
     /// the number of skipped files is in the result.
     ///
     /// - Parameters:
+    ///   - profile: the profile to count.
+    ///   - knownSlugs: the slugs of the profiles that exist. The entries of the
+    ///     cache of a profile that is not in this list leave the cache before
+    ///     the scan starts. `nil` keeps every entry.
     ///   - now: the moment the windows are measured from.
     ///   - calendar: decides the local day of every reply and of `now`.
-    public func usage(for profile: Profile, now: Date = Date(), calendar: Calendar = .current) throws -> UsageResult {
+    public func usage(
+        for profile: Profile,
+        knownSlugs: Set<String>? = nil,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> UsageResult {
         guard profile.isolate else { return .unavailable(.notIsolated) }
         guard Slug.isSafe(profile.slug) else { return .unavailable(.folderMissing) }
         let home = paths.home(for: profile.slug)
@@ -89,6 +98,18 @@ public actor UsageScanner {
 
         var summary = UsageSummary()
         var changed = false
+        // The entries of a profile that does not exist any more leave the cache
+        // before the scan starts: they are never used again, and they hold the
+        // name of a project folder of a profile that is gone.
+        if let knownSlugs {
+            let stale = Self.staleKeys(in: Array(cache.keys), knownSlugs: knownSlugs)
+            if !stale.isEmpty {
+                for key in stale {
+                    cache[key] = nil
+                }
+                changed = true
+            }
+        }
         var skippedFiles = 0
         var skipped = 0
         var seen = Set<String>()
@@ -524,6 +545,38 @@ public actor UsageScanner {
         "\(slug)/\(path)"
     }
 
+    /// The slug a key of the cache belongs to, or `nil` when the key is not
+    /// ours.
+    static func slug(ofKey key: String) -> String? {
+        guard let slash = key.firstIndex(of: "/") else { return nil }
+        let slug = String(key[key.startIndex..<slash])
+        return Slug.isSafe(slug) ? slug : nil
+    }
+
+    /// The keys of the cache that belong to a profile that does not exist.
+    ///
+    /// The cache holds the name of a project folder of the user, so the entries
+    /// of a profile that was deleted or renamed must not stay in it.
+    ///
+    /// - Parameters:
+    ///   - keys: the keys of the cache.
+    ///   - knownSlugs: the slugs of the profiles that exist.
+    /// - Returns: the keys that must leave the cache.
+    static func staleKeys(in keys: [String], knownSlugs: Set<String>) -> Set<String> {
+        var stale: Set<String> = []
+        for key in keys {
+            guard let slug = slug(ofKey: key) else {
+                // A key that is not ours cannot belong to a profile.
+                stale.insert(key)
+                continue
+            }
+            if !knownSlugs.contains(slug) {
+                stale.insert(key)
+            }
+        }
+        return stale
+    }
+
     /// The path of a file relative to the config folder of the profile.
     private static func relativePath(of url: URL, in home: URL) -> String {
         let prefix = home.path.hasSuffix("/") ? home.path : home.path + "/"
@@ -534,9 +587,8 @@ public actor UsageScanner {
     /// The file of a key of the cache, or `nil` when the key is not ours.
     private func fileURL(forKey key: String) -> URL? {
         guard let slash = key.firstIndex(of: "/") else { return nil }
-        let slug = String(key[key.startIndex..<slash])
         let path = String(key[key.index(after: slash)...])
-        guard Slug.isSafe(slug), !path.isEmpty else { return nil }
+        guard let slug = Self.slug(ofKey: key), !path.isEmpty else { return nil }
         return paths.home(for: slug).appendingPathComponent(path)
     }
 

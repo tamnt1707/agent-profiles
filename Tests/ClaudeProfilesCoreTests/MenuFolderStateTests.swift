@@ -70,6 +70,36 @@ final class MenuFolderStateTests: XCTestCase {
         let second = state.begin()
         XCTAssertGreaterThan(second, first)
     }
+
+    /// A profile that was deleted or renamed keeps no folders: they must not
+    /// be shown any more.
+    func testAProfileThatIsGoneKeepsNoFolders() {
+        var state = MenuFolderState()
+        let generation = state.begin()
+        XCTAssertTrue(state.accept(
+            lookup(generation, ["work": .checked(["/tmp/a"]), "gone": .checked(["/tmp/b"])]),
+            known: ["work", "gone"]
+        ))
+        XCTAssertEqual(state.folders, ["work": ["/tmp/a"], "gone": ["/tmp/b"]])
+
+        state.forget(slug: "gone")
+
+        XCTAssertEqual(state.folders, ["work": ["/tmp/a"]])
+    }
+
+    /// A profile that comes back with the same name starts with nothing: the
+    /// folders of the old one are not its folders.
+    func testAProfileThatComesBackStartsWithNothing() {
+        var state = MenuFolderState()
+        let generation = state.begin()
+        XCTAssertTrue(state.accept(lookup(generation, ["work": .checked(["/tmp/a"])]), known: ["work"]))
+        state.forget(slug: "work")
+
+        let next = state.begin()
+        XCTAssertTrue(state.accept(lookup(next, ["work": .unchecked]), known: ["work"]))
+
+        XCTAssertEqual(state.folders, ["work": []])
+    }
 }
 
 /// The rule that keeps a second click from opening a second terminal.
