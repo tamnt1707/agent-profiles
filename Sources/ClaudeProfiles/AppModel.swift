@@ -169,6 +169,14 @@ final class AppModel {
     private var usageTasks: [String: Task<Void, Never>] = [:]
     /// Reads the session files of the profiles. Its cache lives in the data folder.
     private let usageScanner: UsageScanner
+    /// The observer of the notification that tells the app that it is active
+    /// again. It is removed when the model goes away.
+    ///
+    /// The token is not observed and not isolated: it is set when the model is
+    /// made and read when it goes away, and the model has to let go of the
+    /// observer from its own `deinit`.
+    @ObservationIgnored
+    nonisolated(unsafe) private var didBecomeActiveObserver: NSObjectProtocol?
 
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
@@ -177,6 +185,33 @@ final class AppModel {
         self.updater = updater ?? UpdateController()
         load()
         refreshPathStatus()
+        observeDidBecomeActive()
+    }
+
+    deinit {
+        // The observer must not keep the model alive.
+        if let didBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
+    }
+
+    /// Watches the app becoming active, so the keys are read again.
+    ///
+    /// The app can be used without its window: a key that was added outside of
+    /// the app must be seen, even when the menu bar is the only thing that is
+    /// open. The window does not watch this any more.
+    private func observeDidBecomeActive() {
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // The notification is delivered on the main queue, so the model is
+            // used on its own actor.
+            MainActor.assumeIsolated {
+                self?.refreshStoredKeys()
+            }
+        }
     }
 
     // MARK: - Loading
@@ -1136,13 +1171,14 @@ final class AppModel {
 
     // MARK: - Health of the profiles
 
-    /// Reads which profiles have a key stored. Only existence is asked for: no
-    /// secret is read and no request is sent. Runs on launch, on save, on delete
-    /// and when the window becomes active.
+    /// Reads the stored keys of the profiles, off the main thread.
     ///
-    /// This is the one read of the Keychain for the whole app: the health dot
-    /// and the menu bar both read the one map it fills, so the two features
-    /// never ask the Keychain twice at the same time.
+    /// The Keychain is asked once for the whole app: the health dot and the
+    /// menu bar both read the one map this fills, so the two features never
+    /// ask the Keychain twice at the same time.
+    ///
+    /// Only the existence of a key is asked for: no secret is read and no
+    /// request is sent.
     ///
     /// The Keychain is read off the main actor, so a long list of profiles does
     /// not freeze the window. Every read gets a number: a read that comes back

@@ -33,10 +33,8 @@ struct ContentView: View {
         .onChange(of: model.selectedSlug) { _, slug in
             model.sidebarSelectionChanged(to: slug)
         }
-        // Key presence is re-read when the window comes back; no request is sent.
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            model.refreshStoredKeys()
-        }
+        // The key presence is re-read when the app becomes active. The model
+        // watches that itself, so it also happens without this window.
         .alert(model.loc.t("update.unsaved.title"), isPresented: $model.isConfirmingUpdate) {
             Button(model.loc.t("update.unsaved.save")) { model.saveAndUpdate() }
             Button(model.loc.t("update.unsaved.discard")) { model.discardAndUpdate() }
