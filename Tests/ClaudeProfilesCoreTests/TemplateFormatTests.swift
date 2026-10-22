@@ -68,4 +68,172 @@ final class TemplateFormatTests: XCTestCase {
     func testADecimalNumberThatReachesAWholeNumberIsRounded() {
         XCTAssertEqual(TemplateFormat.fill("%d ms", [12.6]), "13 ms")
     }
+
+    // MARK: - Hostile arguments
+
+    /// The arguments that must never be read as a template.
+    ///
+    /// Every one of them holds a percent sign or a line break: a value that
+    /// looks like a placeholder, like a number, or like a sentence of its own.
+    private static let hostileArguments: [String] = [
+        "%@",
+        "%d",
+        "%%",
+        "100%%",
+        "50% done",
+        "%1$@",
+        "%s%s%n",
+        "%",
+        "a%",
+        "%ld",
+        String(repeating: "x", count: 10_000),
+        "first line\nsecond line",
+        "100% hoàn tất",
+    ]
+
+    /// A hostile argument is written as it is: it fills nothing but its own
+    /// placeholder.
+    func testAHostileArgumentIsWrittenVerbatim() {
+        for hostile in Self.hostileArguments {
+            XCTAssertEqual(
+                TemplateFormat.fill("Open %@ in %@", [hostile, hostile]),
+                "Open \(hostile) in \(hostile)",
+                "the argument was not written as it is"
+            )
+        }
+    }
+
+    /// Two percent signs in an argument stay two percent signs.
+    ///
+    /// An argument that is read as a template would turn them into one, and
+    /// the sentence of the app would show something else than what the user
+    /// asked for.
+    func testTwoPercentSignsInAnArgumentStayTwoPercentSigns() {
+        XCTAssertEqual(TemplateFormat.fill("Open %@ in %@", ["%%", "%%"]), "Open %% in %%")
+        XCTAssertEqual(TemplateFormat.fill("Open %@ in %@", ["100%%", "100%%"]), "Open 100%% in 100%%")
+        XCTAssertEqual(TemplateFormat.fill("%@", ["%%"]), "%%")
+    }
+
+    /// An argument that holds a line break stays one argument: the sentence is
+    /// not cut into pieces.
+    func testAnArgumentWithALineBreakStaysOneArgument() {
+        XCTAssertEqual(
+            TemplateFormat.fill("Open %@ in %@", ["first\nsecond", "third\nfourth"]),
+            "Open first\nsecond in third\nfourth"
+        )
+    }
+
+    /// A hostile argument that reaches a whole number is written as zero: a
+    /// whole-number slot never shows a text that cannot be read as a number.
+    func testAHostileArgumentInAWholeNumberSlotBecomesZero() {
+        for hostile in Self.hostileArguments {
+            XCTAssertEqual(
+                TemplateFormat.fill("%d files", [hostile]),
+                "0 files",
+                "the argument was not written as a whole number"
+            )
+        }
+    }
+
+    /// The text of a whole number is always a whole number.
+    func testAWholeNumberSlotAlwaysHoldsAWholeNumber() {
+        let values: [Any] = [
+            Double.nan,
+            Double.infinity,
+            -Double.infinity,
+            Float.nan,
+            Float.infinity,
+            -Float.infinity,
+            Double.greatestFiniteMagnitude,
+            -Double.greatestFiniteMagnitude,
+            Double.greatestFiniteMagnitude * 2,
+            "abc",
+            "",
+            "42",
+        ]
+        for value in values {
+            let text = TemplateFormat.fill("%d", [value])
+            XCTAssertNotNil(Int(text), "\(text) is not a whole number")
+        }
+    }
+
+    /// A number that is not finite has no whole number: it is written as zero.
+    func testANumberThatIsNotFiniteBecomesZero() {
+        XCTAssertEqual(TemplateFormat.fill("%d", [Double.nan]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", [Double.infinity]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", [-Double.infinity]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", [Float.nan]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", [Float.infinity]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", [-Float.infinity]), "0")
+    }
+
+    /// A number that is too big is clamped to the biggest one that fits, so
+    /// the text is still a whole number.
+    func testANumberThatIsTooBigIsClamped() {
+        XCTAssertEqual(TemplateFormat.fill("%d", [Double.greatestFiniteMagnitude]), String(Int.max))
+        XCTAssertEqual(TemplateFormat.fill("%d", [-Double.greatestFiniteMagnitude]), String(Int.min))
+        XCTAssertEqual(TemplateFormat.fill("%d", [Double.greatestFiniteMagnitude * 2]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", ["99999999999999999999"]), String(Int.max))
+    }
+
+    /// A text that is not a number is written as zero.
+    func testATextThatIsNotANumberBecomesZero() {
+        XCTAssertEqual(TemplateFormat.fill("%d", ["abc"]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", [""]), "0")
+        XCTAssertEqual(TemplateFormat.fill("%d", ["42"]), "42")
+        XCTAssertEqual(TemplateFormat.fill("%d", ["-7"]), "-7")
+    }
+
+    // MARK: - The strings of the app
+
+    /// The strings of the app are filled with the same helper, through
+    /// `Loc.t` and `Loc.count`: a hostile argument is written as it is there
+    /// too.
+    func testTheStringsOfTheAppTakeHostileArgumentsVerbatim() throws {
+        let english = try PackageLayout.stringTable("en")
+        let vietnamese = try PackageLayout.stringTable("vi")
+        for hostile in Self.hostileArguments {
+            XCTAssertEqual(
+                TemplateFormat.fill(english["editor.command.normalized"] ?? "", [hostile]),
+                "Will be saved as claude-\(hostile)"
+            )
+            XCTAssertEqual(
+                TemplateFormat.fill(vietnamese["editor.command.normalized"] ?? "", [hostile]),
+                "Sẽ được lưu thành claude-\(hostile)"
+            )
+        }
+    }
+
+    /// The sentences that take a whole number take it as a whole number, in
+    /// both languages.
+    func testTheCountSentencesOfTheAppTakeAWholeNumber() throws {
+        let english = try PackageLayout.stringTable("en")
+        let vietnamese = try PackageLayout.stringTable("vi")
+        XCTAssertEqual(
+            TemplateFormat.fill(english["sidebar.checkAll.progress"] ?? "", [3, 4]),
+            "3 of 4 checked"
+        )
+        XCTAssertEqual(
+            TemplateFormat.fill(vietnamese["sidebar.checkAll.progress"] ?? "", [3, 4]),
+            "3/4 đã kiểm tra"
+        )
+        // A hostile argument in a whole-number slot is written as zero.
+        XCTAssertEqual(
+            TemplateFormat.fill(english["sidebar.checkAll.progress"] ?? "", ["%%", "100%%"]),
+            "0 of 0 checked"
+        )
+        XCTAssertEqual(
+            TemplateFormat.fill(vietnamese["sidebar.checkAll.progress"] ?? "", ["%%", "100%%"]),
+            "0/0 đã kiểm tra"
+        )
+    }
+
+    /// A Vietnamese sentence with a percent sign in it is written as it is.
+    func testAVietnameseSentenceWithAPercentSignIsWrittenAsItIs() throws {
+        let vietnamese = try PackageLayout.stringTable("vi")
+        XCTAssertEqual(
+            TemplateFormat.fill(vietnamese["editor.command.normalized"] ?? "", ["100% hoàn tất"]),
+            "Sẽ được lưu thành claude-100% hoàn tất"
+        )
+    }
 }
