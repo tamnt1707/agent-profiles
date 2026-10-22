@@ -119,7 +119,7 @@ struct ProfileEditorView: View {
                     Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {
                         model.testConnection()
                     }
-                    .disabled(model.isTestingConnection)
+                    .disabled(model.isTestingConnection || model.isCheckingHealth)
                     .help(model.loc.t("editor.test.help"))
                     if model.isTestingConnection {
                         ProgressView()
