@@ -67,11 +67,12 @@ final class ShellPathSetupTests: XCTestCase {
             return XCTFail("expected an install")
         }
         XCTAssertEqual(files.map(\.lastPathComponent), [".zshrc"])
-        XCTAssertEqual(backups.map(\.lastPathComponent), [".zshrc.claude-profiles.bak"])
+        // A file the app creates gets no backup: its record says so.
+        XCTAssertEqual(backups, [])
 
         let content = try XCTUnwrap(text(file(".zshrc")))
         XCTAssertTrue(content.hasPrefix(begin + "\n"))
-        XCTAssertTrue(content.contains("case \":$PATH:\" in *\":$HOME/.claude-profiles/bin:\"*) ;; *) export PATH=\"$HOME/.claude-profiles/bin:$PATH\" ;; esac"))
+        XCTAssertTrue(content.contains("case \":${PATH-}:\" in *\":$HOME/.claude-profiles/bin:\"*) ;; *) export PATH=\"$HOME/.claude-profiles/bin${PATH:+:$PATH}\" ;; esac"))
         XCTAssertEqual(permissions(file(".zshrc")), 0o644)
         XCTAssertEqual(setup.status(for: .zsh), .configured)
 
@@ -82,8 +83,8 @@ final class ShellPathSetupTests: XCTestCase {
 
     /// Removal gives back the original bytes, for every shape of content.
     func testRemoveRestoresEveryShapeOfOriginalContentExactly() throws {
-        // An empty file is not in this list: the app treats an empty file as one it created.
-        let shapes = ["a", "a\n", "a\n\n\n", "a\r\n", "a\r", "\n", "# mine\nexport X=1\n\n", "héllo wörld\n"]
+        // An empty file is in the list too: it existed before, so it stays (empty) after removal.
+        let shapes = ["", "a", "a\n", "a\n\n\n", "a\r\n", "a\r", "\n", "# mine\nexport X=1\n\n", "héllo wörld\n"]
         for original in shapes {
             try? FileManager.default.removeItem(at: file(".zshrc"))
             try? FileManager.default.removeItem(at: file(".zshrc.claude-profiles.bak"))
@@ -93,6 +94,7 @@ final class ShellPathSetupTests: XCTestCase {
             XCTAssertEqual(setup.status(for: .zsh), .configured, "shape \(original.debugDescription)")
             _ = try setup.remove(for: .zsh)
             XCTAssertEqual(bytes(file(".zshrc")), Data(original.utf8), "shape \(original.debugDescription)")
+            XCTAssertFalse(exists(file(".zshrc.claude-profiles.bak")), "backup cleaned up, shape \(original.debugDescription)")
         }
     }
 
@@ -190,7 +192,8 @@ final class ShellPathSetupTests: XCTestCase {
         // The user adds a line after the block: removal no longer matches the backup, so it is kept.
         try write((text(file(".zshrc")) ?? "") + "user line\n", to: file(".zshrc"))
         _ = try setup.remove(for: .zsh)
-        XCTAssertEqual(text(file(".zshrc")), "orig\nuser line\n")
+        // The blank line that install added stays behind.
+        XCTAssertEqual(text(file(".zshrc")), "orig\n\nuser line\n")
         XCTAssertEqual(text(file(".zshrc.claude-profiles.bak")), "orig\n")
 
         // A second install never overwrites that backup.
@@ -221,8 +224,20 @@ final class ShellPathSetupTests: XCTestCase {
 
         let path = outside.standardizedFileURL.path
         let content = try XCTUnwrap(text(file(".zshrc")))
-        XCTAssertTrue(content.contains("case \":$PATH:\" in *':\(path):'*) ;; *) export PATH='\(path)':\"$PATH\" ;; esac"))
+        XCTAssertTrue(content.contains("case \":${PATH-}:\" in *':\(path):'*) ;; *) export PATH='\(path)'\"${PATH:+:$PATH}\" ;; esac"))
         XCTAssertFalse(content.contains("$HOME/"))
+    }
+
+    /// A folder name that ends in a line feed is not "home relative": `$` in a regular
+    /// expression would match before that line feed, so the anchor is `\z`.
+    func testBinFolderNameWithATrailingLineFeedUsesTheAbsoluteQuotedPath() throws {
+        let odd = home.appendingPathComponent(".claude-profiles/bin\n", isDirectory: true)
+        let setup = setup(binDir: odd)
+        _ = try setup.install(for: .zsh)
+
+        let content = try XCTUnwrap(text(file(".zshrc")))
+        XCTAssertFalse(content.contains("$HOME/.claude-profiles/bin\n"))
+        XCTAssertTrue(content.contains("export PATH=" + ShellQuote.quote(odd.standardizedFileURL.path)))
     }
 
     // MARK: - bash
@@ -347,8 +362,9 @@ final class ShellPathSetupTests: XCTestCase {
             XCTAssertEqual(setup.status(for: shell), .configured, "\(shell)")
         }
 
-        let changed = try setup.removeEverything()
-        XCTAssertFalse(changed.isEmpty)
+        let report = setup.removeEverything()
+        XCTAssertFalse(report.changed.isEmpty)
+        XCTAssertEqual(report.skipped, [])
         XCTAssertEqual(text(file(".zshrc")), "z")
         XCTAssertEqual(text(file(".bash_profile")), "bp\n")
         XCTAssertEqual(text(file(".bashrc")), "rc\n")
@@ -366,7 +382,7 @@ final class ShellPathSetupTests: XCTestCase {
         let setup = setup()
         _ = try setup.install(for: .posix)
 
-        _ = try setup.removeEverything()
+        _ = setup.removeEverything()
         XCTAssertEqual(text(file(".zprofile")), manual)
     }
 
@@ -385,7 +401,7 @@ final class ShellPathSetupTests: XCTestCase {
         )
         XCTAssertEqual(setup.manualLine(for: .csh), "setenv PATH \"$HOME/.claude-profiles/bin:$PATH\"")
         XCTAssertEqual(setup.manualLine(for: .fish), "fish_add_path -g \"$HOME/.claude-profiles/bin\"")
-        XCTAssertEqual(setup.manualLine(for: .zsh), "export PATH=\"$HOME/.claude-profiles/bin:$PATH\"")
+        XCTAssertEqual(setup.manualLine(for: .zsh), "export PATH=\"$HOME/.claude-profiles/bin${PATH:+:$PATH}\"")
         XCTAssertEqual(setup.manualLine(for: .other("elvish")), bin.standardizedFileURL.path)
     }
 
@@ -398,6 +414,375 @@ final class ShellPathSetupTests: XCTestCase {
         XCTAssertEqual(ShellKind.from(loginShell: "/bin/tcsh"), .csh)
         XCTAssertEqual(ShellKind.from(loginShell: "/opt/homebrew/bin/nu"), .nushell)
         XCTAssertEqual(ShellKind.from(loginShell: "/usr/bin/elvish"), .other("elvish"))
+    }
+
+    // MARK: - Removal keeps the user's lines (I1)
+
+    /// The body the app writes now, and the body the earlier version wrote.
+    private let body = "case \":${PATH-}:\" in *\":$HOME/.claude-profiles/bin:\"*) ;; *) export PATH=\"$HOME/.claude-profiles/bin${PATH:+:$PATH}\" ;; esac\n"
+    private let legacyBody = "case \":$PATH:\" in *\":$HOME/.claude-profiles/bin:\"*) ;; *) export PATH=\"$HOME/.claude-profiles/bin:$PATH\" ;; esac\n"
+    private var block: String { begin + "\n" + body + end + "\n" }
+
+    func testContentAfterTheBlockWithoutTrailingNewlineKeepsTheLinesApart() throws {
+        try write("a", to: file(".zshrc"))
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        try write((text(file(".zshrc")) ?? "") + "export B=2\n", to: file(".zshrc"))
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\nexport B=2\n")
+    }
+
+    func testContentAfterTheBlockWithTrailingNewlineLeavesOnlyTheBlankLine() throws {
+        try write("a\n", to: file(".zshrc"))
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        try write((text(file(".zshrc")) ?? "") + "export B=2\n", to: file(".zshrc"))
+
+        _ = try setup.remove(for: .zsh)
+        // The blank line install added stays: a leftover blank line is fine, a joined line is not.
+        XCTAssertEqual(text(file(".zshrc")), "a\n\nexport B=2\n")
+    }
+
+    func testBlockMovedByHandBetweenTwoUserLinesIsRemovedWithoutJoiningThem() throws {
+        try write("A=1\n" + block + "B=2\n", to: file(".zshrc"))
+        let setup = setup()
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "A=1\nB=2\n")
+    }
+
+    func testEmptyOriginalFileSurvivesInstallAndRemoveAndIsNeverDeleted() throws {
+        try write("", to: file(".zshrc"))
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertTrue(exists(file(".zshrc")), "a file that existed before install stays")
+        XCTAssertEqual(bytes(file(".zshrc")), Data())
+        XCTAssertFalse(exists(file(".zshrc.claude-profiles.bak")), "the backup of an unchanged file is cleaned up")
+    }
+
+    // MARK: - Only files the app created are deleted (I2)
+
+    /// The files listed as created in `path-setup.json`.
+    private func createdRecord() -> [String] {
+        let record = home.appendingPathComponent(".claude-profiles/path-setup.json")
+        guard let data = bytes(record),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [] }
+        return object["created"] as? [String] ?? []
+    }
+
+    func testCreatedFileIsListedInTheDataFolderAndForgottenOnRemove() throws {
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(createdRecord(), [file(".zshrc").path])
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertFalse(exists(file(".zshrc")))
+        XCTAssertEqual(createdRecord(), [])
+    }
+
+    func testFileEmptiedByTheUserIsNotDeletedUnlessRecordedAsCreated() throws {
+        // Only the block is left, and the app did not create this file: it is emptied, never deleted.
+        try write(block, to: file(".zshrc"))
+
+        _ = try setup().remove(for: .zsh)
+        XCTAssertTrue(exists(file(".zshrc")))
+        XCTAssertEqual(bytes(file(".zshrc")), Data())
+    }
+
+    func testAnUnreadableRecordCountsAsEmptyAndDeletesNothing() throws {
+        try write("not json", to: home.appendingPathComponent(".claude-profiles/path-setup.json"))
+        try write(block, to: file(".zshrc"))
+
+        _ = try setup().remove(for: .zsh)
+        XCTAssertTrue(exists(file(".zshrc")))
+    }
+
+    func testEmptyBashProfileThatShadowsProfileIsNeverDeleted() throws {
+        // bash reads .bash_profile first: deleting an empty one would change what bash runs.
+        try write("", to: file(".bash_profile"))
+        try write("p\n", to: file(".profile"))
+        let setup = setup(login: "/bin/bash")
+
+        _ = try setup.install(for: .bash)
+        _ = try setup.remove(for: .bash)
+        XCTAssertTrue(exists(file(".bash_profile")))
+        XCTAssertEqual(bytes(file(".bash_profile")), Data())
+        XCTAssertEqual(text(file(".profile")), "p\n")
+    }
+
+    func testCreatedFileIsKeptWhenTheUserWroteIntoIt() throws {
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        try write(block + "export B=2\n", to: file(".zshrc"))
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "export B=2\n")
+    }
+
+    // MARK: - Ownership of the block (I3)
+
+    func testCustomisedBlockBodyIsDamagedAndNeverEdited() throws {
+        let content = "keep\n" + begin + "\nexport X=1\n" + end + "\n"
+        try write(content, to: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .damaged)
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { self.assertDamaged($0) }
+        XCTAssertThrowsError(try setup.remove(for: .zsh)) { self.assertDamaged($0) }
+        XCTAssertEqual(text(file(".zshrc")), content)
+    }
+
+    func testIndentedMarkersAreUserTextAndNeverRemoved() throws {
+        let original = "  \(begin)\nexport X=1\n  \(end)\n"
+        try write(original, to: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .notConfigured)
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), original)
+    }
+
+    func testMarkersInsideAHereDocAreDamagedAndUntouched() throws {
+        let content = "cat <<'EOF'\n\(begin)\nhello\n\(end)\nEOF\n"
+        try write(content, to: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .damaged)
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { self.assertDamaged($0) }
+        XCTAssertThrowsError(try setup.remove(for: .zsh)) { self.assertDamaged($0) }
+        XCTAssertEqual(text(file(".zshrc")), content)
+    }
+
+    func testMarkerLinesEndingInCRLFAreRecognisedWithTheSameBody() throws {
+        try write("a\n\n" + begin + "\r\n" + body + end + "\r\n", to: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\n")
+    }
+
+    func testLegacyBlockBodyIsStillConfiguredAndRemovable() throws {
+        try write("a\n\n" + begin + "\n" + legacyBody + end + "\n", to: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        XCTAssertEqual(try setup.install(for: .zsh), .alreadyConfigured(managed: true))
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\n")
+    }
+
+    // MARK: - Links that lead nowhere (M1)
+
+    func testDanglingSymlinkNamesTheLinkInEveryCall() throws {
+        try FileManager.default.createSymbolicLink(
+            at: file(".zshrc"),
+            withDestinationURL: home.appendingPathComponent("missing/zshrc")
+        )
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .damaged)
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .brokenLink(self.file(".zshrc").path))
+        }
+        XCTAssertThrowsError(try setup.remove(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .brokenLink(self.file(".zshrc").path))
+        }
+        XCTAssertEqual(SafeFileSystem.kind(of: file(".zshrc")), .link)
+    }
+
+    func testLoopingSymlinkNamesTheLink() throws {
+        try FileManager.default.createSymbolicLink(at: file(".zshrc"), withDestinationURL: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .damaged)
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .brokenLink(self.file(".zshrc").path))
+        }
+    }
+
+    // MARK: - Files that cannot be written (M4, M12)
+
+    func testReadOnlyFileIsRefusedAndNeverReplaced() throws {
+        try write("a\n", to: file(".zshrc"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file(".zshrc").path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file(".zshrc").path) }
+        let setup = setup()
+
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .notWritable(self.file(".zshrc").path))
+        }
+        XCTAssertEqual(text(file(".zshrc")), "a\n")
+        XCTAssertFalse(exists(file(".zshrc.claude-profiles.bak")))
+        XCTAssertEqual(setup.status(for: .zsh), .notConfigured)
+    }
+
+    func testReadOnlyFolderLeavesNoPartialStateAndNoTemporaryFile() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        try write("a\n", to: zdot.appendingPathComponent(".zshrc"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: zdot.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: zdot.path) }
+        let setup = setup(env: ["ZDOTDIR": zdot.path])
+
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .notWritable(zdot.path))
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: zdot.path), [".zshrc"])
+        XCTAssertEqual(text(zdot.appendingPathComponent(".zshrc")), "a\n")
+        XCTAssertFalse(exists(home.appendingPathComponent(".claude-profiles/path-setup.json")))
+    }
+
+    /// A rename gives the dotfile a new inode, so the other name of a hard link keeps the old
+    /// content. That is expected: the setup still works and nothing else is wrong.
+    func testHardLinkedDotfileStillWorksAndTheOtherNameKeepsItsOldContent() throws {
+        let other = home.appendingPathComponent("dotfiles/zshrc")
+        try write("keep\n", to: other)
+        try FileManager.default.linkItem(at: other, to: file(".zshrc"))
+        let setup = setup()
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        XCTAssertEqual(text(other), "keep\n")
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "keep\n")
+        XCTAssertEqual(setup.status(for: .zsh), .notConfigured)
+    }
+
+    // MARK: - A file changed while it is edited (I6)
+
+    func testFileChangedOnceIsReadAgainAndEditedOnce() throws {
+        try write("orig\n", to: file(".zshrc"))
+        var setup = setup()
+        setup.stagingHook = { url, attempt in
+            if attempt == 0 { try? Data("changed\n".utf8).write(to: url, options: .atomic) }
+        }
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertTrue(text(file(".zshrc"))?.hasPrefix("changed\n\n" + begin) ?? false)
+        XCTAssertEqual(text(file(".zshrc.claude-profiles.bak")), "changed\n")
+    }
+
+    func testFileChangedTwiceThrowsAndWritesNothing() throws {
+        try write("orig\n", to: file(".zshrc"))
+        var setup = setup()
+        setup.stagingHook = { url, attempt in
+            try? Data("changed-\(attempt)\n".utf8).write(to: url, options: .atomic)
+        }
+
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .changedWhileEditing)
+        }
+        XCTAssertEqual(text(file(".zshrc")), "changed-1\n")
+        XCTAssertFalse(exists(file(".zshrc.claude-profiles.bak")))
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: home.path)
+            .filter { $0.hasPrefix(".zshrc.") }
+        XCTAssertEqual(leftovers, [])
+    }
+
+    // MARK: - ZDOTDIR and XDG_CONFIG_HOME (I4, I5)
+
+    func testRelativeEmptyAndBrokenEnvironmentValuesAreIgnored() throws {
+        for value in ["relative/zdot", "", "./here", "/abs\nnewline"] {
+            let setup = setup(env: ["ZDOTDIR": value, "XDG_CONFIG_HOME": value])
+            _ = try setup.install(for: .zsh)
+            _ = try setup.install(for: .fish)
+            XCTAssertTrue(exists(file(".zshrc")), value.debugDescription)
+            XCTAssertTrue(exists(fishFileURL), value.debugDescription)
+
+            _ = try setup.remove(for: .zsh)
+            _ = try setup.remove(for: .fish)
+            XCTAssertFalse(exists(file(".zshrc")), value.debugDescription)
+            XCTAssertFalse(exists(fishFileURL), value.debugDescription)
+        }
+    }
+
+    func testZdotdirFromZshenvIsUsedInEachSimpleForm() throws {
+        let zdotA = home.appendingPathComponent("zdot-a", isDirectory: true)
+        let zdotB = home.appendingPathComponent("zdot-b", isDirectory: true)
+        let zdotC = home.appendingPathComponent("zdot-c", isDirectory: true)
+        let zdotD = temp.url.appendingPathComponent("zdot-d", isDirectory: true)
+        let cases: [(line: String, folder: URL)] = [
+            ("export ZDOTDIR=\"$HOME/zdot-a\"", zdotA),
+            ("ZDOTDIR=${HOME}/zdot-b", zdotB),
+            ("ZDOTDIR=~/zdot-c", zdotC),
+            ("export ZDOTDIR=\(zdotD.path)", zdotD),
+        ]
+        for (line, folder) in cases {
+            try write(line + "\n", to: file(".zshenv"))
+            let setup = setup()
+            _ = try setup.install(for: .zsh)
+
+            XCTAssertEqual(setup.status(for: .zsh), .configured, line)
+            XCTAssertTrue(exists(folder.appendingPathComponent(".zshrc")), line)
+            XCTAssertFalse(exists(file(".zshrc")), "home/.zshrc is not read when ZDOTDIR moves it: \(line)")
+            _ = try setup.remove(for: .zsh)
+            XCTAssertFalse(exists(folder.appendingPathComponent(".zshrc")), line)
+        }
+    }
+
+    func testZdotdirThatCannotBeReadIsReportedAndNothingIsEdited() throws {
+        let content = "ZDOTDIR=$(echo \(home.path)/x)\n"
+        try write(content, to: file(".zshenv"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir)
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .zdotdirUnresolved(self.file(".zshenv").path))
+        }
+        XCTAssertThrowsError(try setup.remove(for: .zsh))
+        XCTAssertFalse(exists(file(".zshrc")))
+        XCTAssertEqual(text(file(".zshenv")), content)
+    }
+
+    func testManualLineIsLookedForWhereInstallWrites() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        let manual = "export PATH=\"$HOME/.claude-profiles/bin${PATH:+:$PATH}\"\n"
+        try write(manual, to: zdot.appendingPathComponent(".zprofile"))
+        try write(manual, to: file(".zprofile"))
+        let setup = setup(env: ["ZDOTDIR": zdot.path])
+        XCTAssertEqual(setup.status(for: .zsh), .manual)
+
+        // zsh does not read the home .zprofile when ZDOTDIR points elsewhere.
+        try FileManager.default.removeItem(at: zdot.appendingPathComponent(".zprofile"))
+        XCTAssertEqual(setup.status(for: .zsh), .notConfigured)
+    }
+
+    // MARK: - Remaining cases
+
+    func testOnePartOfABashSetupIsPartlyConfiguredAndInstallCompletesIt() throws {
+        try write("bp\n", to: file(".bash_profile"))
+        try write("rc\n", to: file(".bashrc"))
+        let setup = setup(login: "/bin/bash")
+        _ = try setup.install(for: .bash)
+        try write("rc\n", to: file(".bashrc"))
+
+        XCTAssertEqual(setup.status(for: .bash), .partlyConfigured)
+        _ = try setup.install(for: .bash)
+        XCTAssertEqual(setup.status(for: .bash), .configured)
+    }
+
+    func testRemoveEverythingLeavesDamagedFilesAloneAndRemovesTheRest() throws {
+        let damaged = "keep\n" + begin + "\nexport X=1\n"
+        try write(damaged, to: file(".zshrc"))
+        try write("p\n", to: file(".profile"))
+        let setup = setup()
+        _ = try setup.install(for: .posix)
+
+        let report = setup.removeEverything()
+        XCTAssertEqual(report.changed.map(\.lastPathComponent), [".profile"])
+        XCTAssertEqual(report.skipped.map(\.url.lastPathComponent), [".zshrc"])
+        XCTAssertEqual(report.skipped.first?.reason, .damaged(file(".zshrc").path))
+        XCTAssertEqual(text(file(".zshrc")), damaged)
+        XCTAssertEqual(text(file(".profile")), "p\n")
     }
 
     // MARK: - Empty shared folders

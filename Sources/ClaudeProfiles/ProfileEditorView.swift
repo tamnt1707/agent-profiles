@@ -424,6 +424,8 @@ struct StatusBar: View {
             return model.loc.t("pathSetup.unsupportedBar", model.loginKind.displayName, model.loginManualLine)
         case .damaged:
             return model.loc.t("pathSetup.damagedBar")
+        case .unresolvedZdotdir:
+            return model.loc.t("pathSetup.status.zdotdir", model.zshManualLine)
         case .configured, .manual:
             return ""
         }

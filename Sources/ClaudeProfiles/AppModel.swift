@@ -867,6 +867,8 @@ final class AppModel {
     var isOfferingPathSetup = false
     /// The profile slug shown in that question.
     private(set) var pathOfferSlug = ""
+    /// Set when the question is about a shell that is only partly set up.
+    private(set) var pathOfferPartly = false
     /// Set while the question about removing the PATH setup is open.
     var isOfferingPathRemoval = false
     /// The result of the last action of the Terminal commands section in Settings.
@@ -885,6 +887,9 @@ final class AppModel {
     /// The line the user copies when the app does not edit the login shell.
     var loginManualLine: String { pathSetup.manualLine(for: loginKind) }
 
+    /// The zsh line the user adds by hand when `ZDOTDIR` cannot be read.
+    var zshManualLine: String { pathSetup.manualLine(for: .zsh) }
+
     /// The files that carry the setup, for the question about removing it.
     var pathFilesText: String {
         pathSetup.managedFiles().map { displayPath($0) }.joined(separator: ", ")
@@ -899,9 +904,15 @@ final class AppModel {
     }
 
     /// After a successful save: asks once per launch, for the login shell only.
+    /// A shell that is only partly set up is offered too, with a text that says so.
     private func offerPathSetupIfNeeded(slug: String) {
         refreshPathStatus()
-        guard !data.pathPromptDeclined, !pathOfferAskedThisLaunch, loginShellStatus == .notConfigured else { return }
+        guard !data.pathPromptDeclined, !pathOfferAskedThisLaunch else { return }
+        switch loginShellStatus {
+        case .notConfigured: pathOfferPartly = false
+        case .partlyConfigured: pathOfferPartly = true
+        default: return
+        }
         pathOfferAskedThisLaunch = true
         pathOfferSlug = slug
         isOfferingPathSetup = true
@@ -951,12 +962,15 @@ final class AppModel {
     }
 
     /// Removes the setup of every shell. Used when the last profile is deleted.
+    /// A file that cannot be changed is left alone and named in the message.
     func removeAllPathSetup() -> Status {
-        let message: Status
-        do {
-            message = removalMessage(try pathSetup.removeEverything())
-        } catch {
-            message = Status(kind: .failure, text: pathErrorText(error))
+        let report = pathSetup.removeEverything()
+        var message = removalMessage(report.changed)
+        if !report.skipped.isEmpty {
+            let list = report.skipped
+                .map { displayPath($0.url) + ": " + pathErrorText($0.reason) }
+                .joined(separator: "\n")
+            message = Status(kind: .failure, text: message.text + "\n" + loc.t("pathSetup.leftAlone", list))
         }
         refreshPathStatus()
         return message
@@ -979,6 +993,14 @@ final class AppModel {
             return loc.t("pathSetup.unsupportedBar", loginKind.displayName, loginManualLine)
         case .ioFailed(let path):
             return loc.t("pathSetup.failed", displayPath(URL(fileURLWithPath: path)))
+        case .brokenLink(let path):
+            return loc.t("pathSetup.brokenLink", displayPath(URL(fileURLWithPath: path)))
+        case .notWritable(let path):
+            return loc.t("pathSetup.readOnly", displayPath(URL(fileURLWithPath: path)))
+        case .changedWhileEditing:
+            return loc.t("pathSetup.changedWhileEditing")
+        case .zdotdirUnresolved(let path):
+            return loc.t("pathSetup.zdotdir", displayPath(URL(fileURLWithPath: path)), zshManualLine)
         }
     }
 

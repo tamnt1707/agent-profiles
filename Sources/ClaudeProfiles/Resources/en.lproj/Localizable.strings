@@ -277,4 +277,11 @@
 "pathSetup.lastProfile.title" = "That was the last profile. Remove the PATH lines from your shell files?";
 "pathSetup.lastProfile.message" = "Claude Profiles added these: %@. No profile needs them now. Lines you wrote by hand are not touched.";
 "pathSetup.lastProfile.remove" = "Remove";
-"pathSetup.keep" = "Keep";
+"pathSetup.keep" = "Keep";"pathSetup.status.zdotdir" = "ZDOTDIR is set in ~/.zshenv in a form Claude Profiles cannot read. Nothing was changed. Add this line to your zsh startup file by hand: %@";
+"pathSetup.zdotdir" = "ZDOTDIR is set in %@ in a form Claude Profiles cannot read. Nothing was changed. Add this line to your zsh startup file by hand: %@";
+"pathSetup.brokenLink" = "%@ is a link that leads nowhere or loops. Claude Profiles did not change it.";
+"pathSetup.readOnly" = "%@ is not writable. Nothing was written. Make it writable and try again.";
+"pathSetup.changedWhileEditing" = "The file changed while Claude Profiles was editing it; nothing was written, try again.";
+"pathSetup.offer.partlyMessage" = "Some of the files that carry this setup are missing. Add it again to finish. Each file gets ONE managed block, after a backup.";
+"pathSetup.leftAlone" = "Left alone, nothing was changed in: %@";
+

@@ -151,6 +151,7 @@ struct SettingsView: View {
         case .notConfigured: return model.loc.t("pathSetup.status.notConfigured")
         case .damaged: return model.loc.t("pathSetup.status.damaged")
         case .unsupported: return model.loc.t("pathSetup.status.unsupported")
+        case .unresolvedZdotdir: return model.loc.t("pathSetup.status.zdotdir", model.zshManualLine)
         }
     }
 

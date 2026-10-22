@@ -44,7 +44,7 @@ struct ContentView: View {
             Button(model.loc.t("pathSetup.offer.later"), role: .cancel) {}
             Button(model.loc.t("pathSetup.offer.never")) { model.declinePathPromptForever() }
         } message: {
-            Text(model.loc.t("pathSetup.offer.message"))
+            Text(model.loc.t(model.pathOfferPartly ? "pathSetup.offer.partlyMessage" : "pathSetup.offer.message"))
         }
         .alert(model.loc.t("pathSetup.lastProfile.title"), isPresented: $model.isOfferingPathRemoval) {
             Button(model.loc.t("pathSetup.lastProfile.remove"), role: .destructive) {

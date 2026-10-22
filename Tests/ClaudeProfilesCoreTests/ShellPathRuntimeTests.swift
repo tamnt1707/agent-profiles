@@ -50,6 +50,60 @@ final class ShellPathRuntimeTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: path), "\(path) is not installed")
     }
 
+    /// Runs a command with exactly the given environment: no PATH unless it is in `environment`.
+    private func runExact(_ executable: String, _ arguments: [String], environment: [String: String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.environment = environment
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = Pipe()
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    /// The block under `set -eu` with PATH unset, empty and with spaces: one entry, never an empty one.
+    func testBlockUnderSetUWithPathUnsetEmptyOrWithSpacesAddsExactlyOneEntry() throws {
+        try requireExecutable("/bin/sh")
+        try requireExecutable("/bin/bash")
+        try requireExecutable("/bin/zsh")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let folder = bin.standardizedFileURL.path
+        try Data("# existing\n".utf8).write(to: home.appendingPathComponent(".profile"))
+        try Data("# existing\n".utf8).write(to: home.appendingPathComponent(".bash_profile"))
+        try Data("# existing\n".utf8).write(to: home.appendingPathComponent(".zshrc"))
+        _ = try setupPath(login: "/bin/sh").install(for: .posix)
+        _ = try setupPath(login: "/bin/bash").install(for: .bash)
+        _ = try setupPath(login: "/bin/zsh").install(for: .zsh)
+
+        let shells: [(executable: String, arguments: [String], script: String)] = [
+            ("/bin/sh", ["-c"], "set -eu; . \"$HOME/.profile\"; . \"$HOME/.profile\"; printf '%s' \"$PATH\""),
+            ("/bin/bash", ["-c"], "set -eu; . \"$HOME/.bash_profile\"; . \"$HOME/.bash_profile\"; printf '%s' \"$PATH\""),
+            ("/bin/zsh", ["-f", "-c"], "set -eu; . \"$HOME/.zshrc\"; . \"$HOME/.zshrc\"; print -rn -- \"$PATH\""),
+        ]
+        let pathValues: [String?] = [nil, "", "/opt/my tools:/usr/bin:/bin"]
+        for shell in shells {
+            for pathValue in pathValues {
+                var environment = ["HOME": home.path]
+                if let pathValue { environment["PATH"] = pathValue }
+                let path = try runExact(shell.executable, shell.arguments + [shell.script], environment: environment)
+                let label = "\(shell.executable) PATH=\(pathValue?.debugDescription ?? "unset")"
+                let entries = path.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+                XCTAssertEqual(entries.filter { $0 == folder }.count, 1, "\(label): \(path)")
+                XCTAssertFalse(entries.contains(""), "\(label) has an empty entry: \(path)")
+                if pathValue == "" {
+                    XCTAssertEqual(path, folder, label)
+                }
+                if pathValue == "/opt/my tools:/usr/bin:/bin" {
+                    XCTAssertTrue(entries.contains("/opt/my tools"), label)
+                }
+            }
+        }
+    }
+
     func testPosixBlockSourcedTwiceAddsTheFolderOnce() throws {
         try requireExecutable("/bin/sh")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)

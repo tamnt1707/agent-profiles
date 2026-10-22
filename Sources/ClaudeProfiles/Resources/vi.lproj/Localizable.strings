@@ -278,3 +278,10 @@
 "pathSetup.lastProfile.message" = "Claude Profiles đã thêm các dòng này vào: %@. Không profile nào cần chúng nữa. Dòng bạn tự viết không bị động đến.";
 "pathSetup.lastProfile.remove" = "Gỡ";
 "pathSetup.keep" = "Giữ lại";
+"pathSetup.status.zdotdir" = "ZDOTDIR được đặt trong ~/.zshenv theo cách Claude Profiles không đọc được. Chưa đổi gì. Hãy thêm dòng này vào file khởi động zsh bằng tay: %@";
+"pathSetup.zdotdir" = "ZDOTDIR trong %@ được đặt theo cách Claude Profiles không đọc được. Chưa đổi gì. Hãy thêm dòng này vào file khởi động zsh bằng tay: %@";
+"pathSetup.brokenLink" = "%@ là liên kết dẫn tới một nơi không tồn tại hoặc bị lặp vòng. Claude Profiles không thay đổi nó.";
+"pathSetup.readOnly" = "%@ không ghi được. Chưa ghi gì cả. Hãy cho phép ghi rồi thử lại.";
+"pathSetup.changedWhileEditing" = "File đã đổi trong lúc Claude Profiles đang sửa; chưa ghi gì cả, hãy thử lại.";
+"pathSetup.offer.partlyMessage" = "Một số file chứa thiết lập này đang thiếu. Hãy thêm lại để hoàn tất. Mỗi file nhận MỘT khối quản lý, sau khi được sao lưu.";
+"pathSetup.leftAlone" = "Đã để nguyên, không đổi gì trong: %@";
