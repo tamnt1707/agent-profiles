@@ -166,7 +166,8 @@ public struct ShellPathSetup: Sendable {
     private var zshDirectory: ZshDirectory {
         let zshenv = homeFile(".zshenv")
         if let data = try? Self.readFile(zshenv), let text = String(data: data, encoding: .utf8) {
-            switch Self.zdotdirAssignment(in: text, home: home.path) {
+            let xdg = absoluteEnvironment("XDG_CONFIG_HOME") ?? home.path + "/.config"
+            switch Self.zdotdirAssignment(in: text, home: home.path, configHome: xdg) {
             case .path(let path)?: return .folder(URL(fileURLWithPath: path, isDirectory: true))
             case .unresolvable?: return .unresolved(zshenv)
             case nil: break
@@ -397,17 +398,22 @@ public struct ShellPathSetup: Sendable {
     ///
     /// Conservative: exactly one plain assignment at the top level is read
     /// (`ZDOTDIR=…` or `export ZDOTDIR=…`, with a literal absolute path or a value
-    /// that starts with `$HOME`, `${HOME}` or `~`). Anything else that mentions
-    /// `ZDOTDIR` makes it `.unresolvable`: an assignment inside an `if`, `case`,
-    /// `for`, `while`, function or brace block, inside a here-doc, a second
-    /// assignment, `unset ZDOTDIR`, a conditional such as `[ -z "$ZDOTDIR" ] && …`,
-    /// or any other form. Comment lines are ignored.
-    static func zdotdirAssignment(in text: String, home: String) -> ZdotdirValue? {
+    /// that starts with `$HOME`, `${HOME}`, `~`, `${XDG_CONFIG_HOME:-$HOME/.config}`
+    /// or `$XDG_CONFIG_HOME`). Anything else that mentions `ZDOTDIR` makes it
+    /// `.unresolvable`: an assignment inside an `if`, `case`, `for`, `while`, function,
+    /// brace or parenthesis block, inside a here-doc, a second assignment, a line with
+    /// a carriage return (zsh keeps it in the value), `unset ZDOTDIR`, a conditional
+    /// such as `[ -z "$ZDOTDIR" ] && …`, or any other form. Comment lines are ignored.
+    static func zdotdirAssignment(in text: String, home: String, configHome: String) -> ZdotdirValue? {
         var values: [String] = []
         var depth = 0
+        var parens = 0
         var heredoc: String?
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            var line = String(rawLine)
+        // Split on the line feed only: "\r\n" is one Character in Swift, so a Character split never sees it.
+        for rawLine in text.components(separatedBy: "\n") {
+            var line = rawLine
+            // zsh reads a carriage return as part of the word, so a line with one never resolves.
+            if line.contains("ZDOTDIR") && line.contains("\r") { return .unresolvable }
             if line.hasSuffix("\r") { line.removeLast() }
             let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
             if let delimiter = heredoc {
@@ -418,7 +424,7 @@ public struct ShellPathSetup: Sendable {
             }
             if trimmed.hasPrefix("#") { continue }
             if line.contains("ZDOTDIR") {
-                guard depth == 0, let value = plainZdotdirValue(trimmed) else { return .unresolvable }
+                guard depth == 0, parens == 0, let value = plainZdotdirValue(trimmed) else { return .unresolvable }
                 values.append(value)
             }
             for segment in trimmed.split(whereSeparator: { ";&|".contains($0) }) {
@@ -430,6 +436,7 @@ public struct ShellPathSetup: Sendable {
                     if depth < 0 { return .unresolvable }
                 }
             }
+            parens = openParentheses(in: line, from: parens)
             if let open = line.range(of: "<<"), !line[open.upperBound...].hasPrefix("<") {
                 let word = line[open.upperBound...]
                     .drop(while: { $0 == "-" || $0 == " " || $0 == "\t" })
@@ -441,14 +448,45 @@ public struct ShellPathSetup: Sendable {
         }
         if values.count > 1 { return .unresolvable }
         guard let value = values.first else { return nil }
-        return resolveZdotdir(value, home: home)
+        return resolveZdotdir(value, home: home, configHome: configHome)
     }
 
     private static let zdotdirOpeners: Set<String> = ["if", "case", "for", "while", "until", "select", "function", "{"]
     private static let zdotdirClosers: Set<String> = ["fi", "esac", "done", "}"]
 
+    /// The count of parentheses still open after one line: a `(` opens a subshell or a
+    /// command substitution, a `)` closes one (a `)` with nothing open is a case pattern
+    /// and is ignored). Text in single quotes is not counted, and a word-start `#` outside
+    /// double quotes starts a comment that ends the count.
+    private static func openParentheses(in line: String, from start: Int) -> Int {
+        var depth = start
+        var single = false
+        var double = false
+        var escaped = false
+        var previous: Character = " "
+        for char in line {
+            defer { previous = char }
+            if escaped { escaped = false; continue }
+            if single {
+                if char == "'" { single = false }
+                continue
+            }
+            switch char {
+            case "\\": escaped = true
+            case "'" where !double: single = true
+            case "\"": double.toggle()
+            case "#" where !double && (previous == " " || previous == "\t"): return depth
+            case "(": depth += 1
+            case ")": if depth > 0 { depth -= 1 }
+            default: break
+            }
+        }
+        return depth
+    }
+
     /// The value of a plain top-level `ZDOTDIR=value` or `export ZDOTDIR=value` line,
-    /// or `nil` when the line is any other form.
+    /// or `nil` when the line is any other form. A trailing comment (a `#` that starts
+    /// a word, outside quotes) is not part of the value.
     private static func plainZdotdirValue(_ trimmed: String) -> String? {
         var rest = Substring(trimmed)
         if rest.hasPrefix("export") {
@@ -457,13 +495,34 @@ public struct ShellPathSetup: Sendable {
             rest = after.drop(while: { $0 == " " || $0 == "\t" })
         }
         guard rest.hasPrefix("ZDOTDIR=") else { return nil }
-        let value = rest.dropFirst("ZDOTDIR=".count).trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+        let value = withoutTrailingComment(rest.dropFirst("ZDOTDIR=".count))
         guard !value.isEmpty, !value.contains(where: { ";&|()<>`".contains($0) }) else { return nil }
         return value
     }
 
+    /// The text before a comment: the first `#` that starts a word and is outside quotes.
+    private static func withoutTrailingComment(_ text: Substring) -> String {
+        var quote: Character?
+        var previous: Character = "="
+        var result = ""
+        for char in text {
+            if let open = quote {
+                if char == open { quote = nil }
+            } else if char == "'" || char == "\"" {
+                quote = char
+            } else if char == "#", previous == " " || previous == "\t" {
+                break
+            }
+            result.append(char)
+            previous = char
+        }
+        return result.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+    }
+
     /// Resolves the value of a `ZDOTDIR` assignment, or says it cannot be done.
-    static func resolveZdotdir(_ raw: String, home: String) -> ZdotdirValue {
+    /// `configHome` is `$XDG_CONFIG_HOME` when the app's environment has an absolute
+    /// one, else `~/.config`.
+    static func resolveZdotdir(_ raw: String, home: String, configHome: String) -> ZdotdirValue {
         guard !raw.isEmpty else { return .unresolvable }
         // Single quotes: nothing is expanded.
         if raw.count >= 2, raw.hasPrefix("'"), raw.hasSuffix("'") {
@@ -474,6 +533,11 @@ public struct ShellPathSetup: Sendable {
         if raw.count >= 2, raw.hasPrefix("\""), raw.hasSuffix("\"") {
             body = String(raw.dropFirst().dropLast())
             quoted = true
+        }
+        for form in ["${XDG_CONFIG_HOME:-$HOME/.config}", "$XDG_CONFIG_HOME"] {
+            if body.hasPrefix(form + "/") {
+                return checkedPath(configHome + String(body.dropFirst(form.count)), spaces: quoted)
+            }
         }
         for form in ["$HOME", "${HOME}"] {
             if body == form { return checkedPath(home, spaces: true) }

@@ -1081,6 +1081,155 @@ final class ShellPathSetupTests: XCTestCase {
         XCTAssertEqual(report.skipped, [])
     }
 
+    // MARK: - CRLF in ~/.zshenv (I2)
+
+    /// Each line of a CRLF `~/.zshenv` with a ZDOTDIR line is unresolvable: zsh keeps the CR
+    /// in the value, and a comment line before it must never hide the assignment.
+    func testCRLFZshenvWithZdotdirIsUnresolvedAndNothingIsEdited() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        let cases = [
+            "# my zsh setup\r\nexport ZDOTDIR=\(zdot.path)\r\n",
+            "export ZDOTDIR=\(zdot.path)\r\n",
+            "export ZDOTDIR=\"$HOME/zdot\"\r\nexport FOO=1\r\n",
+        ]
+        for content in cases {
+            try write(content, to: file(".zshenv"))
+            let setup = setup()
+            XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir, content.debugDescription)
+            XCTAssertThrowsError(try setup.install(for: .zsh), content.debugDescription) { error in
+                XCTAssertEqual(error as? ShellPathError, .zdotdirUnresolved(self.file(".zshenv").path))
+            }
+            XCTAssertFalse(exists(file(".zshrc")), content.debugDescription)
+            XCTAssertFalse(exists(zdot.appendingPathComponent(".zshrc")), content.debugDescription)
+            XCTAssertEqual(text(file(".zshenv")), content, content.debugDescription)
+        }
+    }
+
+    /// CRLF lines that do not mention ZDOTDIR do not stop a resolvable LF assignment.
+    func testMixedEndingZshenvWithLFZdotdirIsStillResolved() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        try write("export FOO=1\r\nexport ZDOTDIR=\(zdot.path)\nexport BAR=2\r\n", to: file(".zshenv"))
+        let setup = setup()
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        XCTAssertTrue(exists(zdot.appendingPathComponent(".zshrc")))
+    }
+
+    // MARK: - ZDOTDIR forms: trailing comments, XDG_CONFIG_HOME, subshells (M1, M2)
+
+    func testZdotdirWithATrailingCommentIsResolved() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        let cases = [
+            "export ZDOTDIR=\"$HOME/zdot\"  # xdg\n",
+            "ZDOTDIR=\(zdot.path) # the folder\n",
+            "export ZDOTDIR='\(zdot.path)'\t# quoted\n",
+        ]
+        for content in cases {
+            try write(content, to: file(".zshenv"))
+            let setup = setup()
+            _ = try setup.install(for: .zsh)
+            XCTAssertEqual(setup.status(for: .zsh), .configured, content.debugDescription)
+            XCTAssertTrue(exists(zdot.appendingPathComponent(".zshrc")), content.debugDescription)
+            _ = try setup.remove(for: .zsh)
+            try FileManager.default.removeItem(at: zdot)
+        }
+    }
+
+    /// A `#` inside quotes, or one that is part of a word, is not a comment: the value is refused.
+    func testHashInsideAValueIsNotAComment() throws {
+        let rejected = [
+            "export ZDOTDIR=\"$HOME/a # b\"\n",
+            "export ZDOTDIR=$HOME/a#b\n",
+            "ZDOTDIR=#\(home.path)/x\n",
+        ]
+        for content in rejected {
+            try write(content, to: file(".zshenv"))
+            let setup = setup()
+            XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir, content.debugDescription)
+            XCTAssertFalse(exists(file(".zshrc")), content.debugDescription)
+        }
+    }
+
+    /// `${XDG_CONFIG_HOME:-$HOME/.config}/zsh` and `$XDG_CONFIG_HOME/zsh` use the app's environment
+    /// only when it is absolute; otherwise `~/.config`.
+    func testXdgConfigHomeFormsUseAnAbsoluteEnvironmentValueOnly() throws {
+        let xdg = temp.url.appendingPathComponent("xdg", isDirectory: true)
+        let forms = [
+            "export ZDOTDIR=${XDG_CONFIG_HOME:-$HOME/.config}/zsh\n",
+            "export ZDOTDIR=\"${XDG_CONFIG_HOME:-$HOME/.config}/zsh\"  # comment\n",
+            "export ZDOTDIR=$XDG_CONFIG_HOME/zsh\n",
+            "export ZDOTDIR=\"$XDG_CONFIG_HOME/zsh\"\n",
+        ]
+        for form in forms {
+            try write(form, to: file(".zshenv"))
+
+            let absolute = setup(env: ["XDG_CONFIG_HOME": xdg.path])
+            _ = try absolute.install(for: .zsh)
+            XCTAssertTrue(exists(xdg.appendingPathComponent("zsh/.zshrc")), form)
+            _ = try absolute.remove(for: .zsh)
+            try FileManager.default.removeItem(at: xdg)
+
+            for env in [[:], ["XDG_CONFIG_HOME": "relative/xdg"]] {
+                let fallback = setup(env: env)
+                _ = try fallback.install(for: .zsh)
+                let folder = home.appendingPathComponent(".config/zsh", isDirectory: true)
+                XCTAssertTrue(exists(folder.appendingPathComponent(".zshrc")), "\(form) \(env)")
+                _ = try fallback.remove(for: .zsh)
+                try FileManager.default.removeItem(at: home.appendingPathComponent(".config"))
+            }
+        }
+    }
+
+    func testXdgFormsWithCommandSubstitutionAreUnresolved() throws {
+        let xdg = temp.url.appendingPathComponent("xdg", isDirectory: true)
+        let rejected = [
+            "export ZDOTDIR=${XDG_CONFIG_HOME:-$(echo $HOME/.config)}/zsh\n",
+            "export ZDOTDIR=\"$XDG_CONFIG_HOME/$(echo zsh)\"\n",
+            "export ZDOTDIR=$(echo $XDG_CONFIG_HOME)/zsh\n",
+        ]
+        for content in rejected {
+            try write(content, to: file(".zshenv"))
+            let setup = setup(env: ["XDG_CONFIG_HOME": xdg.path])
+            XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir, content.debugDescription)
+            XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+                XCTAssertEqual(error as? ShellPathError, .zdotdirUnresolved(self.file(".zshenv").path))
+            }
+            XCTAssertFalse(exists(xdg.appendingPathComponent("zsh/.zshrc")), content.debugDescription)
+        }
+    }
+
+    /// An assignment inside `( … )` or a `$( … )` is not in effect for the shell: unresolved.
+    func testZdotdirInsideParenthesesIsUnresolvedAndNothingIsEdited() throws {
+        let zdot = home.path + "/zdot"
+        let rejected = [
+            "(\nZDOTDIR=\(zdot)\n)\n",
+            "( ZDOTDIR=\(zdot) )\n",
+            "X=$(\nZDOTDIR=\(zdot)\n)\n",
+            // A `#` inside double quotes is text, so the subshell after it is still open.
+            "echo \" #\"; (\nZDOTDIR=\(zdot)\n)\n",
+        ]
+        for content in rejected {
+            try write(content, to: file(".zshenv"))
+            let setup = setup()
+            XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir, content.debugDescription)
+            XCTAssertThrowsError(try setup.install(for: .zsh), content.debugDescription)
+            XCTAssertFalse(exists(URL(fileURLWithPath: zdot).appendingPathComponent(".zshrc")), content.debugDescription)
+            XCTAssertEqual(text(file(".zshenv")), content, content.debugDescription)
+        }
+    }
+
+    /// A subshell that is closed before the assignment does not hide it.
+    func testZdotdirAfterAClosedSubshellIsStillResolved() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        try write("(\n  echo hi\n)\nZDOTDIR=\(zdot.path)\n", to: file(".zshenv"))
+        let setup = setup()
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        XCTAssertTrue(exists(zdot.appendingPathComponent(".zshrc")))
+    }
+
     // MARK: - Bash login file drift (M-I)
 
     func testBlockLeftInProfileIsPartlyConfiguredAndInstallNeverAddsASecondBlock() throws {
