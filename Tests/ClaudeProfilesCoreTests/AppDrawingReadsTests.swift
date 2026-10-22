@@ -73,6 +73,16 @@ final class AppDrawingReadsTests: XCTestCase {
         XCTAssertTrue(measure.contains("DirectorySize.measure"), "the folder is never measured")
     }
 
+    /// A late answer must not change the text of the question.
+    func testALateAnswerDoesNotChangeTheText() {
+        let apply = body(of: "func applyFolderSize(")
+        XCTAssertFalse(apply.isEmpty, "the size of the folder is never used")
+        XCTAssertTrue(
+            apply.contains("guard deleteDialog.apply(bytes: bytes, for: token) else { return }"),
+            "a late answer changes the text of the question"
+        )
+    }
+
     /// The files of the shells are read when the state of the shells is read,
     /// not while the question about them is drawn.
     func testTheFilesOfTheShellsAreNotReadWhileDrawing() {
