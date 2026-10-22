@@ -268,6 +268,7 @@
 "editor.usage.allTime" = "All time";
 "editor.usage.refresh" = "Refresh";
 "editor.usage.stop" = "Stop";
+"editor.usage.stopped" = "The count was stopped. The numbers are the ones of the last count that finished.";
 "editor.usage.detail" = "Input %@ · Output %@ · Cache read %@ · Cache written %@";
 "editor.usage.breakdown" = "Total %@ · input %@ · output %@ · cache read %@ · cache written %@";
 "editor.usage.notCounted" = "not counted yet";
@@ -282,7 +283,7 @@
 "editor.usage.priceInput" = "Input (USD)";
 "editor.usage.priceOutput" = "Output (USD)";
 "editor.usage.priceHelp" = "Cache reads and writes are priced as input tokens. The estimate shows only when both prices are set.";
-"editor.usage.cacheNote" = "The numbers are kept in a cache file of this app, so that the next count is faster. It holds no text of your messages.";
+"editor.usage.cacheNote" = "The numbers are kept in a small cache file of this app, so that the next count is faster. It holds the token totals and the names of the project folders of your sessions, but no text of your conversations. You can delete it at any time.";
 "error.invalidPrice" = "Prices must be a number of zero or more.";
 "probe.ok" = "Connected, %d ms";
 "probe.ok.model" = "Connected, %d ms (model %@)";

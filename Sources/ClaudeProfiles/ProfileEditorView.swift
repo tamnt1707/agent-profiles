@@ -314,6 +314,14 @@ struct ProfileEditorView: View {
             }
         }
 
+        if model.isUsageStopped(slug) {
+            // The count was stopped: the numbers above are the ones of the
+            // last count that finished.
+            Text(model.loc.t("editor.usage.stopped"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+
         if let totals = summary?.allTime,
            let cost = UsageCost.estimate(
                totals,

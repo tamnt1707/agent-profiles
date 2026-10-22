@@ -184,8 +184,34 @@ final class UsagePriceTests: XCTestCase {
         XCTAssertFalse(text.contains("price_output_per_million"))
     }
 
-    // MARK: - Compact numbers
+    // MARK: - The line of the cost
 
+    /// A normal cost is written as money.
+    func testANormalCostIsWrittenAsMoney() {
+        let english = Locale(identifier: "en")
+        XCTAssertEqual(UsageCost.format(12.5, locale: english), "$12.50")
+    }
+
+    /// A cost that is too big is written as a dash: a price of 1e300 would
+    /// print three hundred digits, and the line would not fit anywhere.
+    func testACostThatIsTooBigIsWrittenAsADash() {
+        let english = Locale(identifier: "en")
+        for value in [1e300, Double.greatestFiniteMagnitude, Double.infinity, Double.nan] {
+            let text = UsageCost.format(value, locale: english)
+            XCTAssertEqual(text, UsageCost.tooLargeText, "the cost \(value) was written as \(text)")
+            XCTAssertLessThan(text.count, 10, "the line of the cost is too long")
+        }
+    }
+
+    /// The biggest cost that is still written as money.
+    func testTheBiggestCostThatIsStillWrittenAsMoney() {
+        let english = Locale(identifier: "en")
+        let text = UsageCost.format(UsageCost.maximumWrittenCost, locale: english)
+        XCTAssertNotEqual(text, UsageCost.tooLargeText)
+        XCTAssertEqual(text, "$1,000,000,000.00")
+    }
+
+    // MARK: - Compact numbers
     func testCompactTokenCounts() {
         XCTAssertEqual(TokenFormat.compact(0), "0")
         XCTAssertEqual(TokenFormat.compact(850), "850")

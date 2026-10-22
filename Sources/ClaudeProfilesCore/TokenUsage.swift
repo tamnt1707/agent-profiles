@@ -89,6 +89,55 @@ public enum UsageResult: Equatable, Sendable {
     case unavailable(UsageUnavailableReason)
 }
 
+/// The state of the counts of the usage, one for every profile.
+///
+/// A count can be started, stopped and started again. The numbers of the last
+/// count that finished stay visible when a count is stopped: the count shows
+/// what it had, and a note that it was stopped.
+public struct UsageScanStates: Equatable, Sendable {
+    /// The profiles whose usage is being counted right now.
+    private var running: Set<String> = []
+    /// The profiles whose count was stopped. Their numbers stay.
+    private var stopped: Set<String> = []
+
+    public init() {}
+
+    /// `true` while the usage of the profile is being counted.
+    public func isRunning(_ slug: String) -> Bool {
+        running.contains(slug)
+    }
+
+    /// `true` when the last count of the profile was stopped.
+    public func isStopped(_ slug: String) -> Bool {
+        stopped.contains(slug)
+    }
+
+    /// A count of the profile starts. The note of a stopped count is gone.
+    public mutating func start(_ slug: String) {
+        running.insert(slug)
+        stopped.remove(slug)
+    }
+
+    /// The count of the profile is done: there is no count and no note.
+    public mutating func finish(_ slug: String) {
+        running.remove(slug)
+        stopped.remove(slug)
+    }
+
+    /// The count of the profile was stopped. The numbers stay, and the note of
+    /// a stopped count is there.
+    public mutating func stop(_ slug: String) {
+        running.remove(slug)
+        stopped.insert(slug)
+    }
+
+    /// The profile is gone, or its numbers do not hold any more.
+    public mutating func forget(_ slug: String) {
+        running.remove(slug)
+        stopped.remove(slug)
+    }
+}
+
 /// Estimated cost from the optional prices of a profile.
 public enum UsageCost {
     /// A price is valid when it is not set, or finite and zero or more.
@@ -119,14 +168,27 @@ public enum UsageCost {
         return cost
     }
 
+    /// The biggest cost that is written as money.
+    ///
+    /// A cost that is bigger is only a bound: a price of 1e300 would print
+    /// three hundred digits and the line of the cost would not fit anywhere.
+    public static let maximumWrittenCost: Double = 1_000_000_000
+
+    /// The text that stands for a cost that is too big to be written.
+    public static let tooLargeText = "—"
+
     /// The cost as money in US dollars, written the way the language of the
     /// user writes it: `$1,234.56` in English, `1.234,56 US$` in Vietnamese.
+    ///
+    /// A cost that is bigger than `maximumWrittenCost`, or a cost that is not a
+    /// number, is written as a dash: the line stays short.
     public static func format(_ cost: Double, locale: Locale = .current) -> String {
+        guard cost.isFinite, cost <= maximumWrittenCost else { return tooLargeText }
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         formatter.locale = locale
-        return formatter.string(from: NSNumber(value: cost)) ?? ""
+        return formatter.string(from: NSNumber(value: cost)) ?? tooLargeText
     }
 }
 

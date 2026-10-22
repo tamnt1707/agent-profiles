@@ -146,9 +146,9 @@ final class AppModel {
 
     /// The token usage counted for each profile, by slug. Counted on first show and on Refresh.
     private(set) var usageResults: [String: UsageResult] = [:]
-    /// The slugs whose usage is being counted right now. Every profile has its
-    /// own count: the count of one profile does not stop the count of another.
-    private(set) var usageLoadingSlugs: Set<String> = []
+    /// The state of the count of every profile: which ones are counted right
+    /// now, and which ones were stopped. The numbers of a stopped count stay.
+    private(set) var usageScanStates = UsageScanStates()
     /// A number per slug. Only the newest count of a slug is used, so a count
     /// that was replaced or stopped never shows its numbers.
     private var usageGenerations: [String: Int] = [:]
@@ -528,7 +528,7 @@ final class AppModel {
         usageTasks[slug]?.cancel()
         let generation = (usageGenerations[slug] ?? 0) + 1
         usageGenerations[slug] = generation
-        usageLoadingSlugs.insert(slug)
+        usageScanStates.start(slug)
         let scanner = usageScanner
         usageTasks[slug] = Task {
             let outcome: Result<UsageResult, Error>
@@ -540,11 +540,12 @@ final class AppModel {
             // A newer count replaced this one, and that one owns the state now.
             guard !Task.isCancelled else { return }
             guard usageGenerations[slug] == generation else { return }
-            usageLoadingSlugs.remove(slug)
+            usageScanStates.finish(slug)
             usageTasks[slug] = nil
             // The profile may be gone (deleted or renamed) while the count ran.
             guard data.profiles.contains(where: { $0.slug == slug }) else {
                 usageResults[slug] = nil
+                usageScanStates.forget(slug)
                 return
             }
             switch outcome {
@@ -557,24 +558,39 @@ final class AppModel {
     }
 
     /// Stops the count of the profile that is open.
+    ///
+    /// The numbers of the last count stay: a stopped count shows what it had,
+    /// and a note that it was stopped.
     func stopUsage() {
         guard let slug = currentProfile?.slug else { return }
-        cancelUsage(for: slug)
+        cancelUsageTask(for: slug)
+        usageScanStates.stop(slug)
     }
 
     /// `true` while the usage of the profile is being counted.
     func isUsageLoading(_ slug: String) -> Bool {
-        usageLoadingSlugs.contains(slug)
+        usageScanStates.isRunning(slug)
+    }
+
+    /// `true` when the last count of the profile was stopped.
+    func isUsageStopped(_ slug: String) -> Bool {
+        usageScanStates.isStopped(slug)
     }
 
     /// Stops the count of a profile and forgets its numbers. A count that is
     /// stopped must not show its numbers later.
     private func cancelUsage(for slug: String) {
+        cancelUsageTask(for: slug)
+        usageResults[slug] = nil
+        usageScanStates.forget(slug)
+    }
+
+    /// Stops the count of a profile without touching its numbers.
+    private func cancelUsageTask(for slug: String) {
         usageTasks[slug]?.cancel()
         usageTasks[slug] = nil
-        usageLoadingSlugs.remove(slug)
         usageGenerations[slug] = (usageGenerations[slug] ?? 0) + 1
-        usageResults[slug] = nil
+        usageScanStates.finish(slug)
     }
 
     /// A count stays valid while the folder of the profile and its isolation stay the same.

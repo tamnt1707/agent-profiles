@@ -268,6 +268,7 @@
 "editor.usage.allTime" = "Toàn bộ";
 "editor.usage.refresh" = "Làm mới";
 "editor.usage.stop" = "Dừng";
+"editor.usage.stopped" = "Lần đếm đã dừng. Các con số là của lần đếm đã hoàn tất gần nhất.";
 "editor.usage.detail" = "Đầu vào %@ · Đầu ra %@ · Đọc cache %@ · Ghi cache %@";
 "editor.usage.breakdown" = "Tổng %@ · đầu vào %@ · đầu ra %@ · đọc cache %@ · ghi cache %@";
 "editor.usage.notCounted" = "chưa được đếm";
@@ -282,7 +283,7 @@
 "editor.usage.priceInput" = "Đầu vào (USD)";
 "editor.usage.priceOutput" = "Đầu ra (USD)";
 "editor.usage.priceHelp" = "Token đọc và ghi cache được tính theo giá đầu vào. Chỉ hiện ước tính khi đã nhập đủ cả hai giá.";
-"editor.usage.cacheNote" = "Các con số được giữ trong một tệp cache của ứng dụng, nên lần đếm sau sẽ nhanh hơn. Tệp này không chứa nội dung tin nhắn của bạn.";
+"editor.usage.cacheNote" = "Các con số được giữ trong một tệp cache nhỏ của ứng dụng này, nên lần đếm sau sẽ nhanh hơn. Tệp này chỉ chứa tổng số token và tên các thư mục dự án của những phiên làm việc của bạn, không có nội dung hội thoại. Bạn có thể xóa tệp này bất cứ lúc nào.";
 "error.invalidPrice" = "Giá phải là một số từ 0 trở lên.";
 "probe.ok" = "Đã kết nối, %d ms";
 "probe.ok.model" = "Đã kết nối, %d ms (model %@)";
