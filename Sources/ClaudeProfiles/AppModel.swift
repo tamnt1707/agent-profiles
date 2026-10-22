@@ -143,6 +143,19 @@ final class AppModel {
     /// The recent folders of the menu, looked up when it opens. The menu
     /// itself never asks the file system while it is drawn.
     private(set) var menuBarFolders: [String: [String]] = [:]
+    /// The state of the folders of the menu bar, with the number of the lookup
+    /// that is running. A lookup that comes back late never replaces a newer
+    /// answer.
+    private var menuFolderState = MenuFolderState()
+    /// The lookup of the recent folders that is running, so that it can be
+    /// stopped.
+    private var menuFolderLookup: Task<Void, Never>?
+    /// The checks of the folders that took too long. They go on in the
+    /// background, and the next opening of the menu uses their answer.
+    private var slowFolderChecks: [String: SlowFolderCheck] = [:]
+    /// The launches that are on their way. A second click on the same item of
+    /// the menu is ignored while the first one is still running.
+    private var launchGuard = LaunchGuard()
 
     /// The token usage counted for each profile, by slug. Counted on first show and on Refresh.
     private(set) var usageResults: [String: UsageResult] = [:]
@@ -641,15 +654,18 @@ final class AppModel {
 
     /// Opens the terminal for a plan and remembers the folder when it worked.
     private func launch(_ profile: Profile, _ plan: MenuLaunchPlan) {
+        // A second click on the same item is ignored while the first one is
+        // still on its way: one click opens one terminal.
+        let key = plan.launchKey
+        guard launchGuard.begin(key) else { return }
         menuBarError = nil
         let terminal = data.terminal
         let paths = store.paths
         // The terminal is started off the main thread, so the window keeps responding.
         Task {
+            defer { launchGuard.end(key) }
             do {
-                let stored = data.profiles.first(where: { $0.slug == plan.slug })?.recentDirs ?? []
                 try await plan.run(
-                    stored: stored,
                     launch: {
                         try await Launcher.launchInBackground(
                             profile: profile,
@@ -658,9 +674,11 @@ final class AppModel {
                             workdirOverride: plan.folder
                         )
                     },
-                    remember: { folders in
-                        // The folder is remembered only now, after the launch worked.
-                        remember(folders, for: plan.slug)
+                    remember: { folder in
+                        // The folder is remembered only now, after the launch
+                        // worked. The list is read again here, so that two
+                        // launches that overlap keep both folders.
+                        remember(folder, for: plan.slug)
                     }
                 )
                 status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, profile.name))
@@ -671,9 +689,15 @@ final class AppModel {
         }
     }
 
-    /// Puts the folders of a launch that worked into the list of the profile.
-    private func remember(_ folders: [String], for slug: String) {
+    /// Puts the folder of a launch that worked into the list of the profile.
+    ///
+    /// The list of the profile is read again now and not before the launch
+    /// started: two launches that overlap both keep their folder.
+    private func remember(_ folder: String, for slug: String) {
         guard let index = data.profiles.firstIndex(where: { $0.slug == slug }) else { return }
+        var recent = RecentFolders(data.profiles[index].recentDirs)
+        recent.add(folder)
+        let folders = recent.paths
         guard data.profiles[index].recentDirs != folders else { return }
         data.profiles[index].recentDirs = folders
         // The editor keeps its own copy: update it too, so it does not show as changed.
@@ -689,7 +713,7 @@ final class AppModel {
 
     /// Shows that a folder was refused, in the status bar and in the menu.
     func reportUnsafeFolder(_ path: String) {
-        let error = ProfileError.unsafeFolder(path)
+        let error = ProfileError.unsafeFolderToOpen(path)
         menuBarError = error.localizedMessage(loc)
         report(error)
     }
@@ -718,14 +742,129 @@ final class AppModel {
 
     /// Looks up the recent folders that still exist, off the main thread.
     ///
-    /// The menu is drawn from the result, never from the file system.
+    /// The menu is drawn from the result, never from the file system. A folder
+    /// on a volume that does not answer must not hold the menu: the check of
+    /// such a profile gets a second, and the folders are shown as they are
+    /// until the check is done. The check that took too long goes on in the
+    /// background, and the next opening of the menu uses its answer.
     func refreshMenuBarFolders() {
         let profiles = data.profiles
-        Task {
-            let folders = await Task.detached(priority: .userInitiated) {
-                MenuBarModel.existingFolders(profiles: profiles, folderExists: AppModel.folderExists)
-            }.value
-            menuBarFolders = folders
+        let known = Set(profiles.map(\.slug))
+        // The number of this lookup. The answer of an older lookup is dropped.
+        let generation = menuFolderState.begin()
+        // The lookup that is running is stopped: its answer is older anyway.
+        menuFolderLookup?.cancel()
+        menuFolderLookup = Task { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(Self.menuFolderBudget)
+            var entries: [String: MenuFolderState.Entry] = [:]
+            for profile in profiles {
+                if Task.isCancelled { return }
+                let left = deadline.timeIntervalSinceNow
+                guard left > 0 else {
+                    // The budget of the menu is used up: the folders of this
+                    // profile are shown as they are.
+                    entries[profile.slug] = .unchecked
+                    continue
+                }
+                entries[profile.slug] = await self.checkFolders(of: profile, budget: left)
+            }
+            if Task.isCancelled { return }
+            let lookup = MenuFolderState.Lookup(generation: generation, entries: entries)
+            self.menuFolderState.accept(lookup, known: known)
+            self.menuBarFolders = self.menuFolderState.folders
+        }
+    }
+
+    /// The time the menu waits for the folders of the profiles.
+    private static let menuFolderBudget: TimeInterval = 1
+
+    /// A check of the folders of one profile that did not finish in time.
+    private struct SlowFolderCheck {
+        var paths: [String]
+        var task: Task<[String], Never>
+    }
+
+    /// Checks the folders of one profile, with a budget of time.
+    ///
+    /// A volume that does not answer must not hold the menu. When the check is
+    /// not done in time, the folders are shown as they are, and the check goes
+    /// on in the background: the next opening of the menu uses its answer.
+    private func checkFolders(of profile: Profile, budget: TimeInterval) async -> MenuFolderState.Entry {
+        let paths = RecentFolders(profile.recentDirs).paths
+        guard !paths.isEmpty else { return .checked([]) }
+        // A check that took too long is kept, so that the next opening of the
+        // menu uses its answer right away.
+        let work: Task<[String], Never>
+        if let slow = slowFolderChecks[profile.slug], slow.paths == paths {
+            work = slow.task
+        } else {
+            slowFolderChecks[profile.slug] = nil
+            work = Task.detached(priority: .userInitiated) {
+                // The rule of which folders are kept lives in the core.
+                var recent = RecentFolders(paths)
+                recent.prune(exists: { AppModel.folderExists($0) })
+                return recent.paths
+            }
+        }
+        switch await AppModel.withBudget(budget) { await work.value } {
+        case .value(let folders):
+            slowFolderChecks[profile.slug] = nil
+            return .checked(folders)
+        case .timeout:
+            slowFolderChecks[profile.slug] = SlowFolderCheck(paths: paths, task: work)
+            return .unchecked
+        }
+    }
+
+    /// The answer of a piece of work that had a budget of time.
+    private enum Budget<T: Sendable> {
+        /// The work is done.
+        case value(T)
+        /// The budget was over before the work was done.
+        case timeout
+    }
+
+    /// Waits for the work, but not longer than the budget.
+    ///
+    /// The work is not waited for when the budget is over: a check of the file
+    /// system cannot be stopped, and the menu must not wait for it. The first
+    /// answer wins: a late answer is dropped.
+    nonisolated private static func withBudget<T: Sendable>(
+        _ budget: TimeInterval,
+        work: @escaping @Sendable () async -> T
+    ) async -> Budget<T> {
+        let answer = OneAnswer<T>()
+        return await withCheckedContinuation { continuation in
+            answer.hold(continuation)
+            Task.detached(priority: .userInitiated) {
+                answer.finish(.value(await work()))
+            }
+            Task.detached(priority: .utility) {
+                try? await Task.sleep(nanoseconds: UInt64(max(0, budget) * 1_000_000_000))
+                answer.finish(.timeout)
+            }
+        }
+    }
+
+    /// Holds the answer of a piece of work with a budget. The first answer
+    /// wins: a late answer is dropped.
+    private final class OneAnswer<T: Sendable>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Budget<T>, Never>?
+
+        func hold(_ continuation: CheckedContinuation<Budget<T>, Never>) {
+            lock.lock()
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        func finish(_ answer: Budget<T>) {
+            lock.lock()
+            let pending = continuation
+            continuation = nil
+            lock.unlock()
+            pending?.resume(returning: answer)
         }
     }
 
@@ -1598,8 +1737,12 @@ extension ProfileError {
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
             return loc.t("error.unsafeDeletePath", path)
-        case .unsafeFolder(let path):
-            return loc.t("error.unsafeFolder", path)
+        case .unsafeFolderToOpen(let path):
+            // The path is shown with its control characters written out, so
+            // that the message cannot act on the terminal that shows it.
+            return loc.t("error.unsafeFolder.open", FolderPathSafety.visible(path))
+        case .unsafeFolderToSave(let path):
+            return loc.t("error.unsafeFolder.save", FolderPathSafety.visible(path))
         case .invalidPrice:
             return loc.t("error.invalidPrice")
         }

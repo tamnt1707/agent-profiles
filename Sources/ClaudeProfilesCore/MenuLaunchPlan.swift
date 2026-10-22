@@ -45,6 +45,14 @@ public struct MenuLaunchPlan: Equatable, Sendable {
         source == .chosenFolder && folder != nil
     }
 
+    /// The key of the launch: the profile and the folder.
+    ///
+    /// Two clicks on the same item of the menu have the same key, so the
+    /// second one can be ignored while the first one is on its way.
+    public var launchKey: String {
+        slug + "\u{1F}" + (folder ?? "")
+    }
+
     /// The recent folders of the profile after a launch that worked.
     ///
     /// A folder that was chosen in the menu moves to the front. A launch in the
@@ -61,12 +69,16 @@ public struct MenuLaunchPlan: Equatable, Sendable {
     /// The folder is remembered only after the launch worked: `remember` is
     /// not called at all when the launch fails. A folder of a terminal that
     /// never opened is therefore never remembered.
+    ///
+    /// The list of the recent folders is not handed over: the caller reads the
+    /// list that is live at that moment and adds the folder to it. Two
+    /// launches that overlap therefore keep both folders.
     public func run(
-        stored: [String],
         launch: () async throws -> Void,
-        remember: ([String]) -> Void
+        remember: (String) -> Void
     ) async throws {
         try await launch()
-        remember(recentFoldersAfterSuccess(stored: stored))
+        guard recordsRecentFolder, let folder else { return }
+        remember(folder)
     }
 }

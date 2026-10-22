@@ -43,4 +43,38 @@ public enum FolderPathSafety {
         default: return false
         }
     }
+
+    /// The name of a control character, as it is written in a program: `\t`,
+    /// `\n`, `\r` and `\u{1B}` for the others.
+    ///
+    /// The name is written instead of the character, so that the character
+    /// cannot act on the terminal that shows it.
+    public static func escaped(_ scalar: Unicode.Scalar) -> String {
+        switch scalar.value {
+        case 0x09: return "\\t"
+        case 0x0A: return "\\n"
+        case 0x0D: return "\\r"
+        default: return "\\u{\(String(scalar.value, radix: 16, uppercase: true))}"
+        }
+    }
+
+    /// The path as it can be shown to the user.
+    ///
+    /// Every control character is written as its name, so that the user can see
+    /// what was found and the terminal that shows the message does not act on
+    /// it. A long path is cut in the middle, so that the line stays one line.
+    public static func visible(_ path: String) -> String {
+        let written = path.unicodeScalars.map { scalar in
+            isControl(scalar) ? escaped(scalar) : String(scalar)
+        }.joined()
+        return truncated(written)
+    }
+
+    /// The path, cut in the middle when it is longer than the limit.
+    public static func truncated(_ path: String, limit: Int = 80) -> String {
+        guard path.count > limit else { return path }
+        let head = (limit - 1) / 2
+        let tail = limit - 1 - head
+        return String(path.prefix(head)) + "…" + String(path.suffix(tail))
+    }
 }

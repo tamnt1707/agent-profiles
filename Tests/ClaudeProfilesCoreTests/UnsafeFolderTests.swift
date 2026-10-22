@@ -49,7 +49,7 @@ final class UnsafeFolderTests: XCTestCase {
             try Launcher.launch(profile: Profile.sample(), terminal: .terminal, paths: paths,
                                 workdirOverride: attack, runner: runner)
         ) { error in
-            XCTAssertEqual(error as? ProfileError, .unsafeFolder(attack))
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToOpen(attack))
         }
         XCTAssertTrue(runner.calls.isEmpty, "osascript was run for an unsafe folder")
     }
@@ -62,7 +62,7 @@ final class UnsafeFolderTests: XCTestCase {
         XCTAssertThrowsError(
             try Launcher.launch(profile: profile, terminal: .terminal, paths: paths, runner: runner)
         ) { error in
-            XCTAssertEqual(error as? ProfileError, .unsafeFolder(attack))
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToOpen(attack))
         }
         XCTAssertTrue(runner.calls.isEmpty, "osascript was run for an unsafe folder")
     }
@@ -78,7 +78,7 @@ final class UnsafeFolderTests: XCTestCase {
                                                      workdirOverride: attack, runner: runner)
             XCTFail("the unsafe folder was launched")
         } catch {
-            XCTAssertEqual(error as? ProfileError, .unsafeFolder(attack))
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToOpen(attack))
         }
         XCTAssertTrue(runner.calls.isEmpty, "osascript was run for an unsafe folder")
     }
@@ -152,7 +152,7 @@ final class UnsafeFolderTests: XCTestCase {
         var profile = Profile.sample()
         profile.workdir = attack
         XCTAssertThrowsError(try store.saveProfile(profile, others: [])) { error in
-            XCTAssertEqual(error as? ProfileError, .unsafeFolder(attack))
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToSave(attack))
         }
     }
 
@@ -161,7 +161,7 @@ final class UnsafeFolderTests: XCTestCase {
         var profile = Profile.sample()
         profile.workdir = attack
         XCTAssertThrowsError(try store.validate(profile, others: [])) { error in
-            XCTAssertEqual(error as? ProfileError, .unsafeFolder(attack))
+            XCTAssertEqual(error as? ProfileError, .unsafeFolderToSave(attack))
         }
     }
 

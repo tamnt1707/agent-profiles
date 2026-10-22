@@ -145,7 +145,8 @@
 "error.duplicateCommand" = "The command claude-%@ is already used by the profile \"%@\".";
 "error.foreignCommand" = "The command claude-%@ is taken by the file %@, which was not created by this app.";
 "error.unsafeDeletePath" = "Refused to delete %@: this is not a safe profile folder.";
-"error.unsafeFolder" = "Refused to open %@: the folder name holds control characters that a terminal would act on.";
+"error.unsafeFolder.open" = "Refused to open %@: the path holds control characters that a terminal would act on.";
+"error.unsafeFolder.save" = "Refused to save the profile: the working directory %@ holds control characters (for example a tab or a line break) that a terminal could act on. Choose or type another folder.";
 "error.invalidBaseURL" = "The base URL must start with https:// or http://";
 "error.envMissingEquals" = "Line %d of the environment variables is missing the '=': %@";
 "error.invalidEnvName" = "Invalid variable name on line %d: %@";

@@ -82,4 +82,38 @@ final class FolderPathSafetyTests: XCTestCase {
         XCTAssertTrue(FolderPathSafety.isSafe("/tmp/100%"))
         XCTAssertTrue(FolderPathSafety.isSafe("/tmp/naïve—dash"))
     }
+
+    // MARK: - The path as it is shown
+
+    /// The control characters of a path are written as their names, so that the
+    /// message cannot act on the terminal that shows it.
+    func testTheVisiblePathWritesTheControlCharactersOut() {
+        XCTAssertEqual(FolderPathSafety.visible("/tmp/a\tb"), #"/tmp/a\tb"#)
+        XCTAssertEqual(FolderPathSafety.visible("/tmp/a\nb"), #"/tmp/a\nb"#)
+        XCTAssertEqual(FolderPathSafety.visible("/tmp/a\rb"), #"/tmp/a\rb"#)
+        XCTAssertEqual(FolderPathSafety.visible("/tmp/a\u{1B}b"), #"/tmp/a\u{1B}b"#)
+        XCTAssertEqual(FolderPathSafety.visible("/tmp/a\u{2028}b"), #"/tmp/a\u{2028}b"#)
+    }
+
+    /// A path without a control character is shown as it is.
+    func testTheVisiblePathOfANormalPathIsThePath() {
+        XCTAssertEqual(FolderPathSafety.visible("/tmp/plain"), "/tmp/plain")
+        XCTAssertEqual(FolderPathSafety.visible("/Users/me/Việt Nam"), "/Users/me/Việt Nam")
+    }
+
+    /// A long path is cut in the middle, so that the line stays one line.
+    func testTheVisiblePathIsCutInTheMiddle() {
+        let long = "/" + String(repeating: "x", count: 200)
+        let visible = FolderPathSafety.visible(long)
+        XCTAssertEqual(visible.count, 80)
+        XCTAssertTrue(visible.contains("…"))
+        XCTAssertTrue(visible.hasPrefix("/"))
+        XCTAssertTrue(visible.hasSuffix("x"))
+    }
+
+    /// A path of exactly the limit is not cut.
+    func testAPathOfTheLimitIsNotCut() {
+        let exact = String(repeating: "x", count: 80)
+        XCTAssertEqual(FolderPathSafety.visible(exact), exact)
+    }
 }

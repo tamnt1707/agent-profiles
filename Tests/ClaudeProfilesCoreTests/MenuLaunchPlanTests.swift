@@ -63,11 +63,11 @@ final class MenuLaunchPlanTests: XCTestCase {
         var remembered: [String] = []
         var launched = false
         do {
-            try await plan.run(stored: ["/tmp/old"], launch: {
+            try await plan.run(launch: {
                 launched = true
                 throw ProfileError.launcherFailed("boom")
-            }, remember: { folders in
-                remembered = folders
+            }, remember: { folder in
+                remembered.append(folder)
             })
             XCTFail("the failed launch did not throw")
         } catch {
@@ -77,24 +77,52 @@ final class MenuLaunchPlanTests: XCTestCase {
         XCTAssertEqual(remembered, [], "the folder was remembered although the launch failed")
     }
 
-    /// A launch that worked hands the new list to the remember step.
-    func testASuccessfulLaunchHandsOutTheNewList() async throws {
+    /// A launch that worked hands the folder to the remember step.
+    func testASuccessfulLaunchHandsOutTheFolder() async throws {
         let plan = MenuLaunchPlan.folder("work", "/tmp/new")
         var remembered: [String] = []
-        try await plan.run(stored: ["/tmp/old"], launch: {}, remember: { folders in
-            remembered = folders
+        try await plan.run(launch: {}, remember: { folder in
+            remembered.append(folder)
         })
-        XCTAssertEqual(remembered, ["/tmp/new", "/tmp/old"])
+        XCTAssertEqual(remembered, ["/tmp/new"])
     }
 
-    /// A launch of the profile itself hands out the list unchanged.
-    func testASuccessfulLaunchOfTheProfileHandsOutTheSameList() async throws {
+    /// A launch of the profile itself hands out nothing.
+    func testASuccessfulLaunchOfTheProfileRemembersNoFolder() async throws {
         let plan = MenuLaunchPlan.profile("work")
         var remembered: [String] = []
-        try await plan.run(stored: ["/tmp/old"], launch: {}, remember: { folders in
-            remembered = folders
+        try await plan.run(launch: {}, remember: { folder in
+            remembered.append(folder)
         })
-        XCTAssertEqual(remembered, ["/tmp/old"])
+        XCTAssertEqual(remembered, [])
+    }
+
+    /// Two launches that overlap both keep their folder: the list of the
+    /// recent folders is read again when the launch worked, and not before it
+    /// started.
+    func testTwoLaunchesThatOverlapBothKeepTheirFolder() {
+        // The first launch works and its folder is remembered.
+        var stored = ["/tmp/old"]
+        stored = MenuLaunchPlan.folder("work", "/tmp/one").recentFoldersAfterSuccess(stored: stored)
+        XCTAssertEqual(stored, ["/tmp/one", "/tmp/old"])
+        // The second launch started before the first one was remembered: it
+        // reads the list that is live at that moment.
+        let second = MenuLaunchPlan.folder("work", "/tmp/two").recentFoldersAfterSuccess(stored: stored)
+        XCTAssertEqual(second, ["/tmp/two", "/tmp/one", "/tmp/old"])
+    }
+
+    // MARK: - The key of a launch
+
+    /// Two clicks on the same item of the menu have the same key.
+    func testTheKeyOfALaunchIsTheProfileAndTheFolder() {
+        XCTAssertEqual(MenuLaunchPlan.folder("work", "/tmp/a").launchKey,
+                       MenuLaunchPlan.folder("work", "/tmp/a").launchKey)
+        XCTAssertNotEqual(MenuLaunchPlan.folder("work", "/tmp/a").launchKey,
+                          MenuLaunchPlan.folder("work", "/tmp/b").launchKey)
+        XCTAssertNotEqual(MenuLaunchPlan.folder("work", "/tmp/a").launchKey,
+                          MenuLaunchPlan.folder("other", "/tmp/a").launchKey)
+        XCTAssertNotEqual(MenuLaunchPlan.profile("work").launchKey,
+                          MenuLaunchPlan.folder("work", "/tmp/a").launchKey)
     }
 
     /// A folder with a control character never enters the list, even when the

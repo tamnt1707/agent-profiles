@@ -10,10 +10,11 @@ public enum Launcher {
     /// `workdirOverride` replaces the working directory of the profile for one
     /// launch (the folder chosen from the menu bar). An empty override means no `cd`.
     ///
-    /// - Throws: `ProfileError.unsafeFolder` when the folder holds a control
-    ///   character. The command is typed into a live shell, which acts on such
-    ///   a character before the shell parses the quotes, so nothing is built
-    ///   from an unsafe folder.
+    /// - Throws: `ProfileError.unsafeFolderToOpen` when the folder, the script
+    ///   or the home folder of the profile holds a control character. The
+    ///   command is typed into a live shell, which acts on such a character
+    ///   before the shell parses the quotes, so nothing is built from an unsafe
+    ///   path.
     public static func command(
         for profile: Profile,
         paths: Paths,
@@ -25,11 +26,21 @@ public enum Launcher {
         if !directory.isEmpty {
             let expanded = expandHome(directory, home: paths.home)
             guard FolderPathSafety.isSafe(expanded) else {
-                throw ProfileError.unsafeFolder(directory)
+                throw ProfileError.unsafeFolderToOpen(directory)
             }
             command += "cd \(ShellQuote.quote(expanded)) && "
         }
-        command += ShellQuote.quote(paths.script(for: profile.slug).path)
+        // The script of the profile and the home folder of the profile go into
+        // the command as well: a path with a control character in it is
+        // refused there too.
+        let script = paths.script(for: profile.slug).path
+        guard FolderPathSafety.isSafe(script) else {
+            throw ProfileError.unsafeFolderToOpen(script)
+        }
+        guard FolderPathSafety.isSafe(paths.home.path) else {
+            throw ProfileError.unsafeFolderToOpen(paths.home.path)
+        }
+        command += ShellQuote.quote(script)
         return command
     }
 
@@ -45,10 +56,13 @@ public enum Launcher {
     }
 
     /// The AppleScript that opens the terminal and types the command.
+    ///
+    /// The command stands in one string of the script. A quote and a
+    /// backslash are escaped, and so is every control character: a control
+    /// character in the text of the script would end the string, and the rest
+    /// of the command would be a second statement of the script.
     public static func appleScript(command: String, terminal: TerminalApp) -> String {
-        let escaped = command
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        let escaped = escapeForAppleScript(command)
         switch terminal {
         case .terminal:
             return """
@@ -68,14 +82,37 @@ public enum Launcher {
         }
     }
 
+    /// The text of the command, as it can stand inside an AppleScript string.
+    ///
+    /// A backslash and a quote are escaped, and a control character is written
+    /// as its name: nothing that is left can end the string of the script.
+    static func escapeForAppleScript(_ command: String) -> String {
+        var out = ""
+        for character in command {
+            switch character {
+            case "\\":
+                out += "\\\\"
+            case "\"":
+                out += "\\\""
+            default:
+                for scalar in character.unicodeScalars {
+                    out += FolderPathSafety.isControl(scalar)
+                        ? FolderPathSafety.escaped(scalar)
+                        : String(scalar)
+                }
+            }
+        }
+        return out
+    }
+
     /// Opens the terminal and waits for `osascript`. Returns the exit status.
     ///
     /// This blocks the calling thread while `osascript` runs. The user interface
     /// should use `launchInBackground`. The runner is injectable for the tests.
     /// When `osascript` fails, its output is part of the thrown error.
     ///
-    /// - Throws: `ProfileError.unsafeFolder` when the folder is not safe. The
-    ///   terminal is never opened and `osascript` is never run.
+    /// - Throws: `ProfileError.unsafeFolderToOpen` when the path is not safe.
+    ///   The terminal is never opened and `osascript` is never run.
     @discardableResult
     public static func launch(
         profile: Profile,
@@ -105,7 +142,7 @@ public enum Launcher {
     /// The same as `launch`, run off the calling thread, so that the user
     /// interface stays responsive while the terminal opens.
     ///
-    /// - Throws: `ProfileError.unsafeFolder` when the folder is not safe.
+    /// - Throws: `ProfileError.unsafeFolderToOpen` when the path is not safe.
     @discardableResult
     public static func launchInBackground(
         profile: Profile,

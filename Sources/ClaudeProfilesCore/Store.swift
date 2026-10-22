@@ -302,7 +302,7 @@ public struct Store {
         // here, before the profile is saved.
         let workdir = profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
         if !workdir.isEmpty, !FolderPathSafety.isSafe(workdir) {
-            throw ProfileError.unsafeFolder(profile.workdir)
+            throw ProfileError.unsafeFolderToSave(profile.workdir)
         }
         _ = try ShellQuote.parseExtraEnv(profile.extraEnv)
         // Prices are typed by hand: only finite, non-negative values are kept.
