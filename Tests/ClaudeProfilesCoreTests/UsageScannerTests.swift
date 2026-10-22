@@ -184,6 +184,47 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertEqual(summary(result).allTime.input, 20)
     }
 
+    // MARK: - A reply that is written again
+
+    /// A reply that is written to the same file twice counts once, with the
+    /// largest numbers of its lines: a complete line wins over a partial one.
+    func testARepeatedReplyCountsTheLargestOfItsLines() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":10,\"output_tokens\":5", id: "m", request: "r"),
+            rawReply(usage: "\"input_tokens\":40,\"output_tokens\":7,\"cache_read_input_tokens\":3", id: "m", request: "r"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 40)
+        XCTAssertEqual(summary(result).allTime.output, 7)
+        XCTAssertEqual(summary(result).allTime.cacheRead, 3)
+        XCTAssertEqual(summary(result).allTime.cacheWrite, 0)
+    }
+
+    /// Every counter is compared on its own: the smaller number of one counter
+    /// does not make the larger number of another one smaller.
+    func testEveryCounterOfARepeatedReplyIsComparedOnItsOwn() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":40,\"output_tokens\":2,\"cache_creation_input_tokens\":0", id: "m", request: "r"),
+            rawReply(usage: "\"input_tokens\":10,\"output_tokens\":9,\"cache_creation_input_tokens\":5", id: "m", request: "r"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 40)
+        XCTAssertEqual(summary(result).allTime.output, 9)
+        XCTAssertEqual(summary(result).allTime.cacheWrite, 5)
+    }
+
+    /// A repeated reply keeps the day of its first line.
+    func testARepeatedReplyKeepsTheDayOfItsFirstLine() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":10", id: "m", request: "r", at: "2026-10-20T05:00:00.000Z"),
+            rawReply(usage: "\"input_tokens\":40", id: "m", request: "r", at: "2026-10-21T05:00:00.000Z"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).today.input, 0)
+        XCTAssertEqual(summary(result).last7Days.input, 40)
+        XCTAssertEqual(summary(result).allTime.input, 40)
+    }
+
     // MARK: - Lines that must be skipped
 
     func testMalformedEmptyAndIrrelevantLinesAreSkipped() async throws {

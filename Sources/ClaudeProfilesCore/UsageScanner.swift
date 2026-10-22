@@ -103,7 +103,10 @@ public actor UsageScanner {
     /// Reads a whole file, line by line, into its per-day totals.
     private func scan(_ file: SessionFile, zone: String, calendar: Calendar) throws -> FileEntry {
         var entry = FileEntry(size: file.size, modified: file.modified, zone: zone, days: [:], undated: TokenTotals())
-        var seen = Set<String>()
+        // The replies of this file, by their id. A reply that is written
+        // several times to the same file counts once, with the largest numbers
+        // of all its lines.
+        var replies: [String: Reply] = [:]
         let dates = TimestampReader()
         let decoder = JSONDecoder()
         do {
@@ -116,17 +119,24 @@ public actor UsageScanner {
                 else {
                     return
                 }
-                // A reply is written several times to the same file; it counts once.
-                // Replies without an id cannot be recognised and are counted each time.
-                if let id = message.id, !seen.insert(id + "\u{1F}" + (record.requestId ?? "")).inserted {
-                    return
-                }
                 let totals = Self.tokenTotals(from: usage)
                 guard let totals else { return }
-                if let date = dates.date(record.timestamp) {
-                    entry.days[Self.dayKey(date, calendar), default: TokenTotals()] += totals
+                let day = dates.date(record.timestamp).map { Self.dayKey($0, calendar) }
+                // Replies without an id cannot be recognised and are counted each time.
+                guard let id = message.id else {
+                    Self.add(totals, ofDay: day, to: &entry)
+                    return
+                }
+                let key = id + "\u{1F}" + (record.requestId ?? "")
+                if let known = replies[key] {
+                    // The larger number of every counter wins: a line that was
+                    // written completely later is bigger than a partial one.
+                    replies[key] = Reply(
+                        day: known.day ?? day,
+                        totals: known.totals.merged(with: totals)
+                    )
                 } else {
-                    entry.undated += totals
+                    replies[key] = Reply(day: day, totals: totals)
                 }
             }
         } catch is CancellationError {
@@ -136,7 +146,28 @@ public actor UsageScanner {
             // a project folder of the user.
             throw UnreadableFile()
         }
+        // The replies are added up at the end: a reply that is written again
+        // can still change the numbers of the file.
+        for reply in replies.values {
+            Self.add(reply.totals, ofDay: reply.day, to: &entry)
+        }
         return entry
+    }
+
+    /// One reply of a file: the largest numbers of its lines and the day it
+    /// was written on.
+    private struct Reply {
+        var day: String?
+        var totals: TokenTotals
+    }
+
+    /// Adds the tokens of a reply to the totals of its day.
+    private static func add(_ totals: TokenTotals, ofDay day: String?, to entry: inout FileEntry) {
+        guard let day else {
+            entry.undated += totals
+            return
+        }
+        entry.days[day, default: TokenTotals()] += totals
     }
 
     /// A file that could not be read. It says nothing about the file itself.

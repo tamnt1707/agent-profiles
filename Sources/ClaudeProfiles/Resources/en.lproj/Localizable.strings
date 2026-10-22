@@ -233,7 +233,7 @@
 "editor.usage.allTime" = "All time";
 "editor.usage.refresh" = "Refresh";
 "editor.usage.detail" = "Input %@ · Output %@ · Cache read %@ · Cache written %@";
-"editor.usage.note" = "Numbers come from what the provider reports and can differ from your bill.";
+"editor.usage.note" = "Numbers come from what the provider reports and can differ from your bill. Sessions that were resumed or copied can be counted more than once.";
 "editor.usage.unsaved" = "Save the profile to count its usage.";
 "editor.usage.notIsolated" = "Usage needs a separate configuration space. Turn on \"Give this profile its own Claude configuration\" to count its usage.";
 "editor.usage.noFolder" = "No usage yet: the configuration folder of this profile does not exist.";
