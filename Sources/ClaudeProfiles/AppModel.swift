@@ -460,20 +460,23 @@ final class AppModel {
         }
     }
 
-    /// Copies `claude-<slug>` to the clipboard. The command that is being
-    /// edited is used, not the one of the saved profile.
+    /// Copies the command that runs the profile, the same one the "Open in
+    /// terminal" button types: the full path of the launcher script (and the
+    /// `cd` into the working directory), so it works in any terminal even when
+    /// the `bin` folder is not on the PATH. The command that is being edited is
+    /// used, not the one of the saved profile.
     func copyCommand() {
-        guard let draft else { return }
-        copyToPasteboard(command.slug.isEmpty ? draft.slug : command.slug)
+        guard var draft else { return }
+        if !command.slug.isEmpty { draft.slug = command.slug }
+        copyToPasteboard(Launcher.command(for: draft, paths: store.paths))
     }
 
     /// Copies the command of a profile in the sidebar, the one that was clicked.
     func copyCommand(for profile: Profile) {
-        copyToPasteboard(profile.slug)
+        copyToPasteboard(Launcher.command(for: profile, paths: store.paths))
     }
 
-    private func copyToPasteboard(_ slug: String) {
-        let text = store.paths.command(for: slug)
+    private func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         status = Status(kind: .success, text: loc.t("status.copied", text))
