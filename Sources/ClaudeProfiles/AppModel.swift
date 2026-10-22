@@ -863,6 +863,10 @@ final class AppModel {
     private(set) var loginShellStatus: ShellStatus = .notConfigured
     /// The state of every supported shell. Read when needed, never while drawing.
     private(set) var shellStatuses: [ShellKind: ShellStatus] = [:]
+    /// For a damaged shell: the file that is damaged, with `~`. Read with `refreshPathStatus()`.
+    private(set) var shellDamagedFiles: [ShellKind: String] = [:]
+    /// For a shell with a block in a file it does not read: those files, with `~`.
+    private(set) var shellStrayFiles: [ShellKind: String] = [:]
     /// Set while the question "Make the claude-<name> commands work…?" is open.
     var isOfferingPathSetup = false
     /// The profile slug shown in that question.
@@ -882,6 +886,17 @@ final class AppModel {
         loginKind = setup.loginKind
         loginShellStatus = setup.loginStatus()
         shellStatuses = Dictionary(uniqueKeysWithValues: ShellKind.supported.map { ($0, setup.status(for: $0)) })
+        shellDamagedFiles = [:]
+        shellStrayFiles = [:]
+        for shell in ShellKind.supported {
+            if shellStatuses[shell] == .damaged, let file = setup.damagedFile(for: shell) ?? setup.targets(for: shell).first?.url {
+                shellDamagedFiles[shell] = displayPath(file)
+            }
+            let strays = setup.strayFiles(for: shell)
+            if !strays.isEmpty {
+                shellStrayFiles[shell] = strays.map { displayPath($0) }.joined(separator: ", ")
+            }
+        }
     }
 
     /// The line the user copies when the app does not edit the login shell.
@@ -910,7 +925,10 @@ final class AppModel {
         guard !data.pathPromptDeclined, !pathOfferAskedThisLaunch else { return }
         switch loginShellStatus {
         case .notConfigured: pathOfferPartly = false
-        case .partlyConfigured: pathOfferPartly = true
+        case .partlyConfigured:
+            // A block in a file bash no longer reads is not offered: Remove comes first.
+            guard shellStrayFiles[loginKind] == nil else { return }
+            pathOfferPartly = true
         default: return
         }
         pathOfferAskedThisLaunch = true
@@ -965,12 +983,17 @@ final class AppModel {
     /// A file that cannot be changed is left alone and named in the message.
     func removeAllPathSetup() -> Status {
         let report = pathSetup.removeEverything()
-        var message = removalMessage(report.changed)
+        let removed = removalMessage(report.changed)
+        var message = removed
         if !report.skipped.isEmpty {
             let list = report.skipped
                 .map { displayPath($0.url) + ": " + pathErrorText($0.reason) }
                 .joined(separator: "\n")
-            message = Status(kind: .failure, text: message.text + "\n" + loc.t("pathSetup.leftAlone", list))
+            let leftAlone = loc.t("pathSetup.leftAlone", list)
+            // Nothing removed: the skipped files are the whole answer.
+            message = report.changed.isEmpty
+                ? Status(kind: .failure, text: leftAlone)
+                : Status(kind: .failure, text: removed.text + "\n" + leftAlone)
         }
         refreshPathStatus()
         return message
@@ -987,8 +1010,13 @@ final class AppModel {
     private func pathErrorText(_ error: Error) -> String {
         guard let shellError = error as? ShellPathError else { return loc.t("error.generic") }
         switch shellError {
-        case .damaged:
-            return loc.t("pathSetup.damaged")
+        case .damaged(let path):
+            return loc.t("pathSetup.damaged", displayPath(URL(fileURLWithPath: path)))
+        case .partial(let changed, let reason):
+            let list = changed.map { displayPath(URL(fileURLWithPath: $0)) }.joined(separator: ", ")
+            return pathErrorText(reason) + "\n" + loc.t("pathSetup.partial", list)
+        case .blockElsewhere(let path):
+            return loc.t("pathSetup.elsewhere", displayPath(URL(fileURLWithPath: path)))
         case .unsupported:
             return loc.t("pathSetup.unsupportedBar", loginKind.displayName, loginManualLine)
         case .ioFailed(let path):

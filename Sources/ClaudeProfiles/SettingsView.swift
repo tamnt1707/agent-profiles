@@ -125,7 +125,7 @@ struct SettingsView: View {
         let status = model.shellStatuses[shell] ?? .notConfigured
         LabeledContent(shell.displayName) {
             HStack(spacing: 8) {
-                Text(statusText(status))
+                Text(statusText(status, shell))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
@@ -143,13 +143,17 @@ struct SettingsView: View {
         }
     }
 
-    private func statusText(_ status: ShellStatus) -> String {
+    private func statusText(_ status: ShellStatus, _ shell: ShellKind) -> String {
         switch status {
         case .configured: return model.loc.t("pathSetup.status.configured")
-        case .partlyConfigured: return model.loc.t("pathSetup.status.partly")
+        case .partlyConfigured:
+            if let stray = model.shellStrayFiles[shell] {
+                return model.loc.t("pathSetup.status.stray", stray)
+            }
+            return model.loc.t("pathSetup.status.partly")
         case .manual: return model.loc.t("pathSetup.status.manual")
         case .notConfigured: return model.loc.t("pathSetup.status.notConfigured")
-        case .damaged: return model.loc.t("pathSetup.status.damaged")
+        case .damaged: return model.loc.t("pathSetup.status.damaged", model.shellDamagedFiles[shell] ?? "")
         case .unsupported: return model.loc.t("pathSetup.status.unsupported")
         case .unresolvedZdotdir: return model.loc.t("pathSetup.status.zdotdir", model.zshManualLine)
         }

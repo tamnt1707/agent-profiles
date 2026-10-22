@@ -683,8 +683,9 @@ final class ShellPathSetupTests: XCTestCase {
         }
         XCTAssertEqual(text(file(".zshrc")), "changed-1\n")
         XCTAssertFalse(exists(file(".zshrc.claude-profiles.bak")))
+        // Staged names are "..zshrc.<pid>.<uuid>.tmp": a leftover is one of those.
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: home.path)
-            .filter { $0.hasPrefix(".zshrc.") }
+            .filter { $0.hasPrefix("..zshrc.") && $0.hasSuffix(".tmp") }
         XCTAssertEqual(leftovers, [])
     }
 
@@ -808,5 +809,274 @@ final class ShellPathSetupTests: XCTestCase {
         store.removeEmptySharedFolders()
         XCTAssertTrue(exists(paths.homesDir.appendingPathComponent("alice")))
         XCTAssertTrue(exists(paths.binDir.appendingPathComponent("claude-x")))
+    }
+
+    // MARK: - Relative ZDOTDIR never resolves against the current folder (M-A)
+
+    func testRelativeZdotdirIsUnresolvedAndNothingIsResolvedAgainstTheCurrentFolder() throws {
+        let cwd = temp.url.appendingPathComponent("cwd", isDirectory: true)
+        try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
+        let original = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(cwd.path))
+        defer { _ = FileManager.default.changeCurrentDirectoryPath(original) }
+
+        for line in ["ZDOTDIR=zsh", "ZDOTDIR=./z", "ZDOTDIR=../z", "export ZDOTDIR=zsh"] {
+            try write(line + "\n", to: file(".zshenv"))
+            let setup = setup()
+            XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir, line)
+            XCTAssertThrowsError(try setup.install(for: .zsh), line) { error in
+                XCTAssertEqual(error as? ShellPathError, .zdotdirUnresolved(self.file(".zshenv").path))
+            }
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: cwd.path), [], line)
+            XCTAssertEqual(text(file(".zshenv")), line + "\n", line)
+        }
+    }
+
+    // MARK: - Only one plain top-level ZDOTDIR assignment is read (M-C)
+
+    func testZdotdirInAnyOtherShapeIsUnresolvedAndNothingIsEdited() throws {
+        let zdot = home.path + "/zdot"
+        let zdot2 = home.path + "/zdot2"
+        let rejected = [
+            "if [ -d /x ]; then\n  ZDOTDIR=\(zdot)\nfi\n",
+            "case $HOST in\n  a) ZDOTDIR=\(zdot) ;;\nesac\n",
+            "for d in /x; do\n  ZDOTDIR=$d\ndone\n",
+            "while false; do ZDOTDIR=\(zdot); done\n",
+            "f() {\n  ZDOTDIR=\(zdot)\n}\nf\n",
+            "{ ZDOTDIR=\(zdot); }\n",
+            "cat <<'EOF'\nZDOTDIR=\(zdot)\nEOF\n",
+            "ZDOTDIR=\(zdot)\nunset ZDOTDIR\n",
+            "ZDOTDIR=\(zdot)\nZDOTDIR=\(zdot2)\n",
+            "[ -z \"$ZDOTDIR\" ] && ZDOTDIR=\(zdot)\n",
+            ": ${ZDOTDIR:=\(zdot)}\n",
+            "typeset ZDOTDIR=\(zdot)\n",
+            "export ZDOTDIR\n",
+        ]
+        for content in rejected {
+            try write(content, to: file(".zshenv"))
+            let setup = setup()
+            XCTAssertEqual(setup.status(for: .zsh), .unresolvedZdotdir, content.debugDescription)
+            XCTAssertThrowsError(try setup.install(for: .zsh), content.debugDescription) { error in
+                XCTAssertEqual(error as? ShellPathError, .zdotdirUnresolved(self.file(".zshenv").path))
+            }
+            XCTAssertFalse(exists(file(".zshrc")), content.debugDescription)
+            XCTAssertFalse(exists(URL(fileURLWithPath: zdot).appendingPathComponent(".zshrc")), content.debugDescription)
+            XCTAssertEqual(text(file(".zshenv")), content, content.debugDescription)
+        }
+    }
+
+    func testSingleTopLevelZdotdirAssignmentIsStillReadAmongOtherLines() throws {
+        let zdot = home.appendingPathComponent("zdot", isDirectory: true)
+        let accepted = [
+            "if true; then\n  echo hi\nfi\nexport ZDOTDIR=\(zdot.path)\n",
+            "# ZDOTDIR=/nowhere\nZDOTDIR=\(zdot.path)\n",
+            "export ZDOTDIR=\"$HOME/zdot\"\n",
+            "ZDOTDIR=\(zdot.path)\nif true; then\n  echo hi\nfi\n",
+        ]
+        for content in accepted {
+            try write(content, to: file(".zshenv"))
+            let setup = setup()
+            _ = try setup.install(for: .zsh)
+            XCTAssertEqual(setup.status(for: .zsh), .configured, content.debugDescription)
+            XCTAssertTrue(exists(zdot.appendingPathComponent(".zshrc")), content.debugDescription)
+            _ = try setup.remove(for: .zsh)
+            XCTAssertFalse(exists(zdot.appendingPathComponent(".zshrc")), content.debugDescription)
+            try FileManager.default.removeItem(at: zdot)
+        }
+    }
+
+    // MARK: - CRLF files and the damaged message (M-B, M-E)
+
+    private var crlfBlock: String { block.replacingOccurrences(of: "\n", with: "\r\n") }
+
+    func testCRLFFileGetsACRLFBlockAndRemovesToTheOriginalBytes() throws {
+        try write("a\r\n", to: file(".zshrc"))
+        let setup = setup()
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\r\n\r\n" + crlfBlock)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\r\n")
+    }
+
+    func testBlockEditedOnWindowsWithCRLFEverywhereIsRecognisedAndRemovable() throws {
+        try write("a\r\n\r\n" + crlfBlock + "b\r\n", to: file(".zshrc"))
+        let setup = setup()
+
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\r\n\r\nb\r\n")
+    }
+
+    func testCRLFBlockInTheMiddleKeepsBothSidesIntact() throws {
+        try write("a\r\n" + crlfBlock + "b\r\n", to: file(".zshrc"))
+        _ = try setup().remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\r\nb\r\n")
+    }
+
+    func testCRLFBlockAtTheEndTakesTheLineEndingAsAPair() throws {
+        try write("foo\r\n" + crlfBlock, to: file(".zshrc"))
+        _ = try setup().remove(for: .zsh)
+        // The CR and the LF before the block go together: never a lone CR left behind.
+        XCTAssertEqual(text(file(".zshrc")), "foo")
+    }
+
+    func testDamagedFileIsNamedSoTheUserKnowsWhichToFix() throws {
+        try write("keep\n" + begin + "\nexport X=1\n" + end + "\n", to: file(".zshrc"))
+        let setup = setup()
+        XCTAssertEqual(setup.damagedFile(for: .zsh)?.path, file(".zshrc").path)
+        XCTAssertNil(setup.damagedFile(for: .posix))
+    }
+
+    // MARK: - Partial installs say what was already changed (M-D)
+
+    func testPartialInstallReportsTheFilesAlreadyChangedAndKeepsThem() throws {
+        try write("bp\n", to: file(".bash_profile"))
+        try write("rc\n", to: file(".bashrc"))
+        var setup = setup(login: "/bin/bash")
+        setup.stagingHook = { url, attempt in
+            if url.lastPathComponent == ".bashrc" {
+                try? Data("changed-\(attempt)\n".utf8).write(to: url, options: .atomic)
+            }
+        }
+
+        XCTAssertThrowsError(try setup.install(for: .bash)) { error in
+            XCTAssertEqual(
+                error as? ShellPathError,
+                .partial(changed: [self.file(".bash_profile").path], reason: .changedWhileEditing)
+            )
+        }
+        XCTAssertEqual(occurrences(begin, in: text(file(".bash_profile"))), 1)
+        XCTAssertEqual(text(file(".bashrc")), "changed-1\n")
+        // The changed file can be undone with Remove.
+        let removed = try self.setup(login: "/bin/bash").remove(for: .bash)
+        XCTAssertEqual(removed.map(\.lastPathComponent), [".bash_profile"])
+        XCTAssertEqual(text(file(".bash_profile")), "bp\n")
+    }
+
+    // MARK: - The record is written before a file is created (M-H)
+
+    private var recordPath: String { home.appendingPathComponent(".claude-profiles/path-setup.json").path }
+
+    func testRecordWriteFailureBeforeCreationLeavesNoFileBehind() throws {
+        var setup = setup()
+        setup.recordWriteHook = { throw CocoaError(.fileWriteUnknown) }
+
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .ioFailed(self.recordPath))
+        }
+        XCTAssertFalse(exists(file(".zshrc")))
+    }
+
+    func testRecordEntryIsDroppedAgainWhenTheCreationFails() throws {
+        var setup = setup()
+        setup.stagingHook = { url, _ in
+            // Remove the staged file so the rename that creates the file fails.
+            let folder = url.deletingLastPathComponent()
+            // Staged names are "..zshrc.<pid>.<uuid>.tmp" (a dot, then the target's name).
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            where name.hasPrefix("..zshrc.") && name.hasSuffix(".tmp") {
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+            }
+        }
+
+        XCTAssertThrowsError(try setup.install(for: .zsh)) { error in
+            XCTAssertEqual(error as? ShellPathError, .ioFailed(self.file(".zshrc").path))
+        }
+        XCTAssertFalse(exists(file(".zshrc")))
+        XCTAssertFalse(createdRecord().contains(file(".zshrc").path), "a file that was not created is not recorded")
+    }
+
+    func testRecordWriteFailureOnRemovalIsReportedAndTheOtherFilesAreStillRemoved() throws {
+        let setup = setup()
+        _ = try setup.install(for: .zsh)
+        _ = try setup.install(for: .posix)
+        var failing = setup
+        failing.recordWriteHook = { throw CocoaError(.fileWriteUnknown) }
+
+        let report = failing.removeEverything()
+        XCTAssertEqual(Set(report.changed.map(\.lastPathComponent)), [".zshrc", ".profile"])
+        XCTAssertFalse(exists(file(".zshrc")))
+        XCTAssertFalse(exists(file(".profile")))
+        XCTAssertEqual(report.skipped.map { $0.url.path }, [recordPath])
+        XCTAssertEqual(report.skipped.first?.reason, .ioFailed(recordPath))
+    }
+
+    // MARK: - Removal reports only what had our block (M-G)
+
+    func testRemoveEverythingSaysNothingAboutAFileThatNeverHadTheBlock() throws {
+        try FileManager.default.createSymbolicLink(
+            at: file(".profile"),
+            withDestinationURL: home.appendingPathComponent("missing/profile")
+        )
+        let report = setup().removeEverything()
+
+        XCTAssertEqual(report.changed, [])
+        XCTAssertEqual(report.skipped, [])
+    }
+
+    func testRemoveEverythingReportsOnlyTheDamagedFileAndNotTheUnrelatedLink() throws {
+        try write("keep\n" + begin + "\nexport X=1\n", to: file(".zshrc"))
+        try FileManager.default.createSymbolicLink(
+            at: file(".profile"),
+            withDestinationURL: home.appendingPathComponent("missing/profile")
+        )
+        let report = setup().removeEverything()
+
+        XCTAssertEqual(report.changed, [])
+        XCTAssertEqual(report.skipped.map(\.url.lastPathComponent), [".zshrc"])
+    }
+
+    func testRemoveEverythingFindsTheZdotdirBlockWrittenBeforeZdotdirBecameUnreadable() throws {
+        let zdot = home.appendingPathComponent("zdot-written", isDirectory: true)
+        try write("ZDOTDIR=\(zdot.path)\n", to: file(".zshenv"))
+        _ = try setup().install(for: .zsh)
+        XCTAssertTrue(exists(zdot.appendingPathComponent(".zshrc")))
+
+        try write("ZDOTDIR=$(echo \(zdot.path))\n", to: file(".zshenv"))
+        let report = setup().removeEverything()
+
+        XCTAssertEqual(report.changed.map(\.path), [zdot.appendingPathComponent(".zshrc").path])
+        XCTAssertFalse(exists(zdot.appendingPathComponent(".zshrc")))
+        XCTAssertEqual(report.skipped, [])
+    }
+
+    // MARK: - Bash login file drift (M-I)
+
+    func testBlockLeftInProfileIsPartlyConfiguredAndInstallNeverAddsASecondBlock() throws {
+        let bash = setup(login: "/bin/bash")
+        _ = try setup().install(for: .posix)
+        try write("bp\n", to: file(".bash_profile"))
+
+        XCTAssertEqual(bash.status(for: .bash), .partlyConfigured)
+        XCTAssertEqual(bash.strayFiles(for: .bash).map(\.path), [file(".profile").path])
+        XCTAssertThrowsError(try bash.install(for: .bash)) { error in
+            XCTAssertEqual(error as? ShellPathError, .blockElsewhere(self.file(".profile").path))
+        }
+        XCTAssertEqual(text(file(".bash_profile")), "bp\n")
+        XCTAssertEqual(occurrences(begin, in: text(file(".profile"))), 1)
+
+        let removed = try bash.remove(for: .bash)
+        XCTAssertEqual(removed.map(\.lastPathComponent), [".profile"])
+        XCTAssertFalse(exists(file(".profile")), "created by the app, so it goes with its block")
+        XCTAssertEqual(bash.status(for: .bash), .notConfigured)
+        _ = try bash.install(for: .bash)
+        XCTAssertEqual(bash.status(for: .bash), .configured)
+    }
+
+    func testRemoveForBashFindsEveryManagedBlockInAnyLoginFile() throws {
+        try write("bp\n", to: file(".bash_profile"))
+        try write("p\n", to: file(".profile"))
+        let bash = setup(login: "/bin/bash")
+        _ = try bash.install(for: .bash)
+        _ = try setup().install(for: .posix)
+        XCTAssertEqual(occurrences(begin, in: text(file(".profile"))), 1)
+
+        _ = try bash.remove(for: .bash)
+        XCTAssertEqual(text(file(".bash_profile")), "bp\n")
+        XCTAssertEqual(text(file(".profile")), "p\n")
+        XCTAssertEqual(bash.status(for: .bash), .notConfigured)
     }
 }

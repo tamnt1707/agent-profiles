@@ -253,7 +253,7 @@
 "pathSetup.status.partly" = "Mới thêm một phần";
 "pathSetup.status.manual" = "Đã thêm bằng tay";
 "pathSetup.status.notConfigured" = "Chưa thêm";
-"pathSetup.status.damaged" = "Bị hỏng. Không thay đổi.";
+"pathSetup.status.damaged" = "Bị hỏng trong %@. Không thay đổi.";
 "pathSetup.status.unsupported" = "Chưa hỗ trợ. Hãy tự chép dòng lệnh.";
 "pathSetup.add" = "Thêm";
 "pathSetup.remove" = "Gỡ";
@@ -266,8 +266,8 @@
 "pathSetup.removed" = "Đã gỡ các dòng của Claude Profiles khỏi %@.";
 "pathSetup.nothingToRemove" = "Không có gì để gỡ.";
 "pathSetup.failed" = "Không sửa được %@. Hãy kiểm tra file có ghi được không.";
-"pathSetup.damaged" = "Một khối của Claude Profiles trong file shell bị hỏng. Claude Profiles không thay đổi nó. Hãy sửa hoặc gỡ bằng tay.";
-"pathSetup.damagedBar" = "Một khối của Claude Profiles trong file shell bị hỏng nên không có gì được thay đổi. Hãy sửa bằng tay.";
+"pathSetup.damaged" = "Khối của Claude Profiles trong %@ bị hỏng. Claude Profiles không thay đổi nó. Hãy sửa hoặc gỡ bằng tay.";
+"pathSetup.damagedBar" = "Khối của Claude Profiles trong %@ bị hỏng nên không có gì được thay đổi. Hãy sửa bằng tay.";
 "pathSetup.unsupportedBar" = "Shell của bạn (%@) cần thiết lập bằng tay. Hãy thêm dòng này vào file khởi động: %@";
 "pathSetup.offer.title" = "Làm cho các lệnh claude-%@ chạy được trong mọi terminal?";
 "pathSetup.offer.message" = "Claude Profiles thêm MỘT khối quản lý vào file khởi động của shell. File gốc được sao lưu trước. Bạn có thể gỡ khối trong Cài đặt, hoặc khi xóa profile cuối cùng.";
@@ -281,7 +281,10 @@
 "pathSetup.status.zdotdir" = "ZDOTDIR được đặt trong ~/.zshenv theo cách Claude Profiles không đọc được. Chưa đổi gì. Hãy thêm dòng này vào file khởi động zsh bằng tay: %@";
 "pathSetup.zdotdir" = "ZDOTDIR trong %@ được đặt theo cách Claude Profiles không đọc được. Chưa đổi gì. Hãy thêm dòng này vào file khởi động zsh bằng tay: %@";
 "pathSetup.brokenLink" = "%@ là liên kết dẫn tới một nơi không tồn tại hoặc bị lặp vòng. Claude Profiles không thay đổi nó.";
-"pathSetup.readOnly" = "%@ không ghi được. Chưa ghi gì cả. Hãy cho phép ghi rồi thử lại.";
-"pathSetup.changedWhileEditing" = "File đã đổi trong lúc Claude Profiles đang sửa; chưa ghi gì cả, hãy thử lại.";
+"pathSetup.readOnly" = "%@ không ghi được nên không bị đổi. Hãy cho phép ghi rồi thử lại.";
+"pathSetup.changedWhileEditing" = "Một file đã đổi trong lúc Claude Profiles đang sửa, nên file đó chưa được ghi. Hãy thử lại.";
 "pathSetup.offer.partlyMessage" = "Một số file chứa thiết lập này đang thiếu. Hãy thêm lại để hoàn tất. Mỗi file nhận MỘT khối quản lý, sau khi được sao lưu.";
 "pathSetup.leftAlone" = "Đã để nguyên, không đổi gì trong: %@";
+"pathSetup.status.stray" = "Mới thêm một phần. Có khối trong %@, nơi bash không còn đọc nữa.";
+"pathSetup.partial" = "Đã đổi rồi: %@. Không ghi thêm gì nữa. Hãy dùng Gỡ để hoàn tác thay đổi trong các file đó.";
+"pathSetup.elsewhere" = "Có khối của Claude Profiles trong %@, nơi bash không còn đọc nữa. Hãy gỡ các dòng của Claude Profiles trước, rồi thêm lại.";

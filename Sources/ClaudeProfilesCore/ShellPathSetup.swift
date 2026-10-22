@@ -14,10 +14,16 @@ public enum ShellPathError: Error, Equatable, Sendable {
     case brokenLink(String)
     /// The file, or the folder it has to be written in, is not writable.
     case notWritable(String)
-    /// The file changed twice while it was being edited. Nothing was written.
+    /// A file changed twice while it was being edited. That file was not written.
     case changedWhileEditing
     /// `ZDOTDIR` is set in `~/.zshenv` in a form the app cannot read. Carries `~/.zshenv`.
     case zdotdirUnresolved(String)
+    /// Some files were already changed by this install before `reason` stopped it.
+    /// Carries the changed files, in the order they were written.
+    indirect case partial(changed: [String], reason: ShellPathError)
+    /// A managed block sits in a file bash no longer reads (for example `~/.profile`
+    /// once `~/.bash_profile` exists). Nothing is added; Remove it first. Carries that file.
+    case blockElsewhere(String)
 }
 
 /// The state of the PATH setup of one shell.
@@ -112,6 +118,9 @@ public struct ShellPathSetup: Sendable {
     /// Test hook: called after a file was read and its new content staged, just
     /// before the file is checked again. Arguments: the file and the attempt (0 or 1).
     var stagingHook: (@Sendable (URL, Int) -> Void)? = nil
+    /// Test hook: called before the record file (`path-setup.json`) is written. Throwing
+    /// here makes the record write fail.
+    var recordWriteHook: (@Sendable () throws -> Void)? = nil
 
     public init(
         home: URL,
@@ -239,13 +248,23 @@ public struct ShellPathSetup: Sendable {
         if case .folder(let dir) = zshDirectory {
             all.append(.block(dir.appendingPathComponent(".zshrc")))
         }
-        all.append(.block(homeFile(".zshrc")))
-        for name in [".bash_profile", ".bash_login", ".profile", ".bashrc"] {
-            all.append(.block(homeFile(name)))
+        // The folders an earlier install wrote to, so their block is found even when
+        // `ZDOTDIR` can no longer be read.
+        for folder in recordedZshFolders() {
+            all.append(.block(folder.appendingPathComponent(".zshrc")))
         }
+        all.append(.block(homeFile(".zshrc")))
+        for target in bashCandidates() { all.append(target) }
         all.append(.fishFile(fishFile))
         var seen = Set<String>()
         return all.filter { seen.insert($0.url.standardizedFileURL.path).inserted }
+    }
+
+    /// Every bash file that may hold our block: the three login files and `.bashrc`.
+    /// Bash reads only one of the login files, but a block left in another one (after
+    /// the login file changed) is still ours to find and remove.
+    private func bashCandidates() -> [Target] {
+        [".bash_profile", ".bash_login", ".profile", ".bashrc"].map { .block(homeFile($0)) }
     }
 
     /// The files that may hold a line the user wrote by hand for this shell.
@@ -258,7 +277,9 @@ public struct ShellPathSetup: Sendable {
                 dir.appendingPathComponent(".zshrc"),
                 dir.appendingPathComponent(".zprofile"),
                 dir.appendingPathComponent(".zshenv"),
-                // zsh always reads ~/.zshenv, whatever ZDOTDIR is.
+                // ~/.zshenv is scanned too: it is where ZDOTDIR is usually set, so a
+                // line there is seen by the status. Which startup files zsh reads
+                // depends on ZDOTDIR; this does not claim more than that.
                 homeFile(".zshenv"),
             ]
         case .bash:
@@ -371,27 +392,74 @@ public struct ShellPathSetup: Sendable {
         case unresolvable
     }
 
-    /// The last `ZDOTDIR=` assignment of a `~/.zshenv` text (`export` optional),
-    /// resolved. `nil` when the text has none. Only simple forms are read: a
-    /// literal absolute path, or one that starts with `$HOME`, `${HOME}` or `~`.
+    /// The `ZDOTDIR` that a `~/.zshenv` text sets, resolved. `nil` when the text
+    /// does not mention `ZDOTDIR` at all.
+    ///
+    /// Conservative: exactly one plain assignment at the top level is read
+    /// (`ZDOTDIR=…` or `export ZDOTDIR=…`, with a literal absolute path or a value
+    /// that starts with `$HOME`, `${HOME}` or `~`). Anything else that mentions
+    /// `ZDOTDIR` makes it `.unresolvable`: an assignment inside an `if`, `case`,
+    /// `for`, `while`, function or brace block, inside a here-doc, a second
+    /// assignment, `unset ZDOTDIR`, a conditional such as `[ -z "$ZDOTDIR" ] && …`,
+    /// or any other form. Comment lines are ignored.
     static func zdotdirAssignment(in text: String, home: String) -> ZdotdirValue? {
-        var found: ZdotdirValue?
+        var values: [String] = []
+        var depth = 0
+        var heredoc: String?
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            var line = Substring(rawLine)
-            if line.hasSuffix("\r") { line = line.dropLast() }
-            line = line.drop(while: { $0 == " " || $0 == "\t" })
-            if line.hasPrefix("#") { continue }
-            if line.hasPrefix("export") {
-                let rest = line.dropFirst("export".count)
-                guard rest.first == " " || rest.first == "\t" else { continue }
-                line = rest.drop(while: { $0 == " " || $0 == "\t" })
+            var line = String(rawLine)
+            if line.hasSuffix("\r") { line.removeLast() }
+            let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+            if let delimiter = heredoc {
+                // The body of a here-doc is text, never a statement.
+                if line.contains("ZDOTDIR") { return .unresolvable }
+                if trimmed == delimiter { heredoc = nil }
+                continue
             }
-            guard line.hasPrefix("ZDOTDIR=") else { continue }
-            let value = String(line.dropFirst("ZDOTDIR=".count))
-                .trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
-            found = resolveZdotdir(value, home: home)
+            if trimmed.hasPrefix("#") { continue }
+            if line.contains("ZDOTDIR") {
+                guard depth == 0, let value = plainZdotdirValue(trimmed) else { return .unresolvable }
+                values.append(value)
+            }
+            for segment in trimmed.split(whereSeparator: { ";&|".contains($0) }) {
+                guard let first = segment.split(whereSeparator: { $0 == " " || $0 == "\t" }).first else { continue }
+                if zdotdirOpeners.contains(String(first)) || segment.contains("()") {
+                    depth += 1
+                } else if zdotdirClosers.contains(String(first)) {
+                    depth -= 1
+                    if depth < 0 { return .unresolvable }
+                }
+            }
+            if let open = line.range(of: "<<"), !line[open.upperBound...].hasPrefix("<") {
+                let word = line[open.upperBound...]
+                    .drop(while: { $0 == "-" || $0 == " " || $0 == "\t" })
+                    .prefix(while: { !" \t;&|)".contains($0) })
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+                guard !word.isEmpty else { return .unresolvable }
+                heredoc = word
+            }
         }
-        return found
+        if values.count > 1 { return .unresolvable }
+        guard let value = values.first else { return nil }
+        return resolveZdotdir(value, home: home)
+    }
+
+    private static let zdotdirOpeners: Set<String> = ["if", "case", "for", "while", "until", "select", "function", "{"]
+    private static let zdotdirClosers: Set<String> = ["fi", "esac", "done", "}"]
+
+    /// The value of a plain top-level `ZDOTDIR=value` or `export ZDOTDIR=value` line,
+    /// or `nil` when the line is any other form.
+    private static func plainZdotdirValue(_ trimmed: String) -> String? {
+        var rest = Substring(trimmed)
+        if rest.hasPrefix("export") {
+            let after = rest.dropFirst("export".count)
+            guard after.first == " " || after.first == "\t" else { return nil }
+            rest = after.drop(while: { $0 == " " || $0 == "\t" })
+        }
+        guard rest.hasPrefix("ZDOTDIR=") else { return nil }
+        let value = rest.dropFirst("ZDOTDIR=".count).trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+        guard !value.isEmpty, !value.contains(where: { ";&|()<>`".contains($0) }) else { return nil }
+        return value
     }
 
     /// Resolves the value of a `ZDOTDIR` assignment, or says it cannot be done.
@@ -453,7 +521,11 @@ public struct ShellPathSetup: Sendable {
         for file in files {
             if try state(of: file) { managed += 1 }
         }
+        // Every file bash reads has the block: PATH works, whatever else holds one.
         if !files.isEmpty && managed == files.count { return .configured }
+        // Otherwise a block in a file bash no longer reads is the honest state: say so,
+        // and never add a second block next to it.
+        if try !strayBlocks(for: shell).isEmpty { return .partlyConfigured }
         if managed > 0 { return .partlyConfigured }
         for file in scanFiles(for: shell) {
             if let data = try? Self.readFile(file), manualLineFound(in: [UInt8](data)) {
@@ -482,6 +554,37 @@ public struct ShellPathSetup: Sendable {
 
     /// The status of the login shell.
     public func loginStatus() -> ShellStatus { status(for: loginKind) }
+
+    /// The file that makes the shell damaged, for the message that names it. `nil`
+    /// when no file of the shell is damaged.
+    public func damagedFile(for shell: ShellKind) -> URL? {
+        guard shell.isSupported else { return nil }
+        do {
+            _ = try evaluate(shell)
+            return nil
+        } catch ShellPathError.damaged(let path) {
+            return URL(fileURLWithPath: path)
+        } catch {
+            return nil
+        }
+    }
+
+    /// The managed blocks of a shell that sit in a file the shell does not read.
+    /// Only bash has such files (for example `~/.profile` once `~/.bash_profile` exists).
+    public func strayFiles(for shell: ShellKind) -> [URL] {
+        (try? strayBlocks(for: shell)) ?? []
+    }
+
+    /// Like `strayFiles`, but throws when a file of the shell is damaged.
+    private func strayBlocks(for shell: ShellKind) throws -> [URL] {
+        guard shell == .bash else { return [] }
+        let read = Set(targets(for: .bash).map { $0.url.standardizedFileURL.path })
+        var strays: [URL] = []
+        for target in bashCandidates() where !read.contains(target.url.standardizedFileURL.path) {
+            if try state(of: target) { strays.append(target.url) }
+        }
+        return strays
+    }
 
     /// `true` when the file holds our block (or, for fish, our file). Throws
     /// when the block is damaged.
@@ -538,6 +641,10 @@ public struct ShellPathSetup: Sendable {
         case .notConfigured, .partlyConfigured:
             break
         }
+        // Never a second block: the existing one is removed first.
+        if let stray = try strayBlocks(for: shell).first {
+            throw ShellPathError.blockElsewhere(stray.path)
+        }
 
         var pending: [Target] = []
         for target in targets(for: shell) {
@@ -546,14 +653,23 @@ public struct ShellPathSetup: Sendable {
         for target in pending {
             try Self.requireWritable(try Self.writeTarget(target.url))
         }
+        // The folder is recorded before any file in it is written (best effort removal later).
+        if shell == .zsh, !pending.isEmpty, case .folder(let dir) = zshDirectory {
+            try addZshFolder(dir.path)
+        }
 
         var files: [URL] = []
         var backups: [URL] = []
         for target in pending {
             let result: (file: URL, backup: URL?)?
-            switch target {
-            case .block(let url): result = try installBlock(url)
-            case .fishFile(let url): result = try installFish(url)
+            do {
+                switch target {
+                case .block(let url): result = try installBlock(url)
+                case .fishFile(let url): result = try installFish(url)
+                }
+            } catch let error as ShellPathError where !files.isEmpty {
+                // The files already written keep the setup: report them, so the user can undo.
+                throw ShellPathError.partial(changed: files.map(\.path), reason: error)
             }
             if let result {
                 files.append(result.file)
@@ -567,53 +683,72 @@ public struct ShellPathSetup: Sendable {
     /// Puts the block at the end of a file. A file that did not exist is
     /// recorded as created; a file that existed gets a real backup first.
     private func installBlock(_ url: URL) throws -> (file: URL, backup: URL?)? {
-        var created = false
-        let change = try edit(url, make: { current in
-            if let current {
-                switch blockState([UInt8](current)) {
-                case .intact: return .keep
-                case .damaged: throw ShellPathError.damaged(url.path)
-                case .none: break
+        var recorded: String?
+        do {
+            let change = try edit(url, make: { current in
+                if let current {
+                    switch blockState([UInt8](current)) {
+                    case .intact: return .keep
+                    case .damaged: throw ShellPathError.damaged(url.path)
+                    case .none: break
+                    }
                 }
-            }
-            created = current == nil
-            var output = current ?? Data()
-            // A line feed ends the last line; the block then follows after a blank line.
-            if !output.isEmpty { output.append(Self.lineFeed) }
-            output.append(Data(posixBlock.utf8))
-            return .write(output)
-        }, beforeCommit: { current, target in
-            guard let current else { return nil }
-            return try Self.writeBackup(current, for: target)
-        })
-        guard case .written(let target, let backup) = change else { return nil }
-        try setCreated(target.path, created)
-        return (target, backup)
+                // A file with CRLF line ends gets CRLF lines, so it stays consistent. A file
+                // ending in a bare CR gets CRLF too, so the removal never has to guess
+                // whether that CR belongs to the file or to the separator.
+                let crlf = Self.usesCRLF(current) || current?.last == Self.carriageReturn
+                var output = current ?? Data()
+                // A line ending ends the last line; the block then follows after a blank line.
+                if !output.isEmpty { output.append(Self.lineEnding(crlf: crlf)) }
+                output.append(self.blockBytes(crlf: crlf))
+                return .write(output)
+            }, beforeCommit: { current, target in
+                guard let current else {
+                    // Recorded before the new file appears; dropped again if the rename fails.
+                    try self.setCreated(target.path, true)
+                    recorded = target.path
+                    return nil
+                }
+                return try Self.writeBackup(current, for: target)
+            })
+            guard case .written(let target, let backup) = change else { return nil }
+            return (target, backup)
+        } catch {
+            if let recorded { try? setCreated(recorded, false) }
+            throw error
+        }
     }
 
     /// Writes the dedicated fish file. An empty file that exists is taken over
     /// (and backed up); a file with other content is refused.
     private func installFish(_ url: URL) throws -> (file: URL, backup: URL?)? {
-        var created = false
-        let change = try edit(url, make: { current in
-            switch current {
-            case nil:
-                created = true
-                return .write(self.fishBytes)
-            case let data? where data.isEmpty:
-                return .write(self.fishBytes)
-            case let data? where data == self.fishBytes:
-                return .keep
-            default:
-                throw ShellPathError.damaged(url.path)
-            }
-        }, beforeCommit: { current, target in
-            guard let current else { return nil }
-            return try Self.writeBackup(current, for: target)
-        })
-        guard case .written(let target, let backup) = change else { return nil }
-        try setCreated(target.path, created)
-        return (target, backup)
+        var recorded: String?
+        do {
+            let change = try edit(url, make: { current in
+                switch current {
+                case nil:
+                    return .write(self.fishBytes)
+                case let data? where data.isEmpty:
+                    return .write(self.fishBytes)
+                case let data? where data == self.fishBytes:
+                    return .keep
+                default:
+                    throw ShellPathError.damaged(url.path)
+                }
+            }, beforeCommit: { current, target in
+                guard let current else {
+                    try self.setCreated(target.path, true)
+                    recorded = target.path
+                    return nil
+                }
+                return try Self.writeBackup(current, for: target)
+            })
+            guard case .written(let target, let backup) = change else { return nil }
+            return (target, backup)
+        } catch {
+            if let recorded { try? setCreated(recorded, false) }
+            throw error
+        }
     }
 
     // MARK: - Remove
@@ -627,36 +762,60 @@ public struct ShellPathSetup: Sendable {
         if shell == .zsh, case .unresolved = zshDirectory {
             throw ShellPathError.zdotdirUnresolved(homeFile(".zshenv").path)
         }
+        // Bash removes its block from every file it may have written, not only the one it reads now.
+        let candidates = shell == .bash ? bashCandidates() : targets(for: shell)
         var managed: [Target] = []
-        for target in targets(for: shell) {
+        for target in candidates {
             if try state(of: target) { managed.append(target) }
         }
         for target in managed {
             try Self.requireWritable(try Self.writeTarget(target.url))
         }
         var changed: [URL] = []
+        var recordFailed = false
         for target in managed {
-            if let url = try removeOne(target) { changed.append(url) }
+            guard let url = try removeOne(target) else { continue }
+            changed.append(url)
+            // A record that cannot be written does not stop the other files; it is reported at the end.
+            do { try setCreated(url.path, false) } catch { recordFailed = true }
         }
+        if recordFailed { throw ShellPathError.ioFailed(stateFile.path) }
         return changed
     }
 
     /// Removes the setup from every file the app may have edited, for every
     /// shell. Used when the last profile is deleted. Manual lines stay. Best
-    /// effort per file: a damaged or unwritable file is reported and left alone.
+    /// effort per file: a file that cannot be changed is reported with its reason
+    /// and left alone, but only when it carries our block or is in the record. A
+    /// file that never had the block is not mentioned.
     public func removeEverything() -> ShellRemovalReport {
         var report = ShellRemovalReport()
+        var recordFailed = false
         for target in candidateTargets() {
             do {
-                if try state(of: target), let url = try removeOne(target) {
-                    report.changed.append(url)
-                }
+                guard try state(of: target), let url = try removeOne(target) else { continue }
+                report.changed.append(url)
+                do { try setCreated(url.path, false) } catch { recordFailed = true }
             } catch {
+                guard mayHaveOurBlock(target) else { continue }
                 let reason = (error as? ShellPathError) ?? .ioFailed(target.url.path)
                 report.skipped.append(.init(url: target.url, reason: reason))
             }
         }
+        if recordFailed {
+            report.skipped.append(.init(url: stateFile, reason: .ioFailed(stateFile.path)))
+        }
         return report
+    }
+
+    /// `true` when the file is in the record of created files or holds one of our markers.
+    /// A file that cannot be read and is not in the record is treated as not ours.
+    private func mayHaveOurBlock(_ target: Target) -> Bool {
+        let path = (try? Self.writeTarget(target.url))?.path ?? target.url.path
+        if createdFiles().contains(path) { return true }
+        guard let data = (try? Self.readFile(target.url)) ?? nil else { return false }
+        return data.range(of: Data(Self.beginMarker.utf8)) != nil
+            || data.range(of: Data(Self.endMarker.utf8)) != nil
     }
 
     /// The files that carry the setup now, across every shell.
@@ -688,10 +847,12 @@ public struct ShellPathSetup: Sendable {
             case .intact(let found): range = found
             }
             var start = range.lowerBound
-            // The line feed that install put before the block goes too, but only
+            // The line ending that install put before the block goes too, but only
             // when the block ends the file. Content after it keeps the line break.
+            // A CRLF ending is taken as a pair, never half of one.
             if range.upperBound == bytes.count, start > 0, bytes[start - 1] == Self.lineFeed {
                 start -= 1
+                if start > 0, bytes[start - 1] == Self.carriageReturn { start -= 1 }
             }
             var rest = bytes
             rest.removeSubrange(start..<range.upperBound)
@@ -699,7 +860,7 @@ public struct ShellPathSetup: Sendable {
             if rest.isEmpty, created, SafeFileSystem.kind(of: url) == .file { return .delete }
             return .write(Data(rest))
         })
-        return try finishRemoval(change, restored: restored)
+        return finishRemoval(change, restored: restored)
     }
 
     /// Removes the fish file when it is ours and was created by the app.
@@ -713,11 +874,12 @@ public struct ShellPathSetup: Sendable {
             if created, SafeFileSystem.kind(of: url) == .file { return .delete }
             return .write(Data())
         })
-        return try finishRemoval(change, restored: restored)
+        return finishRemoval(change, restored: restored)
     }
 
-    /// Records the removal and drops the backup when it matches what is left.
-    private func finishRemoval(_ change: Change, restored: Data?) throws -> URL? {
+    /// Drops the backup when it matches what is left. The record is updated by the caller,
+    /// after the file change, so a record error never hides the change.
+    private func finishRemoval(_ change: Change, restored: Data?) -> URL? {
         switch change {
         case .unchanged:
             return nil
@@ -726,14 +888,12 @@ public struct ShellPathSetup: Sendable {
             if let restored, let kept = try? Data(contentsOf: backup), kept == restored {
                 _ = unlink(backup.path)
             }
-            try setCreated(target.path, false)
             return target
         case .deleted(let target):
             let backup = Self.backupURL(for: target)
             if let kept = try? Data(contentsOf: backup), kept.isEmpty {
                 _ = unlink(backup.path)
             }
-            try setCreated(target.path, false)
             return target
         }
     }
@@ -809,32 +969,66 @@ public struct ShellPathSetup: Sendable {
 
     private struct CreatedRecord: Codable {
         var created: [String]
+        /// The folders whose `.zshrc` got the block. Missing in records written before.
+        var zshFolders: [String]?
     }
 
-    /// The absolute paths of the files the app created. A record that cannot
-    /// be read counts as empty: then nothing is deleted.
-    private func createdFiles() -> Set<String> {
+    /// The record as it is on disk. A record that cannot be read counts as empty:
+    /// then nothing is deleted.
+    private func readRecord() -> CreatedRecord {
         guard let data = try? Data(contentsOf: stateFile),
               let record = try? JSONDecoder().decode(CreatedRecord.self, from: data)
-        else { return [] }
-        return Set(record.created.filter { $0.hasPrefix("/") })
+        else { return CreatedRecord(created: []) }
+        return record
     }
 
-    /// Adds or drops a path of the record. Written only when it changes.
+    /// The absolute paths of the files the app created.
+    private func createdFiles() -> Set<String> {
+        Set(readRecord().created.filter { $0.hasPrefix("/") })
+    }
+
+    /// The `ZDOTDIR` folders an install wrote a zsh block to.
+    private func recordedZshFolders() -> [URL] {
+        (readRecord().zshFolders ?? [])
+            .filter { $0.hasPrefix("/") }
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// Adds or drops a created file of the record. Written only when it changes.
     private func setCreated(_ path: String, _ created: Bool) throws {
-        var paths = createdFiles()
-        guard paths.contains(path) != created else { return }
-        if created { paths.insert(path) } else { paths.remove(path) }
-        try Self.createFolder(root)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data: Data
+        try updateRecord { record in
+            var paths = Set(record.created.filter { $0.hasPrefix("/") })
+            guard paths.contains(path) != created else { return false }
+            if created { paths.insert(path) } else { paths.remove(path) }
+            record.created = paths.sorted()
+            return true
+        }
+    }
+
+    /// Remembers a `ZDOTDIR` folder that got a zsh block.
+    private func addZshFolder(_ folder: String) throws {
+        try updateRecord { record in
+            var folders = Set(record.zshFolders ?? [])
+            guard folders.insert(folder).inserted else { return false }
+            record.zshFolders = folders.sorted()
+            return true
+        }
+    }
+
+    /// Applies a change to the record and writes it, only when the change says so.
+    /// Any failure throws the error that names the record file.
+    private func updateRecord(_ change: (inout CreatedRecord) -> Bool) throws {
+        var record = readRecord()
+        guard change(&record) else { return }
         do {
-            data = try encoder.encode(CreatedRecord(created: paths.sorted()))
+            try Self.createFolder(root)
+            try recordWriteHook?()
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            try Self.writeAtomically(try encoder.encode(record), to: stateFile, mode: 0o644)
         } catch {
             throw ShellPathError.ioFailed(stateFile.path)
         }
-        try Self.writeAtomically(data, to: stateFile, mode: 0o644)
     }
 
     // MARK: - Block engine (bytes, so every other byte is kept)
@@ -887,11 +1081,39 @@ public struct ShellPathSetup: Sendable {
         guard begins.count == 1, ends.count == 1, begins[0] < ends[0] else { return .damaged }
         let begin = all[begins[0]]
         let end = all[ends[0]]
-        let body = Array(bytes[begin.range.upperBound..<end.range.lowerBound])
+        // A file edited on Windows has CRLF lines: the body is compared with LF line ends.
+        let body = Self.lfOnly(Array(bytes[begin.range.upperBound..<end.range.lowerBound]))
         let current = Array(posixBody(legacy: false).utf8)
         let legacy = Array(posixBody(legacy: true).utf8)
         guard body == current || body == legacy else { return .damaged }
         return .intact(begin.range.lowerBound..<end.range.upperBound)
+    }
+
+    /// The bytes with every CRLF turned into LF.
+    private static func lfOnly(_ bytes: [UInt8]) -> [UInt8] {
+        var result: [UInt8] = []
+        result.reserveCapacity(bytes.count)
+        for index in bytes.indices {
+            if bytes[index] == carriageReturn, index + 1 < bytes.count, bytes[index + 1] == lineFeed { continue }
+            result.append(bytes[index])
+        }
+        return result
+    }
+
+    /// `true` when the first line of the file ends with CRLF.
+    static func usesCRLF(_ data: Data?) -> Bool {
+        guard let data, let index = data.firstIndex(of: lineFeed) else { return false }
+        return index > data.startIndex && data[data.index(before: index)] == carriageReturn
+    }
+
+    private static func lineEnding(crlf: Bool) -> Data {
+        Data(crlf ? [carriageReturn, lineFeed] : [lineFeed])
+    }
+
+    /// The managed block for the POSIX shells, with the line ends of the file.
+    private func blockBytes(crlf: Bool) -> Data {
+        let text = crlf ? posixBlock.replacingOccurrences(of: "\n", with: "\r\n") : posixBlock
+        return Data(text.utf8)
     }
 
     // MARK: - Files

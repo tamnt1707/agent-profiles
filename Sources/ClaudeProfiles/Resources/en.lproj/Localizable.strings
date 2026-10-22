@@ -253,7 +253,7 @@
 "pathSetup.status.partly" = "Partly added";
 "pathSetup.status.manual" = "Already added by hand";
 "pathSetup.status.notConfigured" = "Not added yet";
-"pathSetup.status.damaged" = "Damaged. Not changed.";
+"pathSetup.status.damaged" = "Damaged in %@. Not changed.";
 "pathSetup.status.unsupported" = "Not supported. Copy the line by hand.";
 "pathSetup.add" = "Add";
 "pathSetup.remove" = "Remove";
@@ -266,8 +266,8 @@
 "pathSetup.removed" = "Removed the Claude Profiles lines from %@.";
 "pathSetup.nothingToRemove" = "There was nothing to remove.";
 "pathSetup.failed" = "Could not change %@. Check that the file can be written.";
-"pathSetup.damaged" = "A Claude Profiles block in your shell files is broken. Claude Profiles did not change it. Fix or remove it by hand.";
-"pathSetup.damagedBar" = "A Claude Profiles block in your shell files is broken, so nothing was changed. Fix it by hand.";
+"pathSetup.damaged" = "A Claude Profiles block in %@ is broken. Claude Profiles did not change it. Fix or remove it by hand.";
+"pathSetup.damagedBar" = "A Claude Profiles block in %@ is broken, so nothing was changed. Fix it by hand.";
 "pathSetup.unsupportedBar" = "Your shell (%@) is set up by hand. Add this line to its startup file: %@";
 "pathSetup.offer.title" = "Make the claude-%@ commands work in every terminal?";
 "pathSetup.offer.message" = "Claude Profiles adds ONE managed block to your shell startup file. The original file is backed up first. You can remove the block in Settings, or when the last profile is deleted.";
@@ -277,11 +277,14 @@
 "pathSetup.lastProfile.title" = "That was the last profile. Remove the PATH lines from your shell files?";
 "pathSetup.lastProfile.message" = "Claude Profiles added these: %@. No profile needs them now. Lines you wrote by hand are not touched.";
 "pathSetup.lastProfile.remove" = "Remove";
-"pathSetup.keep" = "Keep";"pathSetup.status.zdotdir" = "ZDOTDIR is set in ~/.zshenv in a form Claude Profiles cannot read. Nothing was changed. Add this line to your zsh startup file by hand: %@";
+"pathSetup.keep" = "Keep";
+"pathSetup.status.zdotdir" = "ZDOTDIR is set in ~/.zshenv in a form Claude Profiles cannot read. Nothing was changed. Add this line to your zsh startup file by hand: %@";
 "pathSetup.zdotdir" = "ZDOTDIR is set in %@ in a form Claude Profiles cannot read. Nothing was changed. Add this line to your zsh startup file by hand: %@";
 "pathSetup.brokenLink" = "%@ is a link that leads nowhere or loops. Claude Profiles did not change it.";
-"pathSetup.readOnly" = "%@ is not writable. Nothing was written. Make it writable and try again.";
-"pathSetup.changedWhileEditing" = "The file changed while Claude Profiles was editing it; nothing was written, try again.";
+"pathSetup.readOnly" = "%@ is not writable, so it was not changed. Make it writable and try again.";
+"pathSetup.changedWhileEditing" = "A file changed while Claude Profiles was editing it, so that file was not written. Try again.";
 "pathSetup.offer.partlyMessage" = "Some of the files that carry this setup are missing. Add it again to finish. Each file gets ONE managed block, after a backup.";
 "pathSetup.leftAlone" = "Left alone, nothing was changed in: %@";
-
+"pathSetup.status.stray" = "Partly added. A block is in %@, which bash no longer reads.";
+"pathSetup.partial" = "Already changed: %@. Nothing more was written. Use Remove to undo the change in those files.";
+"pathSetup.elsewhere" = "A Claude Profiles block is in %@, which bash no longer reads. Remove the Claude Profiles lines first, then add them again.";

@@ -75,8 +75,10 @@ final class ShellPathRuntimeTests: XCTestCase {
         try Data("# existing\n".utf8).write(to: home.appendingPathComponent(".profile"))
         try Data("# existing\n".utf8).write(to: home.appendingPathComponent(".bash_profile"))
         try Data("# existing\n".utf8).write(to: home.appendingPathComponent(".zshrc"))
-        _ = try setupPath(login: "/bin/sh").install(for: .posix)
+        // Bash first: once ~/.bash_profile exists, a ~/.profile block is one bash no
+        // longer reads, and install refuses to add a second block beside it.
         _ = try setupPath(login: "/bin/bash").install(for: .bash)
+        _ = try setupPath(login: "/bin/sh").install(for: .posix)
         _ = try setupPath(login: "/bin/zsh").install(for: .zsh)
 
         let shells: [(executable: String, arguments: [String], script: String)] = [

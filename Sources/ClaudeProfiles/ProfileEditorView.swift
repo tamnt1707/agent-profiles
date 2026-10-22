@@ -423,7 +423,7 @@ struct StatusBar: View {
         case .unsupported:
             return model.loc.t("pathSetup.unsupportedBar", model.loginKind.displayName, model.loginManualLine)
         case .damaged:
-            return model.loc.t("pathSetup.damagedBar")
+            return model.loc.t("pathSetup.damagedBar", model.shellDamagedFiles[model.loginKind] ?? "")
         case .unresolvedZdotdir:
             return model.loc.t("pathSetup.status.zdotdir", model.zshManualLine)
         case .configured, .manual:
