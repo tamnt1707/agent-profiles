@@ -236,4 +236,42 @@ final class TemplateFormatTests: XCTestCase {
             "Sẽ được lưu thành claude-100% hoàn tất"
         )
     }
+
+    // MARK: - The wrappers of the app
+
+    /// The sentences of the app are filled through the safe helper.
+    ///
+    /// `Loc.t` and `Loc.count` are the two ways the app fills a sentence: both
+    /// of them must go through `TemplateFormat`, whose arguments are written as
+    /// they are. `String(format:)` reads its arguments through pointers: a
+    /// whole number that reaches a `%@` crashes the app.
+    ///
+    /// The app is an executable and cannot be imported here, so its source is
+    /// read instead, the way the other tests of the app read it.
+    func testTheWrappersOfTheAppFillThroughTheSafeHelper() {
+        let source = PackageLayout.text(of: PackageLayout.url("Sources/ClaudeProfiles/Localization.swift"))
+
+        XCTAssertFalse(
+            source.contains("String(format:"),
+            "the app still fills its sentences with String(format:)"
+        )
+        // Every wrapper of the app fills through the helper.
+        let wrappers = [
+            "func t(_ key: String, _ arguments: CVarArg...)",
+            "func count(_ key: String, _ n: Int)",
+            "func count(_ key: String, _ n: Int, _ text: String)",
+            "func count(_ key: String, _ done: Int, _ total: Int)",
+        ]
+        for wrapper in wrappers {
+            guard let start = source.range(of: wrapper) else {
+                XCTFail("\(wrapper) is gone")
+                continue
+            }
+            let body = source[start.upperBound...].prefix(400)
+            XCTAssertTrue(
+                body.contains("TemplateFormat.fill"),
+                "\(wrapper) does not fill through the safe helper"
+            )
+        }
+    }
 }
