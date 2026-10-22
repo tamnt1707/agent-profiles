@@ -129,9 +129,59 @@ final class UsagePriceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: store.paths.dataFile, encoding: .utf8), old)
     }
 
-    func testAPriceMustBeANumber() {
+    /// A price that is not a number is dropped: the list of the profiles still
+    /// loads, and the next save writes the file without the price.
+    func testABrokenPriceIsDropped() throws {
         let json = #"{ "profiles": [ { "name": "A", "slug": "a", "price_input_per_million": "cheap" } ] }"#
-        XCTAssertThrowsError(try JSONDecoder().decode(AppData.self, from: Data(json.utf8)))
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertEqual(data.profiles.count, 1)
+        XCTAssertNil(data.profiles[0].priceInputPerMillion)
+    }
+
+    /// A price that is negative or not finite is dropped as well.
+    func testANegativeOrUnfinitePriceIsDropped() throws {
+        for value in ["-3", "1e400"] {
+            let json = #"{ "profiles": [ { "name": "A", "slug": "a", "price_output_per_million": \#(value) } ] }"#
+            let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+            XCTAssertNil(data.profiles[0].priceOutputPerMillion, "the price \(value) must be dropped")
+        }
+    }
+
+    /// A broken price in the file must not make the whole list fail, and it
+    /// must not stop the saves that come after it.
+    func testABadPriceInTheFileDoesNotFailTheLoadAndTheSaveStillWorks() throws {
+        let json = """
+        {
+          "terminal": "Terminal",
+          "profiles": [
+            {
+              "name": "A",
+              "slug": "a",
+              "isolate": true,
+              "price_input_per_million": "cheap",
+              "price_output_per_million": -3
+            }
+          ],
+          "language": "system",
+          "appearance": "system",
+          "auto_check_updates": true
+        }
+        """
+        try FileManager.default.createDirectory(at: store.paths.root, withIntermediateDirectories: true)
+        try json.write(to: store.paths.dataFile, atomically: false, encoding: .utf8)
+
+        let loaded = store.load()
+        XCTAssertNil(loaded.warning)
+        XCTAssertFalse(store.loadFailed)
+        XCTAssertEqual(loaded.data.profiles.count, 1)
+        XCTAssertNil(loaded.data.profiles[0].priceInputPerMillion)
+        XCTAssertNil(loaded.data.profiles[0].priceOutputPerMillion)
+
+        // The next save writes the file without the broken prices.
+        XCTAssertNoThrow(try store.save(loaded.data))
+        let text = try String(contentsOf: store.paths.dataFile, encoding: .utf8)
+        XCTAssertFalse(text.contains("price_input_per_million"))
+        XCTAssertFalse(text.contains("price_output_per_million"))
     }
 
     // MARK: - Compact numbers

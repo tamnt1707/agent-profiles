@@ -129,9 +129,24 @@ public struct Profile: Codable, Equatable, Sendable {
         workdir = try c.decodeIfPresent(String.self, forKey: .workdir) ?? ""
         isolate = try c.decodeIfPresent(Bool.self, forKey: .isolate) ?? false
         shareFromDefault = try c.decodeIfPresent(Bool.self, forKey: .shareFromDefault) ?? false
-        // Optional: a file written before prices existed has no such keys.
-        priceInputPerMillion = try c.decodeIfPresent(Double.self, forKey: .priceInputPerMillion)
-        priceOutputPerMillion = try c.decodeIfPresent(Double.self, forKey: .priceOutputPerMillion)
+        // Optional: a file written before prices existed has no such keys. A
+        // price that is broken is dropped instead of making the whole list of
+        // profiles unreadable: the next save writes the file without it.
+        priceInputPerMillion = Self.lenientPrice(c, forKey: .priceInputPerMillion)
+        priceOutputPerMillion = Self.lenientPrice(c, forKey: .priceOutputPerMillion)
+    }
+
+    /// The price of the file, or `nil` when it is not there or is broken.
+    ///
+    /// A price that is not a number, that is not finite or that is negative is
+    /// dropped. The price of a profile is a convenience: it must not make the
+    /// list of the profiles unreadable and it must not stop the saves.
+    private static func lenientPrice(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Double? {
+        guard let value = try? container.decode(Double.self, forKey: key) else { return nil }
+        return UsageCost.isValidPrice(value) ? value : nil
     }
 
     public func encode(to encoder: Encoder) throws {
