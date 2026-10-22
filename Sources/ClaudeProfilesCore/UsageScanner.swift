@@ -14,6 +14,10 @@ public actor UsageScanner {
     /// Calls the body with every line of a file, in order. Injected by tests to count reads.
     public typealias LineReader = @Sendable (URL, (RawLine) throws -> Void) throws -> Void
 
+    /// Counts the bytes that the reader of the lines looks at. Injected by the
+    /// tests to prove that a long line is looked at once.
+    public typealias ByteCounter = @Sendable (Int) -> Void
+
     /// One line of a session file, as raw bytes.
     public struct RawLine: Sendable {
         /// The bytes of the line, without the newline.
@@ -348,18 +352,36 @@ public actor UsageScanner {
     /// The reader of the lines of a file, with a limit of its own for the
     /// length of a line.
     public static func streamLines(limit: Int) -> LineReader {
+        streamLines(limit: limit, counted: { _ in })
+    }
+
+    /// The reader of the lines of a file, with a limit of its own and a
+    /// counter of the bytes that are looked at.
+    ///
+    /// The counter is injected by the tests: it proves that every byte of a
+    /// long line is looked at once and not again for every chunk.
+    static func streamLines(limit: Int, counted: @escaping ByteCounter) -> LineReader {
         { url, body in
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
             var pending = Data()
+            // How far the current line was already looked at. The search for a
+            // line break starts there and goes on to the end of the buffer, so
+            // every byte is looked at once: a long line is not read again for
+            // every chunk of the file.
             var searched = 0
             var dropping = false
+            var looked = 0
             while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
                 try Task.checkCancellation()
                 var bytes = chunk
                 if dropping {
                     // The line is too long: only its end matters.
-                    guard let newline = bytes.firstIndex(of: 0x0A) else { continue }
+                    guard let newline = bytes.firstIndex(of: 0x0A) else {
+                        looked += bytes.count
+                        continue
+                    }
+                    looked += newline + 1
                     try body(RawLine(tooLong: true))
                     dropping = false
                     bytes = bytes[bytes.index(after: newline)...]
@@ -368,7 +390,16 @@ public actor UsageScanner {
                 }
                 pending.append(bytes)
                 var lineStart = 0
-                while let newline = pending[searched...].firstIndex(of: 0x0A) {
+                var index = searched
+                while index < pending.count {
+                    guard let newline = Self.newline(in: pending, from: index) else {
+                        // The rest of the buffer holds no line break: it is
+                        // looked at now and never again.
+                        looked += pending.count - index
+                        index = pending.count
+                        break
+                    }
+                    looked += newline - index + 1
                     if newline - lineStart > limit {
                         // The line is longer than the limit: it is not read.
                         try body(RawLine(tooLong: true))
@@ -376,11 +407,14 @@ public actor UsageScanner {
                         try body(RawLine(bytes: Data(pending[lineStart..<newline])))
                     }
                     lineStart = newline + 1
-                    searched = lineStart
+                    index = newline + 1
                 }
+                searched = index
                 if lineStart > 0 {
+                    // What is left is the line that is not finished yet. The
+                    // part of it that was already looked at stays looked at.
                     pending = Data(pending[lineStart...])
-                    searched = 0
+                    searched = index - lineStart
                 }
                 if pending.count > limit {
                     // The line is longer than the limit: its bytes are dropped.
@@ -394,6 +428,25 @@ public actor UsageScanner {
             } else if !pending.isEmpty {
                 try body(RawLine(bytes: pending))
             }
+            counted(looked)
+        }
+    }
+
+    /// The place of the next line break in the data, starting at `from`.
+    ///
+    /// The bytes are looked at where they are: the data is not copied.
+    private static func newline(in data: Data, from: Int) -> Int? {
+        guard from < data.endIndex else { return nil }
+        let start = data.startIndex
+        return data.withUnsafeBytes { raw -> Int? in
+            guard let base = raw.baseAddress else { return nil }
+            let pointer = base.assumingMemoryBound(to: UInt8.self)
+            var index = from - start
+            while index < data.count {
+                if pointer[index] == 0x0A { return start + index }
+                index += 1
+            }
+            return nil
         }
     }
 
