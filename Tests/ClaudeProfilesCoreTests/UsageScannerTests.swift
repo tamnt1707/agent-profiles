@@ -73,6 +73,21 @@ final class UsageScannerTests: XCTestCase {
         return "{" + fields.joined(separator: ",") + "}"
     }
 
+    /// One assistant line whose usage is written as it is, so that a broken
+    /// number can be tried.
+    private func rawReply(
+        usage: String,
+        id: String = "msg_1",
+        request: String? = "req_1",
+        at timestamp: String? = "2026-10-22T05:00:00.000Z"
+    ) -> String {
+        var fields = ["\"type\":\"assistant\""]
+        if let timestamp { fields.append("\"timestamp\":\"\(timestamp)\"") }
+        if let request { fields.append("\"requestId\":\"\(request)\"") }
+        fields.append("\"message\":{\"id\":\"\(id)\",\"role\":\"assistant\",\"content\":[],\"usage\":{\(usage)}}")
+        return "{" + fields.joined(separator: ",") + "}"
+    }
+
     /// Creates the isolated config folder of the profile and writes one session file.
     @discardableResult
     private func session(_ lines: [String], slug: String = "work", project: String = "-proj-a", name: String = "s1.jsonl") throws -> URL {
@@ -184,6 +199,92 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertEqual(summary(result).allTime.input, 9)
         XCTAssertEqual(summary(result).today.input, 0)
         XCTAssertEqual(summary(result).last7Days.input, 0)
+    }
+
+    // MARK: - Broken numbers
+
+    /// The reproduction of the crash: two lines with the biggest number a
+    /// machine can hold used to trap the app when the totals were added up.
+    func testTwoLinesWithTheBiggestNumberDoNotCrash() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":9223372036854775807", id: "a", request: "r1"),
+            rawReply(usage: "\"input_tokens\":9223372036854775807", id: "b", request: "r2"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 0)
+        XCTAssertEqual(summary(result).allTime.total, 0)
+    }
+
+    func testANegativeCounterIgnoresTheWholeLine() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":-1,\"output_tokens\":5", id: "a", request: "r1"),
+            reply(id: "b", request: "r2", input: 7),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        XCTAssertEqual(summary(result).allTime.output, 5)
+    }
+
+    func testAFractionalCounterIgnoresTheWholeLine() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":1.5,\"output_tokens\":5", id: "a", request: "r1"),
+            reply(id: "b", request: "r2", input: 7),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        XCTAssertEqual(summary(result).allTime.output, 5)
+    }
+
+    /// A number written as `1e3` is a whole number and counts.
+    func testAWholeNumberInTheExponentFormCounts() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":1e3,\"output_tokens\":2e1", id: "a", request: "r1"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 1000)
+        XCTAssertEqual(summary(result).allTime.output, 20)
+    }
+
+    /// A number that is bigger than the limit is a broken file, not usage.
+    func testACounterAboveTheLimitIgnoresTheWholeLine() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":1000000000001,\"output_tokens\":5", id: "a", request: "r1"),
+            reply(id: "b", request: "r2", input: 7),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 7)
+        XCTAssertEqual(summary(result).allTime.output, 5)
+    }
+
+    /// The biggest number that is still allowed counts.
+    func testACounterAtTheLimitCounts() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":1000000000000", id: "a", request: "r1"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 1_000_000_000_000)
+    }
+
+    /// A number that does not fit into an integer at all is ignored, not counted half.
+    func testACounterThatIsTooBigForAnIntegerIgnoresTheLine() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":1e30,\"output_tokens\":3", id: "a", request: "r1"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 0)
+        XCTAssertEqual(summary(result).allTime.output, 0)
+    }
+
+    /// A broken counter is not counted half: the other counters of the line are
+    /// dropped with it.
+    func testABrokenCounterDropsTheOtherCountersOfTheLine() async throws {
+        try session([
+            rawReply(usage: "\"input_tokens\":10,\"output_tokens\":-2,\"cache_read_input_tokens\":99", id: "a", request: "r1"),
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 0)
+        XCTAssertEqual(summary(result).allTime.output, 0)
+        XCTAssertEqual(summary(result).allTime.cacheRead, 0)
     }
 
     // MARK: - Days and windows

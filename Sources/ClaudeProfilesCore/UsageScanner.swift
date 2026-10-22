@@ -107,12 +107,8 @@ public actor UsageScanner {
                 if let id = message.id, !seen.insert(id + "\u{1F}" + (record.requestId ?? "")).inserted {
                     return
                 }
-                let totals = TokenTotals(
-                    input: usage.inputTokens ?? 0,
-                    output: usage.outputTokens ?? 0,
-                    cacheRead: usage.cacheReadInputTokens ?? 0,
-                    cacheWrite: usage.cacheCreationInputTokens ?? 0
-                )
+                let totals = Self.tokenTotals(from: usage)
+                guard let totals else { return }
                 if let date = dates.date(record.timestamp) {
                     entry.days[Self.dayKey(date, calendar), default: TokenTotals()] += totals
                 } else {
@@ -140,10 +136,12 @@ public actor UsageScanner {
         }
 
         struct Usage: Decodable {
-            let inputTokens: Int?
-            let outputTokens: Int?
-            let cacheCreationInputTokens: Int?
-            let cacheReadInputTokens: Int?
+            // The numbers are read as doubles: a number that is too big for an
+            // integer must not make the whole line unreadable.
+            let inputTokens: Double?
+            let outputTokens: Double?
+            let cacheCreationInputTokens: Double?
+            let cacheReadInputTokens: Double?
 
             private enum CodingKeys: String, CodingKey {
                 case inputTokens = "input_tokens"
@@ -152,6 +150,35 @@ public actor UsageScanner {
                 case cacheReadInputTokens = "cache_read_input_tokens"
             }
         }
+    }
+
+    /// The biggest counter a line may have. A bigger number means that the
+    /// file is broken, not that the tokens were used.
+    static let maxCounter: Double = 1e12
+
+    /// The counters of a line, or `nil` when the line is malformed.
+    ///
+    /// A counter must be a whole number between 0 and `maxCounter`. A negative
+    /// number, a fraction and a number that is too big mean that the line is
+    /// broken: the whole usage of that line is then ignored, so a broken line
+    /// can neither crash the app nor be counted half.
+    private static func tokenTotals(from usage: Record.Usage) -> TokenTotals? {
+        guard let input = counter(usage.inputTokens),
+              let output = counter(usage.outputTokens),
+              let cacheRead = counter(usage.cacheReadInputTokens),
+              let cacheWrite = counter(usage.cacheCreationInputTokens)
+        else {
+            return nil
+        }
+        return TokenTotals(input: input, output: output, cacheRead: cacheRead, cacheWrite: cacheWrite)
+    }
+
+    /// One counter of a line: a whole number between 0 and `maxCounter`.
+    /// A counter that is not there counts as zero.
+    private static func counter(_ value: Double?) -> Int? {
+        guard let value else { return 0 }
+        guard value.isFinite, value >= 0, value <= maxCounter, value == value.rounded() else { return nil }
+        return Int(value)
     }
 
     /// A malformed line gives `nil`. A line without a `usage` key is skipped before decoding.
