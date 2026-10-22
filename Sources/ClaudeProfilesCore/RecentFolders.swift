@@ -9,14 +9,16 @@ public struct RecentFolders: Equatable, Sendable {
     /// Standardized absolute paths, newest first.
     public private(set) var paths: [String]
 
-    /// Starts from a stored list. Entries that are not absolute are dropped,
-    /// duplicates keep their first place, and the list is cut to `limit`.
+    /// Starts from a stored list. Entries that are not absolute or that hold a
+    /// control character are dropped, duplicates keep their first place, and
+    /// the list is cut to `limit`.
     public init(_ paths: [String] = []) {
         self.paths = Self.normalized(paths)
     }
 
     /// Puts a folder at the front. A folder that is already listed moves there.
-    /// A path that is not absolute is ignored.
+    /// A path that is not absolute, or that holds a control character, is
+    /// ignored: a terminal would act on it before the shell reads the quote.
     public mutating func add(_ path: String) {
         paths = Self.normalized([path] + paths)
     }
@@ -37,9 +39,12 @@ public struct RecentFolders: Equatable, Sendable {
         return path
     }
 
-    /// The standardized form of an absolute path, `nil` for anything else.
+    /// The standardized form of an absolute, safe path, `nil` for anything else.
     private static func standardized(_ path: String) -> String? {
         guard path.hasPrefix("/") else { return nil }
+        // A control character would be acted on by the terminal, never by the
+        // shell, so such a path is not a path at all.
+        guard FolderPathSafety.isSafe(path) else { return nil }
         return URL(fileURLWithPath: path).standardizedFileURL.path
     }
 

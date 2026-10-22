@@ -297,6 +297,13 @@ public struct Store {
         if !url.isEmpty && !url.hasPrefix("https://") && !url.hasPrefix("http://") {
             throw ProfileError.invalidBaseURL
         }
+        // The working folder ends up in a command that is typed into a live
+        // shell, so a folder with a control character in its name is refused
+        // here, before the profile is saved.
+        let workdir = profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !workdir.isEmpty, !FolderPathSafety.isSafe(workdir) {
+            throw ProfileError.unsafeFolder(profile.workdir)
+        }
         _ = try ShellQuote.parseExtraEnv(profile.extraEnv)
     }
 

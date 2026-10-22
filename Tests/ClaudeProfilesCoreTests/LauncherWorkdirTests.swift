@@ -19,57 +19,57 @@ final class LauncherWorkdirTests: XCTestCase {
 
     private var script: String { paths.script(for: "test").path }
 
-    func testWithoutOverrideTheProfileWorkdirIsUsed() {
+    func testWithoutOverrideTheProfileWorkdirIsUsed() throws {
         var profile = Profile.sample()
         profile.workdir = "/tmp/from profile"
-        XCTAssertEqual(Launcher.command(for: profile, paths: paths, workdirOverride: nil),
+        XCTAssertEqual(try Launcher.command(for: profile, paths: paths, workdirOverride: nil),
                        "cd '/tmp/from profile' && '\(script)'")
     }
 
-    func testTheOverrideReplacesTheProfileWorkdir() {
+    func testTheOverrideReplacesTheProfileWorkdir() throws {
         var profile = Profile.sample()
         profile.workdir = "/tmp/from profile"
-        XCTAssertEqual(Launcher.command(for: profile, paths: paths, workdirOverride: "/tmp/chosen"),
+        XCTAssertEqual(try Launcher.command(for: profile, paths: paths, workdirOverride: "/tmp/chosen"),
                        "cd '/tmp/chosen' && '\(script)'")
     }
 
-    func testTheOverrideAddsACdWhenTheProfileHasNoWorkdir() {
-        XCTAssertEqual(Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/tmp/chosen"),
+    func testTheOverrideAddsACdWhenTheProfileHasNoWorkdir() throws {
+        XCTAssertEqual(try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/tmp/chosen"),
                        "cd '/tmp/chosen' && '\(script)'")
     }
 
-    func testAnEmptyOverrideMeansNoCd() {
+    func testAnEmptyOverrideMeansNoCd() throws {
         var profile = Profile.sample()
         profile.workdir = "/tmp/from profile"
-        XCTAssertEqual(Launcher.command(for: profile, paths: paths, workdirOverride: ""), "'\(script)'")
+        XCTAssertEqual(try Launcher.command(for: profile, paths: paths, workdirOverride: ""), "'\(script)'")
     }
 
-    func testAFolderWithSpacesIsOneQuotedArgument() {
-        XCTAssertEqual(Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/Users/me/My Projects/app"),
+    func testAFolderWithSpacesIsOneQuotedArgument() throws {
+        XCTAssertEqual(try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/Users/me/My Projects/app"),
                        "cd '/Users/me/My Projects/app' && '\(script)'")
     }
 
-    func testASingleQuoteInTheFolderIsEscaped() {
-        XCTAssertEqual(Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/tmp/it's here"),
+    func testASingleQuoteInTheFolderIsEscaped() throws {
+        XCTAssertEqual(try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/tmp/it's here"),
                        "cd '/tmp/it'\\''s here' && '\(script)'")
     }
 
-    func testATildeInTheOverrideIsExpandedToTheHomeDirectory() {
-        XCTAssertEqual(Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "~/work dir"),
+    func testATildeInTheOverrideIsExpandedToTheHomeDirectory() throws {
+        XCTAssertEqual(try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "~/work dir"),
                        "cd '\(paths.home.path)/work dir' && '\(script)'")
-        XCTAssertEqual(Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "~"),
+        XCTAssertEqual(try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "~"),
                        "cd '\(paths.home.path)' && '\(script)'")
     }
 
-    func testATildeInsideANameIsNotExpanded() {
-        XCTAssertEqual(Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/tmp/a~b"),
+    func testATildeInsideANameIsNotExpanded() throws {
+        XCTAssertEqual(try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: "/tmp/a~b"),
                        "cd '/tmp/a~b' && '\(script)'")
     }
 
     /// Quotes and shell syntax in a folder name stay inside the single quotes.
-    func testHostileFolderNamesAreQuotedAsOneWord() {
+    func testHostileFolderNamesAreQuotedAsOneWord() throws {
         let hostile = "/tmp/x'; rm -rf ~; echo '$(id)`id`\"q\"&|<>"
-        let command = Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: hostile)
+        let command = try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: hostile)
         XCTAssertEqual(command,
                        "cd '/tmp/x'\\''; rm -rf ~; echo '\\''$(id)`id`\"q\"&|<>' && '\(script)'")
     }
@@ -88,7 +88,7 @@ final class LauncherWorkdirTests: XCTestCase {
         try Data("#!/bin/sh\npwd\n".utf8).write(to: URL(fileURLWithPath: script))
         try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
 
-        let command = Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: folder.path)
+        let command = try Launcher.command(for: Profile.sample(), paths: paths, workdirOverride: folder.path)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", command]

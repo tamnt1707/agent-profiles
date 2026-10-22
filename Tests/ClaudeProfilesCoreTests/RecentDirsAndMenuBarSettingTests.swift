@@ -87,6 +87,50 @@ final class RecentDirsAndMenuBarSettingTests: XCTestCase {
         XCTAssertEqual(try writtenText(), first)
     }
 
+    // MARK: - The list is normalized while it is read
+
+    /// A relative path is not a folder the launcher could open, so it is dropped.
+    func testARelativeRecentDirIsDroppedWhileItIsRead() throws {
+        let json = #"{ "profiles": [ { "name": "Old", "slug": "old", "recent_dirs": ["relative", "/keep"] } ] }"#
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertEqual(data.profiles[0].recentDirs, ["/keep"])
+    }
+
+    /// A folder with a control character is dropped while it is read.
+    func testAUnsafeRecentDirIsDroppedWhileItIsRead() throws {
+        let json = #"{ "profiles": [ { "name": "Old", "slug": "old", "recent_dirs": ["/tmp/a\u0001b", "/keep"] } ] }"#
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertEqual(data.profiles[0].recentDirs, ["/keep"])
+    }
+
+    /// Two spellings of one folder are one entry.
+    func testDuplicatesAreDroppedWhileItIsRead() throws {
+        let json = #"{ "profiles": [ { "name": "Old", "slug": "old", "recent_dirs": ["/a", "/b/", "/a/"] } ] }"#
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertEqual(data.profiles[0].recentDirs, ["/a", "/b"])
+    }
+
+    /// A hand edited file cannot keep an endless list in memory.
+    func testAHandEditedLongListIsCutWhileItIsRead() throws {
+        let many = (1...50).map { "\"/folder/\($0)\"" }.joined(separator: ",")
+        let json = "{ \"profiles\": [ { \"name\": \"Old\", \"slug\": \"old\", \"recent_dirs\": [\(many)] } ] }"
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+        XCTAssertEqual(data.profiles[0].recentDirs.count, 5)
+        XCTAssertEqual(data.profiles[0].recentDirs.first, "/folder/1")
+    }
+
+    /// A list the app wrote is saved again exactly as it was.
+    func testAValidListSavesByteIdentical() throws {
+        var profile = Profile.sample()
+        profile.recentDirs = ["/Users/me/one", "/Users/me/two", "/opt/elsewhere"]
+        try store.save(AppData(profiles: [profile]))
+        let first = try writtenText()
+        let loaded = store.load()
+        XCTAssertEqual(loaded.data.profiles[0].recentDirs, ["/Users/me/one", "/Users/me/two", "/opt/elsewhere"])
+        try store.save(loaded.data)
+        XCTAssertEqual(try writtenText(), first)
+    }
+
     // MARK: - show_menu_bar
 
     func testShowMenuBarDefaultsToTrueWhenTheFileSaysNothing() throws {

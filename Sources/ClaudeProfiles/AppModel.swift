@@ -1256,6 +1256,8 @@ extension ProfileError {
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
             return loc.t("error.unsafeDeletePath", path)
+        case .unsafeFolder(let path):
+            return loc.t("error.unsafeFolder", path)
         }
     }
 }

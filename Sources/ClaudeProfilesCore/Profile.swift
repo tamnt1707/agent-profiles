@@ -127,7 +127,15 @@ public struct Profile: Codable, Equatable, Sendable {
         shareFromDefault = try c.decodeIfPresent(Bool.self, forKey: .shareFromDefault) ?? false
         // Lenient: the list is a convenience, so a malformed value is dropped
         // instead of failing the whole profile list.
-        recentDirs = (try? c.decodeIfPresent([String].self, forKey: .recentDirs)) ?? []
+        //
+        // The list is normalized while it is read: entries that are not
+        // absolute, that hold a control character, or that are duplicates are
+        // dropped, and the list is cut to the five newest folders. A hand
+        // edited file can therefore not keep an endless list in memory, and a
+        // list the app wrote stays byte identical when it is saved again.
+        recentDirs = RecentFolders(
+            (try? c.decodeIfPresent([String].self, forKey: .recentDirs)) ?? []
+        ).paths
     }
 
     public func encode(to encoder: Encoder) throws {
