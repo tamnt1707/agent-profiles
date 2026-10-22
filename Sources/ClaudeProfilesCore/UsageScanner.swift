@@ -46,6 +46,9 @@ public actor UsageScanner {
 
     private let paths: Paths
     private let readLines: LineReader
+    /// Called after the temporary file of the cache is written and before it is
+    /// renamed. Injected by the tests to look at the mode of that file.
+    private let afterTemporaryFileWritten: (@Sendable (URL) -> Void)?
     private var cache: [String: FileEntry] = [:]
     private var cacheLoaded = false
 
@@ -53,9 +56,14 @@ public actor UsageScanner {
     /// It is only a counter: the user is not told about it.
     private(set) var skippedLines: Int = 0
 
-    public init(paths: Paths, readLines: @escaping LineReader = UsageScanner.streamLines) {
+    public init(
+        paths: Paths,
+        readLines: @escaping LineReader = UsageScanner.streamLines,
+        afterTemporaryFileWritten: (@Sendable (URL) -> Void)? = nil
+    ) {
         self.paths = paths
         self.readLines = readLines
+        self.afterTemporaryFileWritten = afterTemporaryFileWritten
     }
 
     /// The usage of a profile. Runs off the main thread and stops when the
@@ -86,55 +94,64 @@ public actor UsageScanner {
         var seen = Set<String>()
         var filesSinceSave = 0
         var lastSave = Date()
-        for file in Self.sessionFiles(in: home, slug: profile.slug) {
-            try Task.checkCancellation()
-            seen.insert(file.key)
-            let entry: FileEntry?
-            if let cached = cache[file.key], cached.size == file.size, cached.modified == file.modified, cached.zone == zone {
-                entry = cached
-            } else {
-                do {
-                    let scanned = try scan(file, zone: zone, calendar: calendar)
-                    entry = scanned.entry
-                    skipped += scanned.skippedLines
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    // The file cannot be read: it is skipped and the other
-                    // files are counted as before.
-                    entry = nil
-                    skippedFiles += 1
-                    if cache[file.key] != nil {
-                        cache[file.key] = nil
+        do {
+            for file in Self.sessionFiles(in: home, slug: profile.slug) {
+                try Task.checkCancellation()
+                seen.insert(file.key)
+                let entry: FileEntry?
+                if let cached = cache[file.key], cached.size == file.size, cached.modified == file.modified, cached.zone == zone {
+                    entry = cached
+                } else {
+                    do {
+                        let scanned = try scan(file, zone: zone, calendar: calendar)
+                        entry = scanned.entry
+                        skipped += scanned.skippedLines
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        // The file cannot be read: it is skipped and the other
+                        // files are counted as before.
+                        entry = nil
+                        skippedFiles += 1
+                        if cache[file.key] != nil {
+                            cache[file.key] = nil
+                            changed = true
+                        }
+                    }
+                    if let entry {
+                        cache[file.key] = entry
                         changed = true
                     }
                 }
                 if let entry {
-                    cache[file.key] = entry
-                    changed = true
+                    for (day, totals) in entry.days {
+                        summary.allTime += totals
+                        if day == todayKey {
+                            summary.today += totals
+                        }
+                        if day >= weekStart && day <= todayKey {
+                            summary.last7Days += totals
+                        }
+                    }
+                    summary.allTime += entry.undated
+                }
+                // The cache is written from time to time, so that a scan that is
+                // stopped keeps the work it has already done.
+                filesSinceSave += 1
+                if filesSinceSave >= Self.filesPerSave || Date().timeIntervalSince(lastSave) >= Self.secondsPerSave {
+                    saveCache()
+                    changed = false
+                    filesSinceSave = 0
+                    lastSave = Date()
                 }
             }
-            if let entry {
-                for (day, totals) in entry.days {
-                    summary.allTime += totals
-                    if day == todayKey {
-                        summary.today += totals
-                    }
-                    if day >= weekStart && day <= todayKey {
-                        summary.last7Days += totals
-                    }
-                }
-                summary.allTime += entry.undated
-            }
-            // The cache is written from time to time, so that a scan that is
-            // stopped keeps the work it has already done.
-            filesSinceSave += 1
-            if filesSinceSave >= Self.filesPerSave || Date().timeIntervalSince(lastSave) >= Self.secondsPerSave {
+        } catch is CancellationError {
+            // The count was stopped. The files that were read are kept, so the
+            // next count reads only the ones that are still missing.
+            if changed {
                 saveCache()
-                changed = false
-                filesSinceSave = 0
-                lastSave = Date()
             }
+            throw CancellationError()
         }
 
         // Entries of files that no longer exist leave the cache. Entries of other
@@ -560,7 +577,9 @@ public actor UsageScanner {
     /// Writes the cache atomically. A failure only means the next scan reads more files.
     ///
     /// The file holds the names of the project folders of the user, so only the
-    /// user may read it.
+    /// user may read it. The temporary file is made with the mode 0600, so it
+    /// is never readable by anyone else: not even for the moment between its
+    /// creation and the moment its mode is set.
     private func saveCache() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -573,8 +592,8 @@ public actor UsageScanner {
         do {
             try manager.createDirectory(at: paths.root, withIntermediateDirectories: true)
             try? manager.removeItem(at: temporary)
-            try bytes.write(to: temporary, options: .withoutOverwriting)
-            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            try Self.writePrivate(bytes, to: temporary)
+            afterTemporaryFileWritten?(temporary)
             guard rename(temporary.path, cacheURL.path) == 0 else {
                 try? manager.removeItem(at: temporary)
                 return
@@ -582,6 +601,33 @@ public actor UsageScanner {
         } catch {
             try? manager.removeItem(at: temporary)
             return
+        }
+    }
+
+    /// Writes the bytes to the file, and only the owner may read it.
+    ///
+    /// The file is made with the mode 0600, so the system sets it when the file
+    /// is created and not afterwards: the file is never readable by anyone
+    /// else, not even for a moment.
+    static func writePrivate(_ bytes: Data, to url: URL) throws {
+        let descriptor = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return open(path, O_CREAT | O_EXCL | O_WRONLY, 0o600)
+        }
+        guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
+        defer { close(descriptor) }
+        guard !bytes.isEmpty else { return }
+        try bytes.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            var written = 0
+            while written < raw.count {
+                let count = write(descriptor, base.advanced(by: written), raw.count - written)
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                written += count
+            }
         }
     }
 
@@ -609,7 +655,7 @@ public actor UsageScanner {
 
 /// Parses the ISO-8601 timestamps of transcript lines, with or without
 /// fractions of a second.
-private final class TimestampReader {
+final class TimestampReader {
     /// The format of the timestamps of the transcripts.
     ///
     /// It is much faster than `ISO8601DateFormatter`, which matters with a
@@ -622,6 +668,36 @@ private final class TimestampReader {
 
     func date(_ text: String?) -> Date? {
         guard let text else { return nil }
+        // A time like 24:00:00 or 23:60:00 is read as the next day by the
+        // parser, but it is not a time that was ever written. Such a line
+        // counts in "All time" only.
+        guard Self.isRealTime(text) else { return nil }
         return try? Date(text, strategy: format)
+    }
+
+    /// `true` when the time of the text is a time that exists.
+    ///
+    /// The hour must be below 24, the minute and the second below 60. A text
+    /// that does not have the shape of a time is left to the parser.
+    static func isRealTime(_ text: String) -> Bool {
+        guard let mark = text.firstIndex(of: "T") else { return true }
+        let rest = text[text.index(after: mark)...]
+        guard let hour = twoDigits(rest) else { return true }
+        let afterHour = rest.dropFirst(2)
+        guard afterHour.first == ":" else { return true }
+        let afterColon = afterHour.dropFirst()
+        guard let minute = twoDigits(afterColon) else { return true }
+        let afterMinute = afterColon.dropFirst(2)
+        guard afterMinute.first == ":" else { return true }
+        guard let second = twoDigits(afterMinute.dropFirst()) else { return true }
+        return hour <= 23 && minute <= 59 && second <= 59
+    }
+
+    /// The two digits at the start of the text, as a number.
+    private static func twoDigits(_ text: Substring) -> Int? {
+        guard text.count >= 2 else { return nil }
+        let pair = text.prefix(2)
+        guard pair.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return Int(pair)
     }
 }

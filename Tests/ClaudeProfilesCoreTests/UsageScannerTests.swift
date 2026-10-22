@@ -748,4 +748,195 @@ final class UsageScannerTests: XCTestCase {
             XCTAssertTrue(error is CancellationError)
         }
     }
+
+    // MARK: - The mode of the cache file
+
+    /// The mode of a file, as the system sees it.
+    private func mode(of url: URL) -> Int? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.posixPermissions] as? NSNumber)?.intValue
+    }
+
+    /// The temporary file of the cache is only readable by the user from the
+    /// very moment it is made.
+    ///
+    /// The umask of the process is set to 0 for the test: a file that is made
+    /// without a mode of its own is then readable by everyone.
+    func testTheTemporaryCacheFileIsOnlyReadableByTheUserFromTheStart() async throws {
+        let previous = umask(0)
+        defer { umask(previous) }
+        try session([reply(id: "a", request: "r1", input: 5)])
+
+        let modes = ModeTally()
+        let scanner = UsageScanner(
+            paths: paths,
+            readLines: UsageScanner.streamLines,
+            afterTemporaryFileWritten: { url in modes.add(self.mode(of: url)) }
+        )
+        _ = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+
+        XCTAssertFalse(modes.values.isEmpty, "the cache was never written")
+        for value in modes.values {
+            XCTAssertEqual(value, 0o600, "the temporary file was readable by others")
+        }
+        let cacheURL = paths.root.appendingPathComponent(UsageScanner.cacheFileName)
+        XCTAssertEqual(mode(of: cacheURL), 0o600)
+    }
+
+    // MARK: - A count that is stopped
+
+    /// A reader that stops the count after a number of lines.
+    ///
+    /// The count is stopped by cancelling the task that runs it, and not by
+    /// throwing: the real path of a stopped count is the one of a cancelled
+    /// task.
+    private func cancellingReader(after lines: Int) -> UsageScanner.LineReader {
+        let counter = LineTally()
+        return { url, body in
+            try UsageScanner.streamLines(url) { line in
+                let seen = counter.add(1)
+                try body(line)
+                if seen >= lines {
+                    // The count is stopped in the middle of the file.
+                    withUnsafeCurrentTask { $0?.cancel() }
+                }
+            }
+        }
+    }
+
+    /// The keys of the files that are in the cache.
+    private func cachedFiles() throws -> Set<String> {
+        let cacheURL = paths.root.appendingPathComponent(UsageScanner.cacheFileName)
+        let bytes = try Data(contentsOf: cacheURL)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let files = try XCTUnwrap(object["files"] as? [String: Any])
+        return Set(files.keys)
+    }
+
+    /// A count that is stopped in the middle of a file keeps the files that
+    /// were read whole.
+    func testACountThatIsStoppedKeepsOnlyTheWholeFiles() async throws {
+        try session([reply(id: "a1", request: "r1", input: 1), reply(id: "a2", request: "r2", input: 1)], name: "a.jsonl")
+        try session([reply(id: "b1", request: "r3", input: 1), reply(id: "b2", request: "r4", input: 1)], name: "b.jsonl")
+        try session([reply(id: "c1", request: "r5", input: 1), reply(id: "c2", request: "r6", input: 1)], name: "c.jsonl")
+
+        let scanner = UsageScanner(paths: paths, readLines: cancellingReader(after: 3))
+        let task = Task { try await scanner.usage(for: profile(), now: noon, calendar: utc()) }
+        do {
+            _ = try await task.value
+            XCTFail("the count must be stopped")
+        } catch is CancellationError {
+            // expected
+        }
+
+        // The first file was read whole, the second one was not.
+        XCTAssertEqual(try cachedFiles(), ["work/projects/-proj-a/a.jsonl"])
+    }
+
+    /// The work of a count that was stopped is not thrown away: the next count
+    /// reads only the files that are not in the cache yet.
+    func testTheNextCountReadsOnlyTheFilesThatAreNotCached() async throws {
+        try session([reply(id: "a1", request: "r1", input: 1), reply(id: "a2", request: "r2", input: 1)], name: "a.jsonl")
+        try session([reply(id: "b1", request: "r3", input: 1), reply(id: "b2", request: "r4", input: 1)], name: "b.jsonl")
+        try session([reply(id: "c1", request: "r5", input: 1), reply(id: "c2", request: "r6", input: 1)], name: "c.jsonl")
+
+        let scanner = UsageScanner(paths: paths, readLines: cancellingReader(after: 3))
+        let task = Task { try await scanner.usage(for: profile(), now: noon, calendar: utc()) }
+        do {
+            _ = try await task.value
+            XCTFail("the count must be stopped")
+        } catch is CancellationError {
+            // expected
+        }
+
+        let counter = ReadCounter()
+        let second = makeScanner(counter: counter)
+        _ = try await second.usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(Set(counter.reads), ["b.jsonl", "c.jsonl"],
+                       "the file that was already counted was read again")
+    }
+
+    // MARK: - A link inside the projects folder
+
+    /// A link that stands for a project folder is not followed: it could lead
+    /// to a folder outside of the folder of the profile.
+    func testALinkedProjectSubfolderIsNotRead() async throws {
+        let real = paths.root.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try (reply(id: "a", request: "r1", input: 100) + "\n")
+            .write(to: real.appendingPathComponent("s1.jsonl"), atomically: false, encoding: .utf8)
+        let projects = paths.home(for: "work").appendingPathComponent("projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: projects.appendingPathComponent("-linked"),
+            withDestinationURL: real
+        )
+
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 0)
+        XCTAssertEqual(skippedFiles(result), 0)
+    }
+
+    // MARK: - Times that do not exist
+
+    /// A time like 24:00:00 or 23:60:00 is not a time that was ever written.
+    /// The line counts in "All time" only.
+    func testATimeThatDoesNotExistCountsOnlyInAllTime() async throws {
+        try session([
+            reply(id: "a", request: "r1", at: "2026-10-22T24:00:00Z", input: 10),
+            reply(id: "b", request: "r2", at: "2026-10-22T23:60:00Z", input: 20),
+            reply(id: "c", request: "r3", at: "2026-10-22T12:60:00Z", input: 40),
+            reply(id: "d", request: "r4", at: "2026-10-22T12:00:60Z", input: 80),
+            reply(id: "e", request: "r5", at: "2026-10-22T12:00:00Z", input: 160)
+        ])
+        let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
+        XCTAssertEqual(summary(result).allTime.input, 310)
+        XCTAssertEqual(summary(result).today.input, 160, "only the real time belongs to today")
+        XCTAssertEqual(summary(result).last7Days.input, 160)
+    }
+
+    /// The parser of the timestamps refuses the times that do not exist.
+    func testTheTimestampParserRefusesTheTimesThatDoNotExist() {
+        let reader = TimestampReader()
+        XCTAssertNil(reader.date("2026-10-22T24:00:00Z"))
+        XCTAssertNil(reader.date("2026-10-22T25:30:00Z"))
+        XCTAssertNil(reader.date("2026-10-22T23:60:00Z"))
+        XCTAssertNil(reader.date("2026-10-22T12:00:60Z"))
+        XCTAssertNotNil(reader.date("2026-10-22T23:59:59Z"))
+        XCTAssertNotNil(reader.date("2026-10-22T00:00:00Z"))
+        XCTAssertNotNil(reader.date("2026-10-22T12:00:00.123Z"))
+    }
+}
+
+/// Collects the modes of the temporary files of the cache.
+private final class ModeTally: @unchecked Sendable {
+    private let lock = NSLock()
+    private var found: [Int?] = []
+
+    func add(_ value: Int?) {
+        lock.lock()
+        found.append(value)
+        lock.unlock()
+    }
+
+    var values: [Int?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return found
+    }
+}
+
+/// Counts the lines that the reader of the lines has seen.
+private final class LineTally: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    /// The number of the line, the first one is 1.
+    func add(_ lines: Int) -> Int {
+        lock.lock()
+        count += lines
+        let total = count
+        lock.unlock()
+        return total
+    }
 }
