@@ -245,3 +245,35 @@
 "probe.network.other" = "Không gửi được yêu cầu tới nhà cung cấp.";
 "probe.crossHostRedirect" = "Đã từ chối: nhà cung cấp chuyển hướng sang một máy chủ khác, máy đó sẽ nhận key. Hãy dùng Base URL cuối cùng.";
 "probe.unsupported" = "Nhà cung cấp này không có danh sách model; hãy gõ tên model bằng tay.";
+
+/* Terminal commands (PATH of the shells) */
+"pathSetup.section" = "Lệnh trong terminal";
+"pathSetup.status.configured" = "Đã thêm bởi Claude Profiles";
+"pathSetup.status.partly" = "Mới thêm một phần";
+"pathSetup.status.manual" = "Đã thêm bằng tay";
+"pathSetup.status.notConfigured" = "Chưa thêm";
+"pathSetup.status.damaged" = "Bị hỏng. Không thay đổi.";
+"pathSetup.status.unsupported" = "Chưa hỗ trợ. Hãy tự chép dòng lệnh.";
+"pathSetup.add" = "Thêm";
+"pathSetup.remove" = "Gỡ";
+"pathSetup.showZshrc" = "Hiện ~/.zshrc";
+"pathSetup.copyLine" = "Sao chép dòng";
+"pathSetup.remove.title" = "Gỡ các dòng của Claude Profiles khỏi %@?";
+"pathSetup.remove.message" = "Các lệnh claude-<tên> sẽ không chạy được trong terminal mới của shell này cho đến khi thêm lại.";
+"pathSetup.done" = "Xong. Mở tab terminal mới, hoặc chạy: source %@";
+"pathSetup.alreadyDone" = "Đã thiết lập sẵn. Không có gì thay đổi.";
+"pathSetup.removed" = "Đã gỡ các dòng của Claude Profiles khỏi %@.";
+"pathSetup.nothingToRemove" = "Không có gì để gỡ.";
+"pathSetup.failed" = "Không sửa được %@. Hãy kiểm tra file có ghi được không.";
+"pathSetup.damaged" = "Một khối của Claude Profiles trong file shell bị hỏng. Claude Profiles không thay đổi nó. Hãy sửa hoặc gỡ bằng tay.";
+"pathSetup.damagedBar" = "Một khối của Claude Profiles trong file shell bị hỏng nên không có gì được thay đổi. Hãy sửa bằng tay.";
+"pathSetup.unsupportedBar" = "Shell của bạn (%@) cần thiết lập bằng tay. Hãy thêm dòng này vào file khởi động: %@";
+"pathSetup.offer.title" = "Làm cho các lệnh claude-%@ chạy được trong mọi terminal?";
+"pathSetup.offer.message" = "Claude Profiles thêm MỘT khối quản lý vào file khởi động của shell. File gốc được sao lưu trước. Bạn có thể gỡ khối trong Cài đặt, hoặc khi xóa profile cuối cùng.";
+"pathSetup.offer.add" = "Thêm";
+"pathSetup.offer.later" = "Để sau";
+"pathSetup.offer.never" = "Đừng hỏi lại";
+"pathSetup.lastProfile.title" = "Đó là profile cuối cùng. Gỡ các dòng PATH khỏi file shell?";
+"pathSetup.lastProfile.message" = "Claude Profiles đã thêm các dòng này vào: %@. Không profile nào cần chúng nữa. Dòng bạn tự viết không bị động đến.";
+"pathSetup.lastProfile.remove" = "Gỡ";
+"pathSetup.keep" = "Giữ lại";

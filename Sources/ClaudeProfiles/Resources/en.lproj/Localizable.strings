@@ -245,3 +245,35 @@
 "probe.network.other" = "The request could not reach the provider.";
 "probe.crossHostRedirect" = "Refused: the provider redirected to another host, which would receive the key. Use the final Base URL.";
 "probe.unsupported" = "This provider does not offer a model list; type the model name by hand.";
+
+/* Terminal commands (PATH of the shells) */
+"pathSetup.section" = "Terminal commands";
+"pathSetup.status.configured" = "Added by Claude Profiles";
+"pathSetup.status.partly" = "Partly added";
+"pathSetup.status.manual" = "Already added by hand";
+"pathSetup.status.notConfigured" = "Not added yet";
+"pathSetup.status.damaged" = "Damaged. Not changed.";
+"pathSetup.status.unsupported" = "Not supported. Copy the line by hand.";
+"pathSetup.add" = "Add";
+"pathSetup.remove" = "Remove";
+"pathSetup.showZshrc" = "Show ~/.zshrc";
+"pathSetup.copyLine" = "Copy line";
+"pathSetup.remove.title" = "Remove the Claude Profiles lines from %@?";
+"pathSetup.remove.message" = "The claude-<name> commands will not work in new terminals for this shell until the setup is added again.";
+"pathSetup.done" = "Done. Open a new terminal tab, or run: source %@";
+"pathSetup.alreadyDone" = "Already set up. Nothing was changed.";
+"pathSetup.removed" = "Removed the Claude Profiles lines from %@.";
+"pathSetup.nothingToRemove" = "There was nothing to remove.";
+"pathSetup.failed" = "Could not change %@. Check that the file can be written.";
+"pathSetup.damaged" = "A Claude Profiles block in your shell files is broken. Claude Profiles did not change it. Fix or remove it by hand.";
+"pathSetup.damagedBar" = "A Claude Profiles block in your shell files is broken, so nothing was changed. Fix it by hand.";
+"pathSetup.unsupportedBar" = "Your shell (%@) is set up by hand. Add this line to its startup file: %@";
+"pathSetup.offer.title" = "Make the claude-%@ commands work in every terminal?";
+"pathSetup.offer.message" = "Claude Profiles adds ONE managed block to your shell startup file. The original file is backed up first. You can remove the block in Settings, or when the last profile is deleted.";
+"pathSetup.offer.add" = "Add";
+"pathSetup.offer.later" = "Not now";
+"pathSetup.offer.never" = "Don't ask again";
+"pathSetup.lastProfile.title" = "That was the last profile. Remove the PATH lines from your shell files?";
+"pathSetup.lastProfile.message" = "Claude Profiles added these: %@. No profile needs them now. Lines you wrote by hand are not touched.";
+"pathSetup.lastProfile.remove" = "Remove";
+"pathSetup.keep" = "Keep";

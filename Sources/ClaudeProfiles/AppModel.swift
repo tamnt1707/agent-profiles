@@ -111,6 +111,7 @@ final class AppModel {
         self.loc = loc ?? Loc()
         self.updater = updater ?? UpdateController()
         load()
+        refreshPathStatus()
     }
 
     // MARK: - Loading
@@ -434,6 +435,7 @@ final class AppModel {
 
             // The warning stays: after a recovering save it names the copy until dismissed.
             status = Status(kind: .success, text: loc.t("status.saved", store.paths.command(for: draft.slug)))
+            offerPathSetupIfNeeded(slug: draft.slug)
             return true
         } catch {
             report(error)
@@ -516,6 +518,7 @@ final class AppModel {
     func deleteCurrent() {
         guard let index = draftIndex, data.profiles.indices.contains(index) else { return }
         let profile = data.profiles[index]
+        let wasLast = data.profiles.count == 1
         isConfirmingDelete = false
 
         let removal: RemovalReport
@@ -536,10 +539,21 @@ final class AppModel {
             failures.append(.dataFile)
         }
 
+        // Empty shared folders go too. Folders with content are kept.
+        store.removeEmptySharedFolders()
+
         status = Status(
             kind: failures.isEmpty ? .success : .failure,
             text: deleteStatusText(removal, failures, profile)
         )
+
+        // The last profile is gone: the PATH setup is no longer needed. Asked, never done silently.
+        if wasLast {
+            refreshPathStatus()
+            if !pathSetup.managedFiles().isEmpty {
+                isOfferingPathRemoval = true
+            }
+        }
 
         draft = nil
         draftIndex = nil
@@ -833,6 +847,142 @@ final class AppModel {
     /// Hides the banner without touching anything else.
     func dismissUpdateBanner() {
         updater.state = .idle
+    }
+
+    // MARK: - Terminal commands (PATH of the shells)
+
+    /// The PATH setup of the shells, built from the current paths.
+    private var pathSetup: ShellPathSetup { ShellPathSetup(paths: store.paths) }
+
+    /// The shell of new terminal tabs. Read with `refreshPathStatus()`.
+    private(set) var loginKind: ShellKind = ShellKind.from(loginShell: ShellPathSetup.currentLoginShell())
+    /// The state of the login shell.
+    private(set) var loginShellStatus: ShellStatus = .notConfigured
+    /// The state of every supported shell. Read when needed, never while drawing.
+    private(set) var shellStatuses: [ShellKind: ShellStatus] = [:]
+    /// Set while the question "Make the claude-<name> commands work…?" is open.
+    var isOfferingPathSetup = false
+    /// The profile slug shown in that question.
+    private(set) var pathOfferSlug = ""
+    /// Set while the question about removing the PATH setup is open.
+    var isOfferingPathRemoval = false
+    /// The result of the last action of the Terminal commands section in Settings.
+    var pathSetupMessage: Status?
+    /// The question is asked at most once per launch: "Not now" holds until the app starts again.
+    private var pathOfferAskedThisLaunch = false
+
+    /// Reads the state of every shell.
+    func refreshPathStatus() {
+        let setup = pathSetup
+        loginKind = setup.loginKind
+        loginShellStatus = setup.loginStatus()
+        shellStatuses = Dictionary(uniqueKeysWithValues: ShellKind.supported.map { ($0, setup.status(for: $0)) })
+    }
+
+    /// The line the user copies when the app does not edit the login shell.
+    var loginManualLine: String { pathSetup.manualLine(for: loginKind) }
+
+    /// The files that carry the setup, for the question about removing it.
+    var pathFilesText: String {
+        pathSetup.managedFiles().map { displayPath($0) }.joined(separator: ", ")
+    }
+
+    /// A path with the home folder written as "~".
+    func displayPath(_ url: URL) -> String {
+        let home = store.paths.home.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(home + "/") else { return path }
+        return "~" + path.dropFirst(home.count)
+    }
+
+    /// After a successful save: asks once per launch, for the login shell only.
+    private func offerPathSetupIfNeeded(slug: String) {
+        refreshPathStatus()
+        guard !data.pathPromptDeclined, !pathOfferAskedThisLaunch, loginShellStatus == .notConfigured else { return }
+        pathOfferAskedThisLaunch = true
+        pathOfferSlug = slug
+        isOfferingPathSetup = true
+    }
+
+    /// "Don't ask again", kept in profiles.json.
+    func declinePathPromptForever() {
+        data.pathPromptDeclined = true
+        persistSettings()
+    }
+
+    /// Adds the setup to one shell and returns the message to show.
+    @discardableResult
+    func addPathSetup(for shell: ShellKind) -> Status {
+        let message: Status
+        do {
+            switch try pathSetup.install(for: shell) {
+            case .added(let files, _):
+                let first = files.first.map { displayPath($0) } ?? ""
+                message = Status(kind: .success, text: loc.t("pathSetup.done", first))
+            case .alreadyConfigured:
+                message = Status(kind: .hint, text: loc.t("pathSetup.alreadyDone"))
+            }
+        } catch {
+            message = Status(kind: .failure, text: pathErrorText(error))
+        }
+        refreshPathStatus()
+        return message
+    }
+
+    /// Removes the setup of one shell. Lines written by hand are never removed.
+    func removePathSetup(for shell: ShellKind) -> Status {
+        let message: Status
+        do {
+            message = removalMessage(try pathSetup.remove(for: shell))
+        } catch {
+            message = Status(kind: .failure, text: pathErrorText(error))
+        }
+        refreshPathStatus()
+        return message
+    }
+
+    /// Removes the setup of every shell. Used when the last profile is deleted.
+    func removeAllPathSetup() -> Status {
+        let message: Status
+        do {
+            message = removalMessage(try pathSetup.removeEverything())
+        } catch {
+            message = Status(kind: .failure, text: pathErrorText(error))
+        }
+        refreshPathStatus()
+        return message
+    }
+
+    private func removalMessage(_ files: [URL]) -> Status {
+        guard !files.isEmpty else {
+            return Status(kind: .hint, text: loc.t("pathSetup.nothingToRemove"))
+        }
+        let list = files.map { displayPath($0) }.joined(separator: ", ")
+        return Status(kind: .success, text: loc.t("pathSetup.removed", list))
+    }
+
+    private func pathErrorText(_ error: Error) -> String {
+        guard let shellError = error as? ShellPathError else { return loc.t("error.generic") }
+        switch shellError {
+        case .damaged:
+            return loc.t("pathSetup.damaged")
+        case .unsupported:
+            return loc.t("pathSetup.unsupportedBar", loginKind.displayName, loginManualLine)
+        case .ioFailed(let path):
+            return loc.t("pathSetup.failed", displayPath(URL(fileURLWithPath: path)))
+        }
+    }
+
+    /// Copies the line for the login shell, for a shell the app does not edit.
+    func copyLoginLine() {
+        copyToPasteboard(loginManualLine)
+    }
+
+    /// Shows ~/.zshrc in Finder, or the home folder when it does not exist.
+    func revealZshrc() {
+        let zshrc = store.paths.home.appendingPathComponent(".zshrc")
+        let target = FileManager.default.fileExists(atPath: zshrc.path) ? zshrc : store.paths.home
+        NSWorkspace.shared.activateFileViewerSelecting([target])
     }
 
     // MARK: - Settings

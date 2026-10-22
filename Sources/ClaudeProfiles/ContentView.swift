@@ -39,6 +39,21 @@ struct ContentView: View {
         } message: {
             Text(model.loc.t("update.unsaved.message"))
         }
+        .alert(model.loc.t("pathSetup.offer.title", model.pathOfferSlug), isPresented: $model.isOfferingPathSetup) {
+            Button(model.loc.t("pathSetup.offer.add")) { model.status = model.addPathSetup(for: model.loginKind) }
+            Button(model.loc.t("pathSetup.offer.later"), role: .cancel) {}
+            Button(model.loc.t("pathSetup.offer.never")) { model.declinePathPromptForever() }
+        } message: {
+            Text(model.loc.t("pathSetup.offer.message"))
+        }
+        .alert(model.loc.t("pathSetup.lastProfile.title"), isPresented: $model.isOfferingPathRemoval) {
+            Button(model.loc.t("pathSetup.lastProfile.remove"), role: .destructive) {
+                model.status = model.removeAllPathSetup()
+            }
+            Button(model.loc.t("pathSetup.keep"), role: .cancel) {}
+        } message: {
+            Text(model.loc.t("pathSetup.lastProfile.message", model.pathFilesText))
+        }
     }
 
     // MARK: - Sidebar

@@ -4,6 +4,8 @@ import ClaudeProfilesCore
 /// The settings window (`Cmd+,`).
 struct SettingsView: View {
     @Bindable var model: AppModel
+    /// The shell whose setup waits for the confirmation of its removal.
+    @State private var shellToRemove: ShellKind?
 
     var body: some View {
         TabView {
@@ -14,7 +16,7 @@ struct SettingsView: View {
         }
         // The window is tall enough for every section, the updates one
         // included.
-        .frame(width: 420, height: 560)
+        .frame(width: 420, height: 700)
     }
 
     private var general: some View {
@@ -43,6 +45,27 @@ struct SettingsView: View {
                     Text(model.loc.t("settings.terminal.iterm")).tag(TerminalApp.iTerm)
                 }
                 .pickerStyle(.radioGroup)
+            }
+
+            Section(model.loc.t("pathSetup.section")) {
+                ForEach(ShellKind.supported, id: \.self) { shell in
+                    shellRow(shell)
+                }
+                if !model.loginKind.isSupported {
+                    Text(model.loc.t("pathSetup.unsupportedBar", model.loginKind.displayName, model.loginManualLine))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(model.loc.t("pathSetup.copyLine")) { model.copyLoginLine() }
+                }
+                if let message = model.pathSetupMessage {
+                    Text(message.text)
+                        .font(.footnote)
+                        .foregroundStyle(message.kind == .failure ? Color(nsColor: .systemRed) : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button(model.loc.t("pathSetup.showZshrc")) { model.revealZshrc() }
             }
 
             Section(model.loc.t("settings.updates.section")) {
@@ -79,6 +102,56 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { model.refreshPathStatus() }
+        .alert(
+            model.loc.t("pathSetup.remove.title", shellToRemove?.displayName ?? ""),
+            isPresented: Binding(get: { shellToRemove != nil }, set: { if !$0 { shellToRemove = nil } })
+        ) {
+            Button(model.loc.t("pathSetup.remove"), role: .destructive) {
+                if let shell = shellToRemove {
+                    model.pathSetupMessage = model.removePathSetup(for: shell)
+                }
+                shellToRemove = nil
+            }
+            Button(model.loc.t("actions.cancel"), role: .cancel) { shellToRemove = nil }
+        } message: {
+            Text(model.loc.t("pathSetup.remove.message"))
+        }
+    }
+
+    /// One shell of the Terminal commands section: its state and its buttons.
+    @ViewBuilder
+    private func shellRow(_ shell: ShellKind) -> some View {
+        let status = model.shellStatuses[shell] ?? .notConfigured
+        LabeledContent(shell.displayName) {
+            HStack(spacing: 8) {
+                Text(statusText(status))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                if status == .notConfigured || status == .partlyConfigured {
+                    Button(model.loc.t("pathSetup.add")) {
+                        model.pathSetupMessage = model.addPathSetup(for: shell)
+                    }
+                    .controlSize(.small)
+                }
+                if status == .configured || status == .partlyConfigured {
+                    Button(model.loc.t("pathSetup.remove")) { shellToRemove = shell }
+                        .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private func statusText(_ status: ShellStatus) -> String {
+        switch status {
+        case .configured: return model.loc.t("pathSetup.status.configured")
+        case .partlyConfigured: return model.loc.t("pathSetup.status.partly")
+        case .manual: return model.loc.t("pathSetup.status.manual")
+        case .notConfigured: return model.loc.t("pathSetup.status.notConfigured")
+        case .damaged: return model.loc.t("pathSetup.status.damaged")
+        case .unsupported: return model.loc.t("pathSetup.status.unsupported")
+        }
     }
 
     /// The sentence that explains why the updater is turned off.

@@ -401,6 +401,10 @@ struct StatusBar: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
+            if model.status == nil && model.loginShellStatus == .unsupported {
+                Button(model.loc.t("pathSetup.copyLine")) { model.copyLoginLine() }
+                    .controlSize(.small)
+            }
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -413,7 +417,16 @@ struct StatusBar: View {
         if let status = model.status {
             return status.text
         }
-        return model.loc.t("status.pathHint", model.store.paths.binDir.path)
+        switch model.loginShellStatus {
+        case .notConfigured, .partlyConfigured:
+            return model.loc.t("status.pathHint", model.store.paths.binDir.path)
+        case .unsupported:
+            return model.loc.t("pathSetup.unsupportedBar", model.loginKind.displayName, model.loginManualLine)
+        case .damaged:
+            return model.loc.t("pathSetup.damagedBar")
+        case .configured, .manual:
+            return ""
+        }
     }
 
     private var icon: String {
