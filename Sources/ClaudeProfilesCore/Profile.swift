@@ -150,6 +150,8 @@ public struct AppData: Codable, Equatable, Sendable {
     public var autoCheckUpdates: Bool
     /// When the last search for a new version was.
     public var lastUpdateCheck: Date?
+    /// The user chose "Don't ask again" for the PATH setup of the shell.
+    public var pathPromptDeclined: Bool
 
     public init(
         terminal: TerminalApp = .terminal,
@@ -157,7 +159,8 @@ public struct AppData: Codable, Equatable, Sendable {
         language: AppLanguage = .system,
         appearance: AppearanceMode = .system,
         autoCheckUpdates: Bool = true,
-        lastUpdateCheck: Date? = nil
+        lastUpdateCheck: Date? = nil,
+        pathPromptDeclined: Bool = false
     ) {
         self.terminal = terminal
         self.profiles = profiles
@@ -165,6 +168,7 @@ public struct AppData: Codable, Equatable, Sendable {
         self.appearance = appearance
         self.autoCheckUpdates = autoCheckUpdates
         self.lastUpdateCheck = lastUpdateCheck
+        self.pathPromptDeclined = pathPromptDeclined
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -174,6 +178,7 @@ public struct AppData: Codable, Equatable, Sendable {
         case appearance
         case autoCheckUpdates = "auto_check_updates"
         case lastUpdateCheck = "last_update_check"
+        case pathPromptDeclined = "path_prompt_declined"
     }
 
     public init(from decoder: Decoder) throws {
@@ -194,6 +199,7 @@ public struct AppData: Codable, Equatable, Sendable {
         // check is on when the file says nothing about it.
         autoCheckUpdates = (try? c.decode(Bool.self, forKey: .autoCheckUpdates)) ?? true
         lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
+        pathPromptDeclined = (try? c.decode(Bool.self, forKey: .pathPromptDeclined)) ?? false
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
@@ -225,6 +231,10 @@ public struct AppData: Codable, Equatable, Sendable {
         try c.encode(autoCheckUpdates, forKey: .autoCheckUpdates)
         if let lastUpdateCheck {
             try c.encode(Timestamp.string(from: lastUpdateCheck), forKey: .lastUpdateCheck)
+        }
+        // Written only when set, so a file without it stays as the old app wrote it.
+        if pathPromptDeclined {
+            try c.encode(true, forKey: .pathPromptDeclined)
         }
     }
 }

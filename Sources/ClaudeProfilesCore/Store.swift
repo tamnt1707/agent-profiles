@@ -543,6 +543,21 @@ public struct Store {
 
     // MARK: - Removing
 
+    /// Removes the `bin` and `homes` folders of the data root when they are empty.
+    ///
+    /// Nothing else is removed: a folder with content stays, and the root folder
+    /// itself (it also holds `profiles.json`) is never touched.
+    public func removeEmptySharedFolders() {
+        for folder in [paths.binDir, paths.homesDir] {
+            guard SafeFileSystem.kind(of: folder) == .directory else { continue }
+            // A folder that cannot be listed is kept.
+            guard let children = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+                  children.isEmpty
+            else { continue }
+            _ = rmdir(folder.path)
+        }
+    }
+
     /// The config folder of a profile, when it is safe to remove it.
     ///
     /// The slug has to be a single harmless path component and the folder has
@@ -637,6 +652,9 @@ enum JSONText {
         out += "  \"language\": \(escape(data.language.rawValue)),\n"
         out += "  \"appearance\": \(escape(data.appearance.rawValue)),\n"
         out += "  \"auto_check_updates\": \(data.autoCheckUpdates)"
+        if data.pathPromptDeclined {
+            out += ",\n  \"path_prompt_declined\": true"
+        }
         if let lastUpdateCheck = data.lastUpdateCheck {
             out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"
         }
