@@ -6,11 +6,14 @@ import ClaudeProfilesCore
 struct ProfileEditorView: View {
     @Bindable var model: AppModel
     @State private var presetID = ""
+    /// The usage section is collapsed until the user opens it.
+    @State private var isUsageExpanded = false
 
     var body: some View {
         Form {
             providerSection
             modelsSection
+            usageSection
             environmentSection
             workspaceSection
             isolationSection
@@ -225,6 +228,136 @@ struct ProfileEditorView: View {
                 .padding(.vertical, 4)
             }
         }
+    }
+
+    // MARK: - Usage
+
+    /// The tokens this profile used, read from its session files. The section starts
+    /// collapsed, so nothing is read at launch: the first expand counts, Refresh counts again.
+    private var usageSection: some View {
+        Section(model.loc.t("editor.usage.section")) {
+            DisclosureGroup(model.loc.t("editor.usage.disclosure"), isExpanded: $isUsageExpanded) {
+                usageContent
+            }
+        }
+        .task(id: model.selectedSlug) {
+            if isUsageExpanded { model.loadUsageIfNeeded() }
+        }
+        .onChange(of: isUsageExpanded) { _, expanded in
+            if expanded { model.loadUsageIfNeeded() }
+        }
+    }
+
+    @ViewBuilder
+    private var usageContent: some View {
+        if model.currentProfile == nil {
+            Text(model.loc.t("editor.usage.unsaved"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if model.draft?.isolate != true {
+            Text(model.loc.t("editor.usage.notIsolated"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            usageRows
+        }
+    }
+
+    @ViewBuilder
+    private var usageRows: some View {
+        let slug = model.currentProfile?.slug ?? ""
+        let result = model.usageResults[slug]
+        let summary = usageSummary(of: result)
+
+        if result == .unavailable(.folderMissing) {
+            Text(model.loc.t("editor.usage.noFolder"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if result == nil && model.usageLoadingSlug != slug {
+            Text(model.loc.t("editor.usage.notLoaded"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+
+        usageRow(model.loc.t("editor.usage.today"), summary?.today)
+        usageRow(model.loc.t("editor.usage.week"), summary?.last7Days)
+        usageRow(model.loc.t("editor.usage.allTime"), summary?.allTime)
+
+        HStack(spacing: 8) {
+            Button(model.loc.t("editor.usage.refresh")) {
+                model.loadUsage()
+            }
+            .disabled(model.usageLoadingSlug != nil)
+            if model.usageLoadingSlug == slug {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+
+        if let totals = summary?.allTime,
+           let cost = UsageCost.estimate(
+               totals,
+               inputPerMillion: model.draft?.priceInputPerMillion,
+               outputPerMillion: model.draft?.priceOutputPerMillion
+           ) {
+            Text(model.loc.t("editor.usage.cost", String(format: "$%.2f", cost)))
+                .font(.callout)
+        }
+
+        DisclosureGroup(model.loc.t("editor.usage.prices")) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(model.loc.t("editor.usage.priceHelp"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                LabeledContent(model.loc.t("editor.usage.priceInput")) {
+                    TextField(model.loc.t("editor.usage.priceInput"), value: price(\.priceInputPerMillion), format: .number)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent(model.loc.t("editor.usage.priceOutput")) {
+                    TextField(model.loc.t("editor.usage.priceOutput"), value: price(\.priceOutputPerMillion), format: .number)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+
+        Text(model.loc.t("editor.usage.note"))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+    }
+
+    /// One window of the usage. The detail shows in the tooltip.
+    private func usageRow(_ title: String, _ totals: TokenTotals?) -> some View {
+        LabeledContent(title) {
+            if let totals {
+                Text(TokenFormat.compact(totals.total))
+                    .monospacedDigit()
+                    .help(model.loc.t(
+                        "editor.usage.detail",
+                        totals.input.formatted(),
+                        totals.output.formatted(),
+                        totals.cacheRead.formatted(),
+                        totals.cacheWrite.formatted()
+                    ))
+            } else {
+                Text("—")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func usageSummary(of result: UsageResult?) -> UsageSummary? {
+        guard case .available(let summary)? = result else { return nil }
+        return summary
+    }
+
+    private func price(_ keyPath: WritableKeyPath<Profile, Double?>) -> Binding<Double?> {
+        Binding(
+            get: { model.draft?[keyPath: keyPath] },
+            set: { model.draft?[keyPath: keyPath] = $0 }
+        )
     }
 
     private var environmentSection: some View {
