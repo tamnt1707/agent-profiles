@@ -6,9 +6,13 @@ public enum Launcher {
     ///
     /// A working directory that starts with `~` is expanded to the home
     /// directory first, because a quoted `'~/x'` would not be expanded by the shell.
-    public static func command(for profile: Profile, paths: Paths) -> String {
+    ///
+    /// `workdirOverride` replaces the working directory of the profile for one
+    /// launch (the folder chosen from the menu bar). An empty override means no `cd`.
+    public static func command(for profile: Profile, paths: Paths, workdirOverride: String? = nil) -> String {
         var command = ""
-        let directory = profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
+        let directory = workdirOverride
+            ?? profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
         if !directory.isEmpty {
             command += "cd \(ShellQuote.quote(expandHome(directory, home: paths.home))) && "
         }
@@ -61,9 +65,11 @@ public enum Launcher {
         profile: Profile,
         terminal: TerminalApp,
         paths: Paths,
+        workdirOverride: String? = nil,
         runner: ProcessRunner = SystemProcessRunner()
     ) throws -> Int32 {
-        let script = appleScript(command: command(for: profile, paths: paths), terminal: terminal)
+        let shellCommand = command(for: profile, paths: paths, workdirOverride: workdirOverride)
+        let script = appleScript(command: shellCommand, terminal: terminal)
         let result: ProcessResult
         do {
             result = try runner.run("/usr/bin/osascript", ["-e", script])
@@ -87,10 +93,11 @@ public enum Launcher {
         profile: Profile,
         terminal: TerminalApp,
         paths: Paths,
+        workdirOverride: String? = nil,
         runner: ProcessRunner = SystemProcessRunner()
     ) async throws -> Int32 {
         try await Task.detached(priority: .userInitiated) {
-            try launch(profile: profile, terminal: terminal, paths: paths, runner: runner)
+            try launch(profile: profile, terminal: terminal, paths: paths, workdirOverride: workdirOverride, runner: runner)
         }.value
     }
 }
