@@ -118,6 +118,16 @@ public enum UsageCost {
         }
         return cost
     }
+
+    /// The cost as money in US dollars, written the way the language of the
+    /// user writes it: `$1,234.56` in English, `1.234,56 US$` in Vietnamese.
+    public static func format(_ cost: Double, locale: Locale = .current) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.locale = locale
+        return formatter.string(from: NSNumber(value: cost)) ?? ""
+    }
 }
 
 /// Short text for token counts: `850`, `12K`, `1.2M`.
@@ -130,7 +140,17 @@ public enum TokenFormat {
         if count < 999_500 {
             return scaled(Double(count) / 1_000, suffix: "K")
         }
-        return scaled(Double(count) / 1_000_000, suffix: "M")
+        // From 999 500 000 on, the millions would read "1000M", so those read as billions.
+        if count < 999_500_000 {
+            return scaled(Double(count) / 1_000_000, suffix: "M")
+        }
+        return scaled(Double(count) / 1_000_000_000, suffix: "B")
+    }
+
+    /// The whole number, written the way the language of the user writes it:
+    /// `1,234,567` in English, `1.234.567` in Vietnamese.
+    public static func number(_ count: Int, locale: Locale = .current) -> String {
+        count.formatted(.number.locale(locale))
     }
 
     /// One decimal below 10, whole numbers above, and no trailing `.0`.

@@ -199,4 +199,32 @@ final class UsagePriceTests: XCTestCase {
         XCTAssertEqual(TokenFormat.compact(1_234_567), "1.2M")
         XCTAssertEqual(TokenFormat.compact(12_345_678), "12M")
     }
+
+    /// The big numbers are read in billions.
+    func testCompactTokenCountsInBillions() {
+        XCTAssertEqual(TokenFormat.compact(999_499_999), "999M")
+        XCTAssertEqual(TokenFormat.compact(999_500_000), "1B")
+        XCTAssertEqual(TokenFormat.compact(999_999_999), "1B")
+        XCTAssertEqual(TokenFormat.compact(1_000_000_000), "1B")
+        XCTAssertEqual(TokenFormat.compact(1_234_567_890), "1.2B")
+        XCTAssertEqual(TokenFormat.compact(12_345_678_901), "12B")
+    }
+
+    // MARK: - The language of the user
+
+    /// The full number is written the way the language of the user writes it.
+    func testTheFullNumberFollowsTheLanguage() {
+        XCTAssertEqual(TokenFormat.number(1_234_567, locale: Locale(identifier: "en")), "1,234,567")
+        XCTAssertEqual(TokenFormat.number(1_234_567, locale: Locale(identifier: "vi")), "1.234.567")
+    }
+
+    /// The cost is money, written the way the language of the user writes it.
+    func testTheCostIsMoneyInTheLanguageOfTheUser() {
+        let english = UsageCost.format(1234.56, locale: Locale(identifier: "en"))
+        XCTAssertTrue(english.contains("1,234.56"), english)
+        XCTAssertTrue(english.contains("$"), english)
+
+        let vietnamese = UsageCost.format(1234.56, locale: Locale(identifier: "vi"))
+        XCTAssertTrue(vietnamese.contains("1.234,56"), vietnamese)
+    }
 }
