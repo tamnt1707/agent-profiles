@@ -53,6 +53,17 @@ final class AppModel {
     /// Set while the delete confirmation is open.
     var isConfirmingDelete: Bool = false
 
+    /// The state of the delete confirmation: the items it lists and the
+    /// measurement of the config folder that is still on its way.
+    private(set) var deleteDialog = DeleteDialogState()
+
+    /// The text of the delete confirmation.
+    ///
+    /// It is built when the question is asked and never while the window is
+    /// drawn: the size of the config folder is measured away from the main
+    /// thread, so asking for it while drawing would freeze the app.
+    private(set) var deleteDialogText: String = ""
+
     /// The updater of the app: it checks the releases and installs them.
     let updater: UpdateController
 
@@ -324,7 +335,9 @@ final class AppModel {
         keyInput = ""
         revealKey = false
         hasStoredKey = (try? store.keys.hasKey(profile.slug)) ?? false
-        isConfirmingDelete = false
+        // Another profile is shown: a measurement of the old one must not
+        // come back and change the text of the next question.
+        cancelDelete()
     }
 
     /// The sidebar selection changed. The user may switch to another profile
@@ -418,7 +431,7 @@ final class AppModel {
         keyInput = ""
         revealKey = false
         hasStoredKey = false
-        isConfirmingDelete = false
+        cancelDelete()
         selectedSlug = nil
     }
 
@@ -953,33 +966,64 @@ final class AppModel {
     }
 
     /// Shows the delete confirmation.
+    ///
+    /// The text is there right away: it names everything that goes away,
+    /// taken from the SAVED profile, because a command name typed but not
+    /// saved is not what gets deleted. The size of the config folder is not
+    /// asked for here: it is measured away from the main thread, so the
+    /// window is never blocked by a folder with many files in it.
     func requestDelete() {
-        guard draftIndex != nil else { return }
+        guard let slug = currentProfile?.slug else { return }
+        guard let target = DeleteTarget(index: draftIndex, in: data, paths: store.paths, measure: { _ in nil }) else { return }
+        let token = deleteDialog.begin(slug: slug, items: target.items)
+        deleteDialogText = DeleteDialogText.message(
+            name: target.name,
+            items: target.items,
+            strings: loc.deleteDialogStrings
+        )
         isConfirmingDelete = true
+        measureFolderSize(for: token)
     }
 
-    /// The message of the delete confirmation. It names everything that goes
-    /// away, taken from the SAVED profile: a command name typed but not saved
-    /// is not what gets deleted.
-    var deleteDialogMessage: String {
-        guard let target = DeleteTarget(index: draftIndex, in: data, paths: store.paths) else { return "" }
-        let list = target.items.map { "• " + deleteItemText($0) }.joined(separator: "\n")
-        return loc.t("delete.dialog.intro", target.name)
-            + "\n\n" + list + "\n\n" + loc.t("delete.dialog.warning")
-    }
-
-    /// One line of the delete confirmation, in the language of the user.
-    private func deleteItemText(_ item: DeleteTarget.Item) -> String {
-        switch item {
-        case .key:
-            return loc.t("delete.item.key")
-        case .command(let name):
-            return loc.t("delete.item.command", name)
-        case .folder(let path, let bytes):
-            guard let bytes else { return loc.t("delete.item.folder", path) }
-            let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-            return loc.t("delete.item.folderSize", path, size)
+    /// Measures the config folder of the profile, away from the main thread.
+    ///
+    /// The answer is used only when it still belongs to the open question.
+    private func measureFolderSize(for token: DeleteDialogState.Token) {
+        let url = store.paths.home(for: token.slug)
+        Task.detached(priority: .userInitiated) {
+            let bytes = DirectorySize.measure(at: url)
+            await MainActor.run { self.applyFolderSize(bytes, for: token) }
         }
+    }
+
+    /// Puts the size of the config folder into the text of the question.
+    ///
+    /// A late answer is dropped: the question may be about another profile
+    /// now, or it may be closed already. Only the text of the message
+    /// changes, never the buttons under it.
+    private func applyFolderSize(_ bytes: Int?, for token: DeleteDialogState.Token) {
+        guard deleteDialog.apply(bytes: bytes, for: token) else { return }
+        guard let name = deleteDialogName else { return }
+        deleteDialogText = DeleteDialogText.message(
+            name: name,
+            items: deleteDialog.items,
+            strings: loc.deleteDialogStrings
+        )
+    }
+
+    /// The name of the profile the confirmation is about.
+    private var deleteDialogName: String? {
+        guard let slug = deleteDialog.slug else { return nil }
+        return data.profiles.first { $0.slug == slug }?.name
+    }
+
+    /// Closes the delete confirmation.
+    ///
+    /// A measurement that is still on its way is dropped: its answer belongs
+    /// to a question that is not open any more.
+    func cancelDelete() {
+        isConfirmingDelete = false
+        deleteDialog.cancel()
     }
 
     /// Removes the profile: the key, the command and the config folder go away.
@@ -987,7 +1031,8 @@ final class AppModel {
         guard let index = draftIndex, data.profiles.indices.contains(index) else { return }
         let profile = data.profiles[index]
         let wasLast = data.profiles.count == 1
-        isConfirmingDelete = false
+        // The question is closed: a measurement of it must not come back.
+        cancelDelete()
 
         let removal: RemovalReport
         do {

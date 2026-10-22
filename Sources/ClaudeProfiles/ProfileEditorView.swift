@@ -34,9 +34,12 @@ struct ProfileEditorView: View {
         }
         .alert(model.loc.t("actions.confirmDelete"), isPresented: $model.isConfirmingDelete) {
             Button(model.loc.t("delete.button"), role: .destructive) { model.deleteCurrent() }
-            Button(model.loc.t("actions.cancel"), role: .cancel) { model.isConfirmingDelete = false }
+            Button(model.loc.t("actions.cancel"), role: .cancel) { model.cancelDelete() }
         } message: {
-            Text(verbatim: model.deleteDialogMessage)
+            // The text is built when the question is asked. Asking for the
+            // size of the folder here would walk the folder on the main
+            // thread, on every pass of the window.
+            Text(verbatim: model.deleteDialogText)
         }
     }
 

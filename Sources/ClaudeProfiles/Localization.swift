@@ -145,4 +145,16 @@ final class Loc {
             accessDeniedTemplate: t("script.accessDenied")
         )
     }
+
+    /// The sentences of the delete confirmation.
+    var deleteDialogStrings: DeleteDialogStrings {
+        DeleteDialogStrings(
+            introTemplate: t("delete.dialog.intro"),
+            warning: t("delete.dialog.warning"),
+            keyText: t("delete.item.key"),
+            commandTemplate: t("delete.item.command"),
+            folderTemplate: t("delete.item.folder"),
+            folderSizeTemplate: t("delete.item.folderSize")
+        )
+    }
 }
