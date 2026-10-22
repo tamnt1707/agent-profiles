@@ -12,7 +12,16 @@ import Foundation
 /// can be deleted at any time, and a damaged one is ignored.
 public actor UsageScanner {
     /// Calls the body with every line of a file, in order. Injected by tests to count reads.
-    public typealias LineReader = @Sendable (URL, (RawLine) throws -> Void) throws -> Void
+    ///
+    /// The file is already open: the scanner opens it without following a
+    /// link, so a reader never sees a file that was swapped in the meantime.
+    public typealias LineReader = @Sendable (FileHandle, (RawLine) throws -> Void) throws -> Void
+
+    /// Opens a file for reading. Injected by the tests.
+    public typealias FileOpener = @Sendable (URL) throws -> FileHandle
+
+    /// The names of the children of a folder. Injected by the tests.
+    public typealias FolderLister = @Sendable (URL) throws -> [String]
 
     /// Counts the bytes that the reader of the lines looks at. Injected by the
     /// tests to prove that a long line is looked at once.
@@ -46,6 +55,10 @@ public actor UsageScanner {
 
     private let paths: Paths
     private let readLines: LineReader
+    /// Opens the session files. The default never follows a link.
+    private let opener: FileOpener
+    /// Lists the folders of the sessions. The default never follows a link.
+    private let lister: FolderLister
     /// Called after the temporary file of the cache is written and before it is
     /// renamed. Injected by the tests to look at the mode of that file.
     private let afterTemporaryFileWritten: (@Sendable (URL) -> Void)?
@@ -58,12 +71,60 @@ public actor UsageScanner {
 
     public init(
         paths: Paths,
-        readLines: @escaping LineReader = UsageScanner.streamLines,
+        readLines: LineReader? = nil,
+        opener: FileOpener? = nil,
+        lister: FolderLister? = nil,
         afterTemporaryFileWritten: (@Sendable (URL) -> Void)? = nil
     ) {
+        let fileOpener = opener ?? UsageScanner.openReadOnly
         self.paths = paths
-        self.readLines = readLines
+        self.opener = fileOpener
+        self.lister = lister ?? UsageScanner.childrenOfFolder
+        self.readLines = readLines ?? UsageScanner.streamLines
         self.afterTemporaryFileWritten = afterTemporaryFileWritten
+    }
+
+    /// Opens a file for reading, without following a link.
+    ///
+    /// The file is opened with `open(2)` and `O_NOFOLLOW`: a link that takes
+    /// the place of the file after the listing is never read. The descriptor
+    /// belongs to the handle, so it is closed when the handle goes away.
+    public static let openReadOnly: FileOpener = { url in
+        let descriptor = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return open(path, O_RDONLY | O_NOFOLLOW)
+        }
+        guard descriptor >= 0 else { throw CocoaError(.fileReadUnknown) }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    /// The names of the children of a folder, without following a link.
+    ///
+    /// The folder is opened with `open(2)` and `O_NOFOLLOW`, so a link that
+    /// takes the place of the folder is never opened, and the names come from
+    /// the folder that was opened. A folder that cannot be opened has no
+    /// children.
+    public static let childrenOfFolder: FolderLister = { folder in
+        let descriptor = folder.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return open(path, O_RDONLY | O_NOFOLLOW | O_DIRECTORY)
+        }
+        guard descriptor >= 0 else { return [] }
+        guard let directory = fdopendir(descriptor) else {
+            close(descriptor)
+            return []
+        }
+        defer { closedir(directory) }
+        var names: [String] = []
+        while let entry = readdir(directory) {
+            let name = withUnsafeBytes(of: entry.pointee.d_name) { raw -> String in
+                guard let base = raw.baseAddress else { return "" }
+                return String(cString: base.assumingMemoryBound(to: CChar.self))
+            }
+            guard !name.isEmpty, name != ".", name != ".." else { continue }
+            names.append(name)
+        }
+        return names
     }
 
     /// The usage of a profile. Runs off the main thread and stops when the
@@ -116,7 +177,7 @@ public actor UsageScanner {
         var filesSinceSave = 0
         var lastSave = Date()
         do {
-            for file in Self.sessionFiles(in: home, slug: profile.slug) {
+            for file in sessionFiles(in: home, slug: profile.slug) {
                 try Task.checkCancellation()
                 seen.insert(file.key)
                 let entry: FileEntry?
@@ -194,6 +255,9 @@ public actor UsageScanner {
     // MARK: - Reading one file
 
     /// Reads a whole file, line by line, into its per-day totals.
+    ///
+    /// The file is opened without following a link: a link that took the place
+    /// of the file after the listing is not read, the file is skipped.
     private func scan(_ file: SessionFile, zone: String, calendar: Calendar) throws -> ScanResult {
         var entry = FileEntry(size: file.size, modified: file.modified, zone: zone, days: [:], undated: TokenTotals())
         // The replies of this file, by their id. A reply that is written
@@ -203,8 +267,10 @@ public actor UsageScanner {
         var skipped = 0
         let dates = TimestampReader()
         let decoder = JSONDecoder()
+        let handle = try opener(file.url)
+        defer { try? handle.close() }
         do {
-            try readLines(file.url) { line in
+            try readLines(handle) { line in
                 try Task.checkCancellation()
                 // A line that is longer than the limit is not read.
                 guard !line.tooLong, line.bytes.count <= Self.maxLineBytes else {
@@ -383,6 +449,9 @@ public actor UsageScanner {
     /// read in chunks of 64 KB, so only one line (plus one chunk) is in memory
     /// at a time.
     ///
+    /// The file is already open: the scanner opens it without following a
+    /// link.
+    ///
     /// A line that is longer than `maxLineBytes` is not handed over: its bytes
     /// are dropped while it is read, so a huge line cannot fill the memory.
     public static let streamLines: LineReader = streamLines(limit: maxLineBytes)
@@ -393,15 +462,31 @@ public actor UsageScanner {
         streamLines(limit: limit, counted: { _ in })
     }
 
-    /// The reader of the lines of a file, with a limit of its own and a
+    /// The reader of the lines of a file at a path.
+    ///
+    /// The file is opened without following a link, so a link that took the
+    /// place of the file is never read.
+    public static func streamLines(of url: URL, _ body: (RawLine) throws -> Void) throws {
+        let handle = try openReadOnly(url)
+        defer { try? handle.close() }
+        try streamLines(handle, body)
+    }
+
+    /// The reader of the lines of a file at a path, with a limit of its own
+    /// for the length of a line.
+    public static func streamLines(of url: URL, limit: Int, _ body: (RawLine) throws -> Void) throws {
+        let handle = try openReadOnly(url)
+        defer { try? handle.close() }
+        try streamLines(limit: limit, counted: { _ in })(handle, body)
+    }
+
+    /// The reader of the lines of an open file, with a limit of its own and a
     /// counter of the bytes that are looked at.
     ///
     /// The counter is injected by the tests: it proves that every byte of a
     /// long line is looked at once and not again for every chunk.
     static func streamLines(limit: Int, counted: @escaping ByteCounter) -> LineReader {
-        { url, body in
-            let handle = try FileHandle(forReadingFrom: url)
-            defer { try? handle.close() }
+        { handle, body in
             var pending = Data()
             // How far the current line was already looked at. The search for a
             // line break starts there and goes on to the end of the buffer, so
@@ -503,16 +588,19 @@ public actor UsageScanner {
     /// Empty when the folder does not exist.
     ///
     /// Links are never followed: a link could lead to a file outside of the
-    /// folder of the profile.
-    private static func sessionFiles(in home: URL, slug: String) -> [SessionFile] {
+    /// folder of the profile. The folders are opened with `open(2)` and
+    /// `O_NOFOLLOW`, so a link that takes the place of a folder is not opened
+    /// either.
+    private func sessionFiles(in home: URL, slug: String) -> [SessionFile] {
         let root = home.appendingPathComponent("projects", isDirectory: true)
         guard SafeFileSystem.kind(of: root) == .directory else { return [] }
         var files: [SessionFile] = []
         var folders: [URL] = [root]
         while let folder = folders.first {
             folders.removeFirst()
-            let children = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-            for name in children where !name.hasPrefix(".") {
+            // A folder that cannot be listed has no children.
+            let names = (try? lister(folder)) ?? []
+            for name in names where !name.hasPrefix(".") {
                 let url = folder.appendingPathComponent(name)
                 switch SafeFileSystem.kind(of: url) {
                 case .directory:
@@ -523,7 +611,7 @@ public actor UsageScanner {
                     let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
                     let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
                     files.append(SessionFile(
-                        key: cacheKey(slug: slug, path: relativePath(of: url, in: home)),
+                        key: Self.cacheKey(slug: slug, path: Self.relativePath(of: url, in: home)),
                         url: url,
                         size: size,
                         modified: modified

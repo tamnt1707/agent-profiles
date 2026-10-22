@@ -102,10 +102,11 @@ final class UsageScannerTests: XCTestCase {
         Profile.sample(name: slug, slug: slug, isolate: isolate)
     }
 
+    /// The scanner of the test. The opener counts the files that are read.
     private func makeScanner(counter: ReadCounter? = nil) -> UsageScanner {
-        UsageScanner(paths: paths, readLines: { url, body in
+        UsageScanner(paths: paths, opener: { url in
             counter?.record(url.lastPathComponent)
-            try UsageScanner.streamLines(url, body)
+            return try UsageScanner.openReadOnly(url)
         })
     }
 
@@ -386,7 +387,7 @@ final class UsageScannerTests: XCTestCase {
 
         var streamed = 0
         let url = paths.home(for: "work").appendingPathComponent("projects/-proj-a/s1.jsonl")
-        try UsageScanner.streamLines(url) { _ in streamed += 1 }
+        try UsageScanner.streamLines(of: url) { _ in streamed += 1 }
         XCTAssertEqual(streamed, 100_000)
 
         let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
@@ -398,7 +399,7 @@ final class UsageScannerTests: XCTestCase {
         try session([long, "second", ""])
         let url = paths.home(for: "work").appendingPathComponent("projects/-proj-a/s1.jsonl")
         var received: [String] = []
-        try UsageScanner.streamLines(url) { line in
+        try UsageScanner.streamLines(of: url) { line in
             received.append(String(decoding: line.bytes, as: UTF8.self))
         }
         XCTAssertEqual(received, [long, "second", ""])
@@ -605,11 +606,11 @@ final class UsageScannerTests: XCTestCase {
     func testAFileThatDisappearsDuringTheScanIsSkipped() async throws {
         try session([reply(id: "a", request: "r1", input: 100)], name: "gone.jsonl")
         try session([reply(id: "b", request: "r2", input: 7)], name: "kept.jsonl")
-        let scanner = UsageScanner(paths: paths, readLines: { url, body in
+        let scanner = UsageScanner(paths: paths, opener: { url in
             if url.lastPathComponent == "gone.jsonl" {
                 throw ProfileError.ioFailed("/Users/somebody/project/gone.jsonl")
             }
-            try UsageScanner.streamLines(url, body)
+            return try UsageScanner.openReadOnly(url)
         })
 
         let result = try await scanner.usage(for: profile(), now: noon, calendar: utc())
@@ -666,7 +667,7 @@ final class UsageScannerTests: XCTestCase {
         try session([long, "second", "third"])
         let url = paths.home(for: "work").appendingPathComponent("projects/-proj-a/s1.jsonl")
         var received: [UsageScanner.RawLine] = []
-        try UsageScanner.streamLines(limit: 1_000)(url) { received.append($0) }
+        try UsageScanner.streamLines(of: url, limit: 1_000) { received.append($0) }
         XCTAssertEqual(received.count, 3)
         XCTAssertTrue(received[0].tooLong)
         XCTAssertFalse(received[1].tooLong)
@@ -713,11 +714,11 @@ final class UsageScannerTests: XCTestCase {
             try session([reply(id: "m\(index)", request: "r\(index)", input: 1)], name: "f\(index).jsonl")
         }
         let counter = ReadCounter()
-        let scanner = UsageScanner(paths: paths, readLines: { url, body in
+        let scanner = UsageScanner(paths: paths, opener: { url in
             counter.record(url.lastPathComponent)
             // The scan is stopped after 25 files.
             if counter.count == 26 { throw CancellationError() }
-            try UsageScanner.streamLines(url, body)
+            return try UsageScanner.openReadOnly(url)
         })
         do {
             _ = try await scanner.usage(for: profile(), now: noon, calendar: utc())
@@ -770,6 +771,64 @@ final class UsageScannerTests: XCTestCase {
 
         let result = try await makeScanner().usage(for: profile(), now: noon, calendar: utc())
         XCTAssertEqual(summary(result).allTime.input, 0)
+    }
+
+    // MARK: - The race between the listing and the reading
+
+    /// A link that takes the place of the file after the listing is not read.
+    ///
+    /// The file is opened with `O_NOFOLLOW`, so the link is refused and the
+    /// file is skipped: the numbers of the file behind the link are not
+    /// counted.
+    func testALinkThatTakesThePlaceOfTheFileAfterTheListingIsNotRead() async throws {
+        try session([reply(id: "a", request: "r1", input: 1)], name: "one.jsonl")
+        // The file behind the link: it holds numbers that must not be counted.
+        let outside = paths.root.appendingPathComponent("outside.jsonl")
+        try (reply(id: "b", request: "r2", input: 999) + "\n")
+            .write(to: outside, atomically: false, encoding: .utf8)
+
+        let scanner = UsageScanner(paths: paths, opener: { url in
+            // The file is replaced by a link right after the listing.
+            try? FileManager.default.removeItem(at: url)
+            try FileManager.default.createSymbolicLink(at: url, withDestinationURL: outside)
+            return try UsageScanner.openReadOnly(url)
+        })
+
+        let result = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+
+        XCTAssertEqual(summary(result).allTime.input, 0, "the file behind the link was read")
+        XCTAssertEqual(skippedFiles(result), 1, "the file was not skipped")
+    }
+
+    /// A link that takes the place of a folder after the listing is not walked
+    /// into.
+    ///
+    /// The folder is opened with `O_NOFOLLOW`, so the link is refused and the
+    /// files behind it are never listed.
+    func testALinkThatTakesThePlaceOfAFolderAfterTheListingIsNotWalkedInto() async throws {
+        try session([reply(id: "a", request: "r1", input: 1)], name: "one.jsonl")
+        // The folder behind the link: it holds files that must not be counted.
+        let outside = paths.root.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try (reply(id: "b", request: "r2", input: 999) + "\n")
+            .write(to: outside.appendingPathComponent("two.jsonl"), atomically: false, encoding: .utf8)
+
+        let project = paths.home(for: "work").appendingPathComponent("projects/-proj-b", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+
+        let scanner = UsageScanner(paths: paths, lister: { folder in
+            let names = try UsageScanner.childrenOfFolder(folder)
+            // The folder is replaced by a link right after it was listed.
+            if folder.lastPathComponent == "-proj-b" {
+                try? FileManager.default.removeItem(at: folder)
+                try FileManager.default.createSymbolicLink(at: folder, withDestinationURL: outside)
+            }
+            return names
+        })
+        let result = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+
+        XCTAssertEqual(summary(result).allTime.input, 1, "the files behind the link were read")
+        XCTAssertEqual(skippedFiles(result), 0)
     }
 
     /// A slug that is not a safe file name reads nothing.
@@ -869,8 +928,8 @@ final class UsageScannerTests: XCTestCase {
     /// task.
     private func cancellingReader(after lines: Int) -> UsageScanner.LineReader {
         let counter = LineTally()
-        return { url, body in
-            try UsageScanner.streamLines(url) { line in
+        return { handle, body in
+            try UsageScanner.streamLines(handle) { line in
                 let seen = counter.add(1)
                 try body(line)
                 if seen >= lines {
