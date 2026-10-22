@@ -297,6 +297,13 @@ public struct Store {
         if !url.isEmpty && !url.hasPrefix("https://") && !url.hasPrefix("http://") {
             throw ProfileError.invalidBaseURL
         }
+        // The working folder ends up in a command that is typed into a live
+        // shell, so a folder with a control character in its name is refused
+        // here, before the profile is saved.
+        let workdir = profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !workdir.isEmpty, !FolderPathSafety.isSafe(workdir) {
+            throw ProfileError.unsafeFolder(profile.workdir)
+        }
         _ = try ShellQuote.parseExtraEnv(profile.extraEnv)
     }
 
@@ -655,6 +662,9 @@ enum JSONText {
         if data.pathPromptDeclined {
             out += ",\n  \"path_prompt_declined\": true"
         }
+        // The rule of the field is in one place: it is written only when the
+        // menu bar is turned off.
+        out += MenuBarSetting.json(data.showMenuBar)
         if let lastUpdateCheck = data.lastUpdateCheck {
             out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"
         }
@@ -665,19 +675,28 @@ enum JSONText {
     static func encode(_ profile: Profile, indent: Int) -> String {
         let pad = String(repeating: " ", count: indent)
         let inner = String(repeating: " ", count: indent + 2)
+        var fields = [
+            "\"name\": \(escape(profile.name))",
+            "\"slug\": \(escape(profile.slug))",
+            "\"base_url\": \(escape(profile.baseURL))",
+            "\"auth\": \(escape(profile.auth.rawValue))",
+            "\"model\": \(escape(profile.model))",
+            "\"opus_model\": \(escape(profile.opusModel))",
+            "\"sonnet_model\": \(escape(profile.sonnetModel))",
+            "\"haiku_model\": \(escape(profile.haikuModel))",
+            "\"extra_env\": \(escape(profile.extraEnv))",
+            "\"workdir\": \(escape(profile.workdir))",
+            "\"isolate\": \(profile.isolate)",
+            "\"share_from_default\": \(profile.shareFromDefault)",
+        ]
+        // Optional: written only when there is a list, as a multi-line array like serde_json.
+        if !profile.recentDirs.isEmpty {
+            let item = String(repeating: " ", count: indent + 4)
+            let items = profile.recentDirs.map { item + escape($0) }.joined(separator: ",\n")
+            fields.append("\"recent_dirs\": [\n\(items)\n\(inner)]")
+        }
         var out = pad + "{\n"
-        out += "\(inner)\"name\": \(escape(profile.name)),\n"
-        out += "\(inner)\"slug\": \(escape(profile.slug)),\n"
-        out += "\(inner)\"base_url\": \(escape(profile.baseURL)),\n"
-        out += "\(inner)\"auth\": \(escape(profile.auth.rawValue)),\n"
-        out += "\(inner)\"model\": \(escape(profile.model)),\n"
-        out += "\(inner)\"opus_model\": \(escape(profile.opusModel)),\n"
-        out += "\(inner)\"sonnet_model\": \(escape(profile.sonnetModel)),\n"
-        out += "\(inner)\"haiku_model\": \(escape(profile.haikuModel)),\n"
-        out += "\(inner)\"extra_env\": \(escape(profile.extraEnv)),\n"
-        out += "\(inner)\"workdir\": \(escape(profile.workdir)),\n"
-        out += "\(inner)\"isolate\": \(profile.isolate),\n"
-        out += "\(inner)\"share_from_default\": \(profile.shareFromDefault)\n"
+        out += fields.map { inner + $0 }.joined(separator: ",\n") + "\n"
         out += "\(pad)}"
         return out
     }

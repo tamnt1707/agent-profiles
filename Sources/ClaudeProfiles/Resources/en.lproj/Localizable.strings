@@ -145,6 +145,7 @@
 "error.duplicateCommand" = "The command claude-%@ is already used by the profile \"%@\".";
 "error.foreignCommand" = "The command claude-%@ is taken by the file %@, which was not created by this app.";
 "error.unsafeDeletePath" = "Refused to delete %@: this is not a safe profile folder.";
+"error.unsafeFolder" = "Refused to open %@: the folder name holds control characters that a terminal would act on.";
 "error.invalidBaseURL" = "The base URL must start with https:// or http://";
 "error.envMissingEquals" = "Line %d of the environment variables is missing the '=': %@";
 "error.invalidEnvName" = "Invalid variable name on line %d: %@";
@@ -221,6 +222,19 @@
 "menu.profile" = "Profile";
 "menu.checkForUpdates" = "Check for Updates…";
 "menu.about" = "About Claude Profiles";
+
+/* Menu bar launcher */
+"menubar.section" = "Menu bar";
+"menubar.show" = "Show in the menu bar";
+"menubar.openInFolder" = "Open in a folder…";
+"menubar.chooseFolder" = "Choose a folder…";
+"menubar.recentFolders" = "Recent folders";
+"menubar.openApp" = "Open Claude Profiles";
+"menubar.settings" = "Settings…";
+"menubar.quit" = "Quit";
+"menubar.noKey" = "no key";
+"menubar.panel.message" = "Choose the folder to open this profile in.";
+"menubar.panel.prompt" = "Open";
 
 /* Provider templates */
 "preset.custom" = "Custom";

@@ -123,6 +123,9 @@ final class AppModel {
     /// What is known about the key of each profile: stored, missing, or the
     /// Keychain could not be read. A slug that is not in the map was never
     /// read: its presence is unknown.
+    ///
+    /// This is the one map of the stored keys: the health dot and the menu bar
+    /// both read it, and there is only one read of the Keychain for it.
     private(set) var keyPresence = KeyPresenceBook()
     /// The check of all profiles while it runs.
     private var healthTask: Task<Void, Never>?
@@ -133,6 +136,13 @@ final class AppModel {
 
     /// `true` while "Check all connections" runs.
     var isCheckingHealth: Bool { healthTask != nil }
+
+    /// The message of the last failed terminal launch. The menu bar shows it
+    /// until the next launch attempt.
+    private(set) var menuBarError: String?
+    /// The recent folders of the menu, looked up when it opens. The menu
+    /// itself never asks the file system while it is drawn.
+    private(set) var menuBarFolders: [String: [String]] = [:]
 
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
@@ -166,7 +176,11 @@ final class AppModel {
         if let warning = loaded.warning {
             status = Status(kind: .failure, text: warning.localizedMessage(loc))
         }
+        // The file was read again: the keys, the folders of the menu and the
+        // last tests are looked at again, once each.
         refreshStoredKeys()
+        refreshMenuBarFolders()
+        health.profilesLoaded(data.profiles)
     }
 
     /// `true` while `profiles.json` is unread. Automatic saves are refused then.
@@ -308,6 +322,8 @@ final class AppModel {
     /// saved profile stays open.
     private func saveIntoReloadedFile() {
         let edited = currentProfile?.slug
+        // The file was read again: the keys, the folders of the menu and the
+        // last tests are looked at again by `applyLoaded`.
         applyLoaded(store.load())
         draftIndex = edited.flatMap { slug in data.profiles.firstIndex { $0.slug == slug } }
         if !save() {
@@ -459,7 +475,10 @@ final class AppModel {
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
             // A typed key, a new Base URL or auth kind, or a new slug makes the last test describe something else.
             health.profileSaved(old: previousProfile, new: draft, typedKey: typedKey)
+            // The key presence and the folders of the menu are looked at again,
+            // with the one read of the Keychain that both of them use.
             refreshStoredKeys()
+            refreshMenuBarFolders()
 
             do {
                 try store.save(data)
@@ -484,17 +503,129 @@ final class AppModel {
     func openTerminal() {
         guard save() else { return }
         guard let draft else { return }
+        launch(draft, MenuLaunchPlan.profile(draft.slug))
+    }
+
+    // MARK: - Menu bar launcher
+
+    /// Opens a terminal with a saved profile from the menu bar.
+    ///
+    /// Without a `folder` the profile is opened in its own working directory.
+    /// With one it is opened there, and the folder is remembered after the
+    /// launch worked.
+    func openFromMenu(slug: String, folder: String?) {
+        guard let index = data.profiles.firstIndex(where: { $0.slug == slug }) else { return }
+        let profile = data.profiles[index]
+        let plan: MenuLaunchPlan
+        if let folder {
+            // A folder with a control character is refused before anything
+            // starts: a terminal would act on it before the shell reads the
+            // quotes.
+            guard FolderPathSafety.isSafe(folder) else {
+                reportUnsafeFolder(folder)
+                return
+            }
+            plan = MenuLaunchPlan.folder(slug, folder)
+        } else {
+            plan = MenuLaunchPlan.profile(slug)
+        }
+        launch(profile, plan)
+    }
+
+    /// Opens the terminal for a plan and remembers the folder when it worked.
+    private func launch(_ profile: Profile, _ plan: MenuLaunchPlan) {
+        menuBarError = nil
         let terminal = data.terminal
         let paths = store.paths
         // The terminal is started off the main thread, so the window keeps responding.
         Task {
             do {
-                try await Launcher.launchInBackground(profile: draft, terminal: terminal, paths: paths)
-                status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, draft.name))
+                let stored = data.profiles.first(where: { $0.slug == plan.slug })?.recentDirs ?? []
+                try await plan.run(
+                    stored: stored,
+                    launch: {
+                        try await Launcher.launchInBackground(
+                            profile: profile,
+                            terminal: terminal,
+                            paths: paths,
+                            workdirOverride: plan.folder
+                        )
+                    },
+                    remember: { folders in
+                        // The folder is remembered only now, after the launch worked.
+                        remember(folders, for: plan.slug)
+                    }
+                )
+                status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, profile.name))
             } catch {
+                menuBarError = (error as? ProfileError)?.localizedMessage(loc) ?? loc.t("error.generic")
                 report(error)
             }
         }
+    }
+
+    /// Puts the folders of a launch that worked into the list of the profile.
+    private func remember(_ folders: [String], for slug: String) {
+        guard let index = data.profiles.firstIndex(where: { $0.slug == slug }) else { return }
+        guard data.profiles[index].recentDirs != folders else { return }
+        data.profiles[index].recentDirs = folders
+        // The editor keeps its own copy: update it too, so it does not show as changed.
+        if draftIndex == index {
+            draft?.recentDirs = folders
+        }
+        // A failed write is not shown: the recent folders are a convenience.
+        try? store.save(data)
+        // The menu shows the folder right away, without waiting for the next
+        // opening.
+        refreshMenuBarFolders()
+    }
+
+    /// Shows that a folder was refused, in the status bar and in the menu.
+    func reportUnsafeFolder(_ path: String) {
+        let error = ProfileError.unsafeFolder(path)
+        menuBarError = error.localizedMessage(loc)
+        report(error)
+    }
+
+    /// The entries of the menu bar menu, built from the saved profiles.
+    func menuBarEntries() -> [MenuBarModel.Entry] {
+        MenuBarModel.entries(
+            profiles: data.profiles,
+            paths: store.paths,
+            keyPresence: { self.keyPresence.state(for: $0) },
+            recentFolders: menuBarFolders,
+            folderTitle: loc.t("menubar.openInFolder"),
+            lastError: menuBarError
+        )
+    }
+
+    /// Looks up what the menu needs, when the menu opens.
+    ///
+    /// The folders that still exist and the keys of the profiles are asked for
+    /// off the main thread and kept until the next opening, so the menu is
+    /// drawn without asking the file system or the Keychain.
+    func prepareMenuBar() {
+        refreshStoredKeys()
+        refreshMenuBarFolders()
+    }
+
+    /// Looks up the recent folders that still exist, off the main thread.
+    ///
+    /// The menu is drawn from the result, never from the file system.
+    func refreshMenuBarFolders() {
+        let profiles = data.profiles
+        Task {
+            let folders = await Task.detached(priority: .userInitiated) {
+                MenuBarModel.existingFolders(profiles: profiles, folderExists: AppModel.folderExists)
+            }.value
+            menuBarFolders = folders
+        }
+    }
+
+    /// Whether a folder exists. Recent folders that were removed are left out of the menu.
+    nonisolated static func folderExists(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     /// Copies `claude-<name>`: the short command, which works in any terminal
@@ -602,6 +733,9 @@ final class AppModel {
         command = CommandNameDraft()
         keyInput = ""
         hasStoredKey = false
+        // The profile is gone: the menu must not show it any more. The keys
+        // were looked at again above, with the one read of the Keychain.
+        refreshMenuBarFolders()
         if let first = data.profiles.first {
             select(first)
         } else {
@@ -756,6 +890,10 @@ final class AppModel {
     /// Reads which profiles have a key stored. Only existence is asked for: no
     /// secret is read and no request is sent. Runs on launch, on save, on delete
     /// and when the window becomes active.
+    ///
+    /// This is the one read of the Keychain for the whole app: the health dot
+    /// and the menu bar both read the one map it fills, so the two features
+    /// never ask the Keychain twice at the same time.
     ///
     /// The Keychain is read off the main actor, so a long list of profiles does
     /// not freeze the window. Every read gets a number: a read that comes back
@@ -1242,6 +1380,12 @@ final class AppModel {
         persistSettings()
     }
 
+    /// Shows or hides the launcher in the menu bar.
+    func setShowMenuBar(_ show: Bool) {
+        data.showMenuBar = show
+        persistSettings()
+    }
+
     /// The color scheme the window should use.
     var colorScheme: ColorScheme? {
         switch data.appearance {
@@ -1344,6 +1488,8 @@ extension ProfileError {
             return loc.t("error.launcher", message)
         case .unsafeDeletePath(let path):
             return loc.t("error.unsafeDeletePath", path)
+        case .unsafeFolder(let path):
+            return loc.t("error.unsafeFolder", path)
         }
     }
 }

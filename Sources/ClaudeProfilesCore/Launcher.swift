@@ -6,11 +6,28 @@ public enum Launcher {
     ///
     /// A working directory that starts with `~` is expanded to the home
     /// directory first, because a quoted `'~/x'` would not be expanded by the shell.
-    public static func command(for profile: Profile, paths: Paths) -> String {
+    ///
+    /// `workdirOverride` replaces the working directory of the profile for one
+    /// launch (the folder chosen from the menu bar). An empty override means no `cd`.
+    ///
+    /// - Throws: `ProfileError.unsafeFolder` when the folder holds a control
+    ///   character. The command is typed into a live shell, which acts on such
+    ///   a character before the shell parses the quotes, so nothing is built
+    ///   from an unsafe folder.
+    public static func command(
+        for profile: Profile,
+        paths: Paths,
+        workdirOverride: String? = nil
+    ) throws -> String {
         var command = ""
-        let directory = profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
+        let directory = workdirOverride
+            ?? profile.workdir.trimmingCharacters(in: .whitespacesAndNewlines)
         if !directory.isEmpty {
-            command += "cd \(ShellQuote.quote(expandHome(directory, home: paths.home))) && "
+            let expanded = expandHome(directory, home: paths.home)
+            guard FolderPathSafety.isSafe(expanded) else {
+                throw ProfileError.unsafeFolder(directory)
+            }
+            command += "cd \(ShellQuote.quote(expanded)) && "
         }
         command += ShellQuote.quote(paths.script(for: profile.slug).path)
         return command
@@ -56,14 +73,19 @@ public enum Launcher {
     /// This blocks the calling thread while `osascript` runs. The user interface
     /// should use `launchInBackground`. The runner is injectable for the tests.
     /// When `osascript` fails, its output is part of the thrown error.
+    ///
+    /// - Throws: `ProfileError.unsafeFolder` when the folder is not safe. The
+    ///   terminal is never opened and `osascript` is never run.
     @discardableResult
     public static func launch(
         profile: Profile,
         terminal: TerminalApp,
         paths: Paths,
+        workdirOverride: String? = nil,
         runner: ProcessRunner = SystemProcessRunner()
     ) throws -> Int32 {
-        let script = appleScript(command: command(for: profile, paths: paths), terminal: terminal)
+        let shellCommand = try command(for: profile, paths: paths, workdirOverride: workdirOverride)
+        let script = appleScript(command: shellCommand, terminal: terminal)
         let result: ProcessResult
         do {
             result = try runner.run("/usr/bin/osascript", ["-e", script])
@@ -82,15 +104,18 @@ public enum Launcher {
 
     /// The same as `launch`, run off the calling thread, so that the user
     /// interface stays responsive while the terminal opens.
+    ///
+    /// - Throws: `ProfileError.unsafeFolder` when the folder is not safe.
     @discardableResult
     public static func launchInBackground(
         profile: Profile,
         terminal: TerminalApp,
         paths: Paths,
+        workdirOverride: String? = nil,
         runner: ProcessRunner = SystemProcessRunner()
     ) async throws -> Int32 {
         try await Task.detached(priority: .userInitiated) {
-            try launch(profile: profile, terminal: terminal, paths: paths, runner: runner)
+            try launch(profile: profile, terminal: terminal, paths: paths, workdirOverride: workdirOverride, runner: runner)
         }.value
     }
 }

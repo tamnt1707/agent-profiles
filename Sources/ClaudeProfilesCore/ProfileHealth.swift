@@ -188,6 +188,30 @@ public struct HealthBook: Equatable, Sendable {
         bump(slug: slug)
     }
 
+    /// The list of the profiles was read again.
+    ///
+    /// A result that does not describe the profile of the list any more is
+    /// dropped: a profile that is gone keeps nothing, and a profile whose Base
+    /// URL or auth kind changed keeps no result either. The generation of
+    /// every profile that changed rises, so an answer of a running check
+    /// cannot land in the dot of the new settings.
+    public mutating func profilesLoaded(_ profiles: [Profile]) {
+        let loaded = Dictionary(profiles.map { ($0.slug, $0) }, uniquingKeysWith: { first, _ in first })
+        // A profile that is gone: its result is dropped.
+        for slug in Array(entries.keys) where loaded[slug] == nil {
+            forget(slug: slug)
+            bump(slug: slug)
+        }
+        // A profile that is still there but changed: the result describes
+        // another provider or another account.
+        for profile in profiles {
+            guard let entry = entries[profile.slug] else { continue }
+            guard entry.baseURL != profile.baseURL || entry.auth != profile.auth else { continue }
+            forget(slug: profile.slug)
+            bump(slug: profile.slug)
+        }
+    }
+
     /// `true` when the result of the editor's "Test connection" may go into the dot.
     ///
     /// The test is about the saved profile only when no key was typed: a typed

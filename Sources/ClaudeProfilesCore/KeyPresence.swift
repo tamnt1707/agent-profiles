@@ -21,6 +21,10 @@ public enum KeyState: Equatable, Sendable {
 }
 
 /// The presence of the stored keys, as the Keychain says it.
+///
+/// This is the one read of the Keychain for the whole app: the health dot and
+/// the menu bar both read the one map that `KeyPresenceBook` holds, so the
+/// two features never ask the Keychain twice at the same time.
 public enum KeyPresence {
     /// Reads which of the profiles have a key stored. Only the existence is
     /// asked for: no secret is read and no request is sent.
@@ -30,11 +34,29 @@ public enum KeyPresence {
     ///
     /// - Returns: what the Keychain said, per slug.
     public static func read(slugs: [String], keys: KeyStore) async -> [String: KeyRead] {
+        await read(slugs: slugs, hasKey: { try keys.hasKey($0) })
+    }
+
+    /// The same read, with the source of the answer given by the caller.
+    ///
+    /// Every slug is asked on its own: a profile whose key cannot be read does
+    /// not stop the others. A Keychain that cannot be read does not mean that
+    /// the key is gone: the answer says that it could not be read.
+    ///
+    /// - Parameters:
+    ///   - slugs: the profiles to look at.
+    ///   - hasKey: asks whether a key is stored. It throws when the Keychain
+    ///     cannot be read.
+    /// - Returns: what the Keychain said, per slug.
+    public static func read(
+        slugs: [String],
+        hasKey: @escaping @Sendable (String) throws -> Bool
+    ) async -> [String: KeyRead] {
         await Task.detached(priority: .utility) {
             var read: [String: KeyRead] = [:]
             for slug in slugs {
                 do {
-                    read[slug] = .read(try keys.hasKey(slug))
+                    read[slug] = .read(try hasKey(slug))
                 } catch {
                     // A Keychain that cannot be read does not mean that the
                     // key is gone: the caller says that it could not be read.

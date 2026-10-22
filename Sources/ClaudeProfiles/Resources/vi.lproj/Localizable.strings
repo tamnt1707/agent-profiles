@@ -145,6 +145,7 @@
 "error.duplicateCommand" = "Lệnh claude-%@ đã được profile \"%@\" dùng.";
 "error.foreignCommand" = "Lệnh claude-%@ bị chiếm bởi file %@, file này không do app này tạo.";
 "error.unsafeDeletePath" = "Từ chối xóa %@: đây không phải thư mục profile an toàn.";
+"error.unsafeFolder" = "Từ chối mở %@: tên thư mục chứa ký tự điều khiển mà terminal sẽ thực hiện theo.";
 "error.invalidBaseURL" = "Base URL phải bắt đầu bằng https:// hoặc http://";
 "error.envMissingEquals" = "Dòng %d của biến môi trường thiếu dấu '=': %@";
 "error.invalidEnvName" = "Tên biến không hợp lệ ở dòng %d: %@";
@@ -221,6 +222,19 @@
 "menu.profile" = "Profile";
 "menu.checkForUpdates" = "Kiểm tra cập nhật…";
 "menu.about" = "Giới thiệu Claude Profiles";
+
+/* Trình khởi chạy trên thanh menu */
+"menubar.section" = "Thanh menu";
+"menubar.show" = "Hiện trên thanh menu";
+"menubar.openInFolder" = "Mở trong thư mục…";
+"menubar.chooseFolder" = "Chọn thư mục…";
+"menubar.recentFolders" = "Thư mục gần đây";
+"menubar.openApp" = "Mở Claude Profiles";
+"menubar.settings" = "Cài đặt…";
+"menubar.quit" = "Thoát";
+"menubar.noKey" = "chưa có key";
+"menubar.panel.message" = "Chọn thư mục để mở profile này.";
+"menubar.panel.prompt" = "Mở";
 
 /* Mẫu nhà cung cấp */
 "preset.custom" = "Tùy chỉnh";
