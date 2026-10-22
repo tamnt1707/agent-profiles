@@ -84,7 +84,10 @@ final class ShellPathSetupTests: XCTestCase {
     /// Removal gives back the original bytes, for every shape of content.
     func testRemoveRestoresEveryShapeOfOriginalContentExactly() throws {
         // An empty file is in the list too: it existed before, so it stays (empty) after removal.
-        let shapes = ["", "a", "a\n", "a\n\n\n", "a\r\n", "a\r", "\n", "# mine\nexport X=1\n\n", "héllo wörld\n"]
+        let shapes = [
+            "", "a", "a\n", "a\n\n\n", "a\r\n", "a\r", "\n", "# mine\nexport X=1\n\n", "héllo wörld\n",
+            "a\r\nb\r\n", "a\r\nb\n", "a\nb\r\n", "\r", "\r\n", "\r\n\n", "a\r\n\r\n", "echo a\r\nb\nc\n",
+        ]
         for original in shapes {
             try? FileManager.default.removeItem(at: file(".zshrc"))
             try? FileManager.default.removeItem(at: file(".zshrc.claude-profiles.bak"))
@@ -889,16 +892,51 @@ final class ShellPathSetupTests: XCTestCase {
 
     private var crlfBlock: String { block.replacingOccurrences(of: "\n", with: "\r\n") }
 
-    func testCRLFFileGetsACRLFBlockAndRemovesToTheOriginalBytes() throws {
+    /// Our block always has LF line ends: a CRLF block cannot run in a shell.
+    func testCRLFFileGetsAnLFBlockAndRemovesToTheOriginalBytes() throws {
         try write("a\r\n", to: file(".zshrc"))
         let setup = setup()
 
         _ = try setup.install(for: .zsh)
-        XCTAssertEqual(text(file(".zshrc")), "a\r\n\r\n" + crlfBlock)
+        XCTAssertEqual(text(file(".zshrc")), "a\r\n\n" + block)
         XCTAssertEqual(setup.status(for: .zsh), .configured)
 
         _ = try setup.remove(for: .zsh)
         XCTAssertEqual(text(file(".zshrc")), "a\r\n")
+    }
+
+    /// A mixed-ending file gets an LF block too, so every shell reads the block (see the runtime tests).
+    func testMixedEndingFileGetsAnLFBlockAndRemovesToTheOriginalBytes() throws {
+        let original = "echo a\r\nb\nc\n"
+        try write(original, to: file(".zshrc"))
+        let setup = setup()
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), original + "\n" + block)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), original)
+    }
+
+    /// A file ending in a bare CR gets exactly one LF after that CR, never a CRLF.
+    func testBareCRFileGetsOneLineFeedAfterTheCRAndRemovesBack() throws {
+        try write("a\r", to: file(".zshrc"))
+        let setup = setup()
+
+        _ = try setup.install(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\r\n" + block)
+        XCTAssertEqual(setup.status(for: .zsh), .configured)
+
+        _ = try setup.remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "a\r")
+    }
+
+    /// A block that a Windows editor turned into CRLF, after an LF line, is removed without a stray CR.
+    func testWindowsEditedBlockAfterAnLFLineIsRemovedCleanly() throws {
+        try write("foo\n" + crlfBlock, to: file(".zshrc"))
+        _ = try setup().remove(for: .zsh)
+        XCTAssertEqual(text(file(".zshrc")), "foo")
     }
 
     func testBlockEditedOnWindowsWithCRLFEverywhereIsRecognisedAndRemovable() throws {

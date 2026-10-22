@@ -106,6 +106,68 @@ final class ShellPathRuntimeTests: XCTestCase {
         }
     }
 
+    /// Runs a command with exactly the given environment and returns its output and its errors.
+    private func runCapturing(
+        _ executable: String,
+        _ arguments: [String],
+        environment: [String: String]
+    ) throws -> (output: String, errors: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.environment = environment
+        let output = Pipe()
+        let errors = Pipe()
+        process.standardOutput = output
+        process.standardError = errors
+        try process.run()
+        let outputData = output.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (String(decoding: outputData, as: UTF8.self), String(decoding: errorData, as: UTF8.self))
+    }
+
+    /// A file with mixed or CRLF line ends gets the block, and the shell runs it with no
+    /// error at all and the folder on PATH exactly once (I1: a CRLF block broke every shell).
+    func testBlockInMixedEndingFilesRunsWithoutErrorsInEveryShell() throws {
+        try requireExecutable("/bin/sh")
+        try requireExecutable("/bin/bash")
+        try requireExecutable("/bin/zsh")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let folder = bin.standardizedFileURL.path
+        let contents = [
+            "echo a\r\nexport B=2\nexport C=3\n",
+            "export B=2\nexport C=3\r\n",
+            "export B=2\r",
+            "export B=2\r\nexport C=3\r\n",
+        ]
+        // Bash before sh: once ~/.bash_profile holds a block, a ~/.profile block is one bash does not read.
+        let shells: [(kind: ShellKind, file: String, executable: String, arguments: [String], script: String)] = [
+            (.bash, ".bash_profile", "/bin/bash", ["-c"], ". \"$HOME/.bash_profile\"; . \"$HOME/.bash_profile\"; printf '%s' \"$PATH\""),
+            (.posix, ".profile", "/bin/sh", ["-c"], ". \"$HOME/.profile\"; . \"$HOME/.profile\"; printf '%s' \"$PATH\""),
+            (.zsh, ".zshrc", "/bin/zsh", ["-f", "-c"], ". \"$HOME/.zshrc\"; . \"$HOME/.zshrc\"; print -rn -- \"$PATH\""),
+        ]
+        for shell in shells {
+            for content in contents {
+                let label = "\(shell.executable) \(content.debugDescription)"
+                let file = home.appendingPathComponent(shell.file)
+                try? FileManager.default.removeItem(at: file)
+                try Data(content.utf8).write(to: file)
+                _ = try setupPath(login: shell.executable).install(for: shell.kind)
+
+                let result = try runCapturing(
+                    shell.executable,
+                    shell.arguments + [shell.script],
+                    environment: ["HOME": home.path, "PATH": "/usr/bin:/bin"]
+                )
+                // The user's own `echo` may print a line before the PATH: the PATH is the last line.
+                let path = result.output.components(separatedBy: "\n").last ?? ""
+                XCTAssertEqual(result.errors, "", label)
+                XCTAssertEqual(entries(in: path, folder: folder), 1, "\(label): \(result.output)")
+            }
+        }
+    }
+
     func testPosixBlockSourcedTwiceAddsTheFolderOnce() throws {
         try requireExecutable("/bin/sh")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)

@@ -693,14 +693,12 @@ public struct ShellPathSetup: Sendable {
                     case .none: break
                     }
                 }
-                // A file with CRLF line ends gets CRLF lines, so it stays consistent. A file
-                // ending in a bare CR gets CRLF too, so the removal never has to guess
-                // whether that CR belongs to the file or to the separator.
-                let crlf = Self.usesCRLF(current) || current?.last == Self.carriageReturn
+                // The block always has LF line ends, whatever the file uses: a CRLF block cannot
+                // run in a shell. A line feed ends the last line (after a bare CR too, so the
+                // separator is always exactly one LF); the block then follows after a blank line.
                 var output = current ?? Data()
-                // A line ending ends the last line; the block then follows after a blank line.
-                if !output.isEmpty { output.append(Self.lineEnding(crlf: crlf)) }
-                output.append(self.blockBytes(crlf: crlf))
+                if !output.isEmpty { output.append(Self.lineFeed) }
+                output.append(Data(self.posixBlock.utf8))
                 return .write(output)
             }, beforeCommit: { current, target in
                 guard let current else {
@@ -847,12 +845,14 @@ public struct ShellPathSetup: Sendable {
             case .intact(let found): range = found
             }
             var start = range.lowerBound
-            // The line ending that install put before the block goes too, but only
-            // when the block ends the file. Content after it keeps the line break.
-            // A CRLF ending is taken as a pair, never half of one.
+            // The line feed that install put before the block goes too, but only when the
+            // block ends the file. Content after it keeps the line break. A block that was
+            // edited on Windows (CRLF lines) takes its CR as a pair with that line feed.
             if range.upperBound == bytes.count, start > 0, bytes[start - 1] == Self.lineFeed {
                 start -= 1
-                if start > 0, bytes[start - 1] == Self.carriageReturn { start -= 1 }
+                if Self.hasCRLFLines(bytes, from: range.lowerBound), start > 0, bytes[start - 1] == Self.carriageReturn {
+                    start -= 1
+                }
             }
             var rest = bytes
             rest.removeSubrange(start..<range.upperBound)
@@ -1100,20 +1100,10 @@ public struct ShellPathSetup: Sendable {
         return result
     }
 
-    /// `true` when the first line of the file ends with CRLF.
-    static func usesCRLF(_ data: Data?) -> Bool {
-        guard let data, let index = data.firstIndex(of: lineFeed) else { return false }
-        return index > data.startIndex && data[data.index(before: index)] == carriageReturn
-    }
-
-    private static func lineEnding(crlf: Bool) -> Data {
-        Data(crlf ? [carriageReturn, lineFeed] : [lineFeed])
-    }
-
-    /// The managed block for the POSIX shells, with the line ends of the file.
-    private func blockBytes(crlf: Bool) -> Data {
-        let text = crlf ? posixBlock.replacingOccurrences(of: "\n", with: "\r\n") : posixBlock
-        return Data(text.utf8)
+    /// `true` when the line that starts at `index` (the begin marker) ends with CRLF.
+    private static func hasCRLFLines(_ bytes: [UInt8], from index: Int) -> Bool {
+        guard let end = bytes[index...].firstIndex(of: lineFeed), end > index else { return false }
+        return bytes[end - 1] == carriageReturn
     }
 
     // MARK: - Files
