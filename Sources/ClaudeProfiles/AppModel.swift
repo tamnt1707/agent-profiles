@@ -106,12 +106,20 @@ final class AppModel {
     /// `true` while the model list is being fetched.
     private(set) var isFetchingModels = false
 
+    /// The message of the last failed terminal launch. The menu bar shows it
+    /// until the next launch attempt.
+    private(set) var menuBarError: String?
+    /// The profiles that have a key stored. Looked up when the menu bar menu
+    /// opens and after a save, never while the menu is drawn.
+    private(set) var profilesWithKey: Set<String> = []
+
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
         self.loc = loc ?? Loc()
         self.updater = updater ?? UpdateController()
         load()
         refreshPathStatus()
+        refreshProfilesWithKey()
     }
 
     // MARK: - Loading
@@ -425,6 +433,7 @@ final class AppModel {
             command = CommandNameDraft(profile: draft)
             keyInput = ""
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
+            refreshProfilesWithKey()
 
             do {
                 try store.save(data)
@@ -449,17 +458,74 @@ final class AppModel {
     func openTerminal() {
         guard save() else { return }
         guard let draft else { return }
+        launchTerminal(draft, folder: nil)
+    }
+
+    /// Opens a terminal running the profile, in its own folder or in `folder`.
+    /// A failure is shown in the status bar and, until the next attempt, in the menu bar.
+    private func launchTerminal(_ profile: Profile, folder: String?) {
+        menuBarError = nil
         let terminal = data.terminal
         let paths = store.paths
         // The terminal is started off the main thread, so the window keeps responding.
         Task {
             do {
-                try await Launcher.launchInBackground(profile: draft, terminal: terminal, paths: paths)
-                status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, draft.name))
+                try await Launcher.launchInBackground(
+                    profile: profile,
+                    terminal: terminal,
+                    paths: paths,
+                    workdirOverride: folder
+                )
+                status = Status(kind: .success, text: loc.t("status.launched", terminal.rawValue, profile.name))
             } catch {
+                menuBarError = (error as? ProfileError)?.localizedMessage(loc) ?? loc.t("error.generic")
                 report(error)
             }
         }
+    }
+
+    // MARK: - Menu bar launcher
+
+    /// Opens a terminal with a saved profile from the menu bar. With a `folder`,
+    /// that folder becomes the most recent one of the profile.
+    func openFromMenu(slug: String, folder: String?) {
+        guard let index = data.profiles.firstIndex(where: { $0.slug == slug }) else { return }
+        if let folder {
+            var recent = RecentFolders(data.profiles[index].recentDirs)
+            recent.add(folder)
+            data.profiles[index].recentDirs = recent.paths
+            // The editor keeps its own copy: update it too, so it does not show as changed.
+            if draftIndex == index {
+                draft?.recentDirs = recent.paths
+            }
+            // A failed write is not shown: the recent folders are a convenience.
+            try? store.save(data)
+        }
+        launchTerminal(data.profiles[index], folder: folder)
+    }
+
+    /// The entries of the menu bar menu, built from the saved profiles.
+    func menuBarEntries() -> [MenuBarModel.Entry] {
+        MenuBarModel.entries(
+            profiles: data.profiles,
+            paths: store.paths,
+            hasKey: { self.profilesWithKey.contains($0) },
+            folderExists: AppModel.folderExists,
+            lastError: menuBarError
+        )
+    }
+
+    /// Reads which profiles have a key stored, without reading the keys.
+    func refreshProfilesWithKey() {
+        profilesWithKey = Set(data.profiles.map(\.slug).filter { slug in
+            (try? store.keys.hasKey(slug)) ?? false
+        })
+    }
+
+    /// Whether a folder exists. Recent folders that were removed are left out of the menu.
+    static func folderExists(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     /// Copies `claude-<name>`: the short command, which works in any terminal
@@ -1079,6 +1145,12 @@ final class AppModel {
     /// Switches the automatic check of a new version on or off.
     func setAutoCheckUpdates(_ enabled: Bool) {
         data.autoCheckUpdates = enabled
+        persistSettings()
+    }
+
+    /// Shows or hides the launcher in the menu bar.
+    func setShowMenuBar(_ show: Bool) {
+        data.showMenuBar = show
         persistSettings()
     }
 

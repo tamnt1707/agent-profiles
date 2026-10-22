@@ -201,6 +201,18 @@
 "menu.checkForUpdates" = "Kiểm tra cập nhật…";
 "menu.about" = "Giới thiệu Claude Profiles";
 
+/* Trình khởi chạy trên thanh menu */
+"menubar.section" = "Thanh menu";
+"menubar.show" = "Hiện trên thanh menu";
+"menubar.openInFolder" = "Mở trong thư mục…";
+"menubar.recentFolders" = "Thư mục gần đây";
+"menubar.openApp" = "Mở Claude Profiles";
+"menubar.settings" = "Cài đặt…";
+"menubar.quit" = "Thoát";
+"menubar.noKey" = "chưa có khóa";
+"menubar.panel.message" = "Chọn thư mục để mở profile này.";
+"menubar.panel.prompt" = "Mở";
+
 /* Mẫu nhà cung cấp */
 "preset.custom" = "Tùy chỉnh";
 "preset.openrouter" = "OpenRouter";
