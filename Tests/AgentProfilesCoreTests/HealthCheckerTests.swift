@@ -9,11 +9,9 @@ final class HealthCheckerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        StubURLProtocol.reset()
     }
 
     override func tearDown() {
-        StubURLProtocol.reset()
         super.tearDown()
     }
 
@@ -227,87 +225,86 @@ final class HealthCheckerTests: XCTestCase {
         XCTAssertEqual(probes.calls.count, 0)
     }
 
-    // MARK: - Real probe, stubbed transport: every answer kind
+    // MARK: - The CLI probe, with a stubbed CLI: what each answer gives
 
-    /// Runs one profile through the real `ConnectionProbe` against the stub and
-    /// returns the state its answer gives. `answer` nil means the stub is not asked.
+    /// Runs one profile through the real `HeadlessProbe` with a stubbed CLI and
+    /// returns the state its answer gives, with how many times the CLI was run.
     @MainActor
-    private func state(for profile: Profile, answer: StubURLProtocol.Answer?) async -> (HealthStatus, Int) {
-        StubURLProtocol.reset()
-        if let answer {
-            StubURLProtocol.answer(answer, for: "https://api.example.com/v1/messages")
-        }
+    private func state(for profile: Profile, output: String?) async -> (HealthStatus, Int) {
+        let runner = StubHeadlessRunner(result: HeadlessResult(status: 0, output: output ?? ""))
+        let headless = HeadlessProbe(runner: runner, executable: { "/bin/claude" }, baseEnvironment: { _ in [:] })
         let keys = try? keyStore([profile.slug: secret])
-        let connection = ConnectionProbe(session: StubURLProtocol.session())
         let checker = HealthChecker(
             keys: keys ?? InMemoryKeyStore(),
-            probe: { p, k in try await connection.testConnection(profile: p, key: k) },
+            probe: { p, k in try await headless.testConnection(profile: p, key: k, paths: Paths()) },
             now: { self.fixedNow }
         )
         var steps: [HealthCheckStep] = []
         await runCheck(checker, profiles: [profile]) { steps.append($0) }
-        let requests = StubURLProtocol.requests.count
+        let runs = runner.requests.count
 
         guard case .tested(_, let outcome, let at)? = steps.first else {
-            return (HealthStatus(state: .problem, reason: .noKeyStored), requests)
+            return (HealthStatus(state: .problem, reason: .noKeyStored), runs)
         }
         let status = ProfileHealth.evaluate(
             profile: profile, key: .stored, lastTest: TestRecord(outcome: outcome, testedAt: at), now: fixedNow
         )
-        return (status, requests)
+        return (status, runs)
     }
 
     @MainActor
     func testAnswerKindsMapToStates() async throws {
-        let cases: [(String, StubURLProtocol.Answer, HealthState, HealthReason)] = [
-            ("200", .json(#"{"model":"claude-haiku-4-5"}"#), .ready, .connected(minutesAgo: 0)),
-            ("429", .json(#"{"error":{"message":"slow down"}}"#, statusCode: 429), .attention, .testWarning(.rateLimited)),
-            ("401", .json(#"{"error":{"message":"no"}}"#, statusCode: 401), .problem, .testFailed(.unauthorized)),
-            ("403", .json(#"{"error":{"message":"no"}}"#, statusCode: 403), .problem, .testFailed(.forbidden)),
-            ("404", .json(#"{"error":{"message":"not here"}}"#, statusCode: 404), .problem, .testFailed(.notFound)),
-            ("404 model", .json(#"{"error":{"message":"model: claude-x does not exist"}}"#, statusCode: 404), .problem, .testFailed(.modelNotFound)),
-            ("400 model", .json(#"{"error":{"message":"Invalid model name passed in"}}"#, statusCode: 400), .problem, .testFailed(.modelNotFound)),
-            ("500", .json(#"{"error":{"message":"oops"}}"#, statusCode: 500), .problem, .testFailed(.serverError(500))),
-            ("timeout", .failure(URLError(.timedOut)), .problem, .testFailed(.timeout)),
-            ("dns", .failure(URLError(.cannotFindHost)), .problem, .testFailed(.network(.dns))),
-            ("offline", .failure(URLError(.notConnectedToInternet)), .problem, .testFailed(.network(.offline))),
-            ("tls", .failure(URLError(.serverCertificateUntrusted)), .problem, .testFailed(.network(.tls))),
+        let cases: [(String, String, HealthState)] = [
+            ("ok", #"{"is_error":false,"result":"OK","duration_ms":900,"modelUsage":{"m":{}}}"#, .ready),
+            ("429", #"{"is_error":true,"api_error_status":429,"result":"slow down"}"#, .attention),
+            ("401", #"{"is_error":true,"api_error_status":401,"result":"Invalid API key"}"#, .problem),
+            ("not logged in", #"{"is_error":true,"api_error_status":null,"result":"Not logged in · Please run /login"}"#, .attention),
+            ("500", #"{"is_error":true,"api_error_status":500,"result":"oops"}"#, .problem),
+            ("refused", #"{"is_error":true,"api_error_status":null,"result":"API Error: (ECONNREFUSED)"}"#, .problem),
+            ("no json", "something odd", .problem),
         ]
-        for (name, answer, expectedState, expectedReason) in cases {
-            let (status, requests) = await state(for: profile("a"), answer: answer)
-            XCTAssertEqual(requests, 1, name)
-            XCTAssertEqual(status.state, expectedState, name)
-            XCTAssertEqual(status.reason, expectedReason, name)
+        for (name, output, expected) in cases {
+            let (status, runs) = await state(for: profile("a"), output: output)
+            XCTAssertEqual(runs, 1, name)
+            XCTAssertEqual(status.state, expected, name)
         }
     }
 
     @MainActor
-    func testRedirectToAnotherHostIsAProblem() async throws {
-        let (status, _) = await state(
-            for: profile("a"),
-            answer: .redirect(to: "https://evil.example.net/v1/messages")
-        )
-        XCTAssertEqual(status.state, .problem)
-        XCTAssertEqual(status.reason, .testFailed(.crossHostRedirect))
-    }
-
-    @MainActor
-    func testRemotePlainHTTPIsAProblemAndNothingIsSent() async throws {
+    func testRemotePlainHTTPIsAProblemAndNothingIsRun() async throws {
         var insecure = profile("a")
         insecure.baseURL = "http://api.example.com"
-        let (status, requests) = await state(for: insecure, answer: nil)
-        XCTAssertEqual(requests, 0, "a request left over plain http")
+        let (status, runs) = await state(for: insecure, output: nil)
+        XCTAssertEqual(runs, 0, "the CLI ran over plain http")
         XCTAssertEqual(status.state, .problem)
         XCTAssertEqual(status.reason, .testFailed(.insecureURL))
     }
 
     @MainActor
-    func testInvalidBaseURLIsAProblemAndNothingIsSent() async throws {
+    func testInvalidBaseURLIsAProblemAndNothingIsRun() async throws {
         var invalid = profile("a")
         invalid.baseURL = "not a url"
-        let (status, requests) = await state(for: invalid, answer: nil)
-        XCTAssertEqual(requests, 0)
+        let (status, runs) = await state(for: invalid, output: nil)
+        XCTAssertEqual(runs, 0)
         XCTAssertEqual(status.reason, .testFailed(.invalidURL))
+    }
+}
+
+/// A CLI that answers with a fixed result and remembers what it was asked.
+final class StubHeadlessRunner: HeadlessRunner, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [HeadlessRequest] = []
+    var result: HeadlessResult
+
+    init(result: HeadlessResult) {
+        self.result = result
+    }
+
+    var requests: [HeadlessRequest] { lock.withLock { recorded } }
+
+    func run(_ request: HeadlessRequest) async throws -> HeadlessResult {
+        lock.withLock { recorded.append(request) }
+        return result
     }
 }
 

@@ -18,7 +18,6 @@
 "sidebar.health.connectedMany" = "Đã kết nối %d phút trước";
 "sidebar.health.notTested" = "Chưa kiểm tra";
 "sidebar.health.keychainUnreadable" = "Không đọc được Keychain";
-"sidebar.health.stale" = "Lần kiểm tra cuối cách đây %d phút. Hãy kiểm tra lại.";
 "sidebar.health.warning" = "Lần kiểm tra cuối có cảnh báo. %@";
 "sidebar.health.failed" = "Lần kiểm tra cuối thất bại. %@";
 "sidebar.checkAll" = "Kiểm tra tất cả kết nối";
@@ -26,7 +25,7 @@
 "sidebar.checkAll.progress" = "%d/%d đã kiểm tra";
 "sidebar.checkAll.stop" = "Dừng";
 "sidebar.checkAll.confirm.title" = "Kiểm tra tất cả kết nối?";
-"sidebar.checkAll.confirm.message" = "Thao tác này gửi một yêu cầu rất nhỏ (khoảng một token) tới từng nhà cung cấp.";
+"sidebar.checkAll.confirm.message" = "Thao tác này chạy CLI một lần cho mỗi profile: một yêu cầu ngắn khoảng 1.500 token tới từng nhà cung cấp, với key của profile đó. Kết quả mới thay thế kết quả đã lưu.";
 "sidebar.checkAll.confirm.check" = "Kiểm tra";
 
 /* Phần chi tiết */
@@ -258,7 +257,7 @@
 
 /* Connection check and model list in the editor */
 "editor.test.button" = "Kiểm tra kết nối";
-"editor.test.help" = "Gửi một yêu cầu rất nhỏ (khoảng 1 token) tới Base URL bằng key này để kiểm tra kết nối.";
+"editor.test.help" = "Nhờ CLI trả lời một câu ngắn (khoảng 1.500 token) với các cài đặt này, giống cách lệnh của bạn làm.";
 "editor.test.running" = "Đang kiểm tra…";
 "editor.models.fetching" = "Đang lấy…";
 "editor.models.choose" = "Chọn từ danh sách model của nhà cung cấp";
@@ -423,3 +422,11 @@
 "terminal.confirm.restart.title" = "Khởi động lại phiên đang chạy này?";
 "terminal.confirm.close.title" = "Đóng phiên đang chạy này?";
 "terminal.confirm.message" = "Tiến trình trong phiên này vẫn đang chạy. Nó sẽ bị kết thúc.";
+"sidebar.health.connectedHours" = "Đã kết nối %d giờ trước";
+"sidebar.health.connectedDays" = "Đã kết nối %d ngày trước";
+"probe.cliNotFound" = "CLI chưa được cài trên máy này nên không kiểm tra được. Chưa gửi gì cả.";
+"probe.notLoggedIn" = "Tài khoản chưa đăng nhập. Hãy mở profile này trong terminal và đăng nhập.";
+"probe.cliFailed" = "CLI báo lỗi mà không nêu lý do rõ ràng.";
+"settings.autoCheck.section" = "Kiểm tra kết nối";
+"settings.autoCheck" = "Kiểm tra các profile chưa có kết quả khi mở ứng dụng";
+"settings.autoCheck.hint" = "Mỗi lần kiểm tra chạy CLI một lần cho một profile, khoảng 1.500 token. Kết quả được giữ cho đến khi profile thay đổi hoặc bạn kiểm tra lại.";

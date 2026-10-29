@@ -185,7 +185,20 @@ final class AppModel {
     }
 
     /// The last test of each profile, kept for this session only.
-    private(set) var health = HealthBook()
+    private(set) var health = HealthBook() {
+        // The last tests are kept on disk, so they survive a restart.
+        didSet {
+            guard health != oldValue else { return }
+            healthCache.save(health.storedTests)
+        }
+    }
+    /// The file that keeps the last test of each profile.
+    private let healthCache: HealthCacheStore
+    /// The CLI check of a connection: the request the user's own commands make.
+    private let headless = HeadlessProbe()
+    /// The automatic check of the profiles that have no result runs once for each run of the app.
+    private var didAutoCheck = false
+    private var didRestoreHealth = false
     /// What is known about the key of each profile: stored, missing, or the
     /// Keychain could not be read. A slug that is not in the map was never
     /// read: its presence is unknown.
@@ -247,6 +260,7 @@ final class AppModel {
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
         self.usageScanner = UsageScanner(paths: store.paths)
+        self.healthCache = HealthCacheStore(paths: store.paths)
         self.loc = loc ?? Loc()
         self.updater = updater ?? UpdateController()
         load()
@@ -309,6 +323,11 @@ final class AppModel {
         refreshStoredKeys()
         refreshMenuBarFolders()
         health.profilesLoaded(data.profiles)
+        // The tests of the last run come back, once, for the profiles they still describe.
+        if !didRestoreHealth {
+            didRestoreHealth = true
+            health.restore(healthCache.load(), profiles: data.profiles)
+        }
         // The profiles are read again: the name of the command is looked at
         // again, because another profile may own it now.
         refreshForeignCommandPath()
@@ -1491,7 +1510,7 @@ final class AppModel {
 
     // MARK: - Connection checks
 
-    /// Sends one tiny request with the edited settings and shows the result.
+    /// Asks the CLI for one short answer with the edited settings and shows the result.
     /// A second tap while the request runs does nothing.
     func testConnection() {
         guard let draft, !isTestingConnection, !isCheckingHealth else { return }
@@ -1511,8 +1530,9 @@ final class AppModel {
         connectionReport = nil
         let token = UUID()
         connectionToken = token
-        connectionTask = Task { [weak self, probe] in
-            let result = try? await probe.testConnection(profile: draft, key: key)
+        let paths = store.paths
+        connectionTask = Task { [weak self, headless] in
+            let result = try? await headless.testConnection(profile: draft, key: key, paths: paths)
             guard let self, !Task.isCancelled, self.connectionToken == token else { return }
             self.isTestingConnection = false
             self.connectionReport = result
@@ -1652,13 +1672,29 @@ final class AppModel {
         isConfirmingHealthCheck = true
     }
 
-    /// Tests every profile one at a time with its stored key. Only runs after the user confirmed.
+    /// Tests every profile one at a time with its stored key, and keeps the new
+    /// results in place of the old ones. Only runs after the user confirmed.
     func startHealthCheck() {
+        startHealthCheck(of: data.profiles)
+    }
+
+    /// Tests the profiles of the list that have no result yet, when the app
+    /// starts. The result stays on disk, so a profile is tested again only when
+    /// its settings change or when the user asks. Once for each run of the app.
+    func autoCheckOnLaunch() {
+        guard !didAutoCheck else { return }
+        didAutoCheck = true
+        guard data.autoCheckConnections, !dataFailed else { return }
+        let pending = data.profiles.filter { health.lastTest(for: $0) == nil }
+        guard !pending.isEmpty else { return }
+        startHealthCheck(of: pending)
+    }
+
+    private func startHealthCheck(of profiles: [Profile]) {
         // The check of the profiles and the fetch of the model list do not run
         // at the same time.
-        guard healthTask == nil, !isTestingConnection, !isFetchingModels else { return }
-        let profiles = data.profiles
-        let checker = HealthChecker(keys: store.keys)
+        guard healthTask == nil, !isTestingConnection, !isFetchingModels, !profiles.isEmpty else { return }
+        let checker = HealthChecker(keys: store.keys, paths: store.paths)
         healthProgress = HealthProgress(done: 0, total: profiles.count)
         healthTask = Task { [weak self] in
             guard let self else { return }
@@ -2115,6 +2151,13 @@ final class AppModel {
     func setShowMenuBar(_ show: Bool) {
         guard SettingsChange.isDifferent(data.showMenuBar, show) else { return }
         data.showMenuBar = show
+        persistSettings()
+    }
+
+    /// Tests the profiles that have no result when the app starts.
+    func setAutoCheckConnections(_ enabled: Bool) {
+        guard SettingsChange.isDifferent(data.autoCheckConnections, enabled) else { return }
+        data.autoCheckConnections = enabled
         persistSettings()
     }
 

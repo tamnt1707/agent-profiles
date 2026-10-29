@@ -34,6 +34,10 @@ final class ProfileHealthTests: XCTestCase {
         (.insecureURL, .problem),
         (.missingKey, .problem),
         (.crossHostRedirect, .problem),
+        (.cliNotFound, .problem),
+        (.cliFailed, .problem),
+        (.notLoggedIn, .attention),
+        (.cliLogin, .attention),
     ]
 
     // MARK: - Every outcome, fresh test
@@ -154,43 +158,33 @@ final class ProfileHealthTests: XCTestCase {
         XCTAssertEqual(status, HealthStatus(state: .ready, reason: .connected(minutesAgo: 0)))
     }
 
-    // MARK: - Freshness
+    // MARK: - A kept result has no expiry
 
-    func testEveryOutcomeIsUntestedWhenStale() {
-        for (outcome, _) in table {
-            let status = ProfileHealth.evaluate(
-                profile: profile(), key: .stored, lastTest: test(outcome, secondsAgo: 31 * 60), now: now
-            )
-            XCTAssertEqual(status.state, .untested, "stale outcome \(outcome)")
-            XCTAssertEqual(status.reason, .staleTest(minutesAgo: 31), "stale outcome \(outcome)")
+    func testAResultOfAnyAgeKeepsItsState() {
+        for (outcome, expected) in table {
+            for age in [5 * 60, 31 * 60, 3 * 3600, 40 * 24 * 3600] {
+                let status = ProfileHealth.evaluate(
+                    profile: profile(), key: .stored, lastTest: test(outcome, secondsAgo: TimeInterval(age)), now: now
+                )
+                XCTAssertEqual(status.state, expected, "\(outcome) after \(age) s")
+            }
         }
     }
 
-    func testExactlyThirtyMinutesIsStillFresh() {
+    func testTheAgeIsInTheReasonOfASuccess() {
         let status = ProfileHealth.evaluate(
             profile: profile(), key: .stored,
-            lastTest: test(.ok(latencyMs: 1, model: nil), secondsAgo: ProfileHealth.freshWindow), now: now
+            lastTest: test(.ok(latencyMs: 1, model: nil), secondsAgo: 3 * 3600), now: now
         )
         XCTAssertEqual(status.state, .ready)
-        XCTAssertEqual(status.reason, .connected(minutesAgo: 30))
+        XCTAssertEqual(status.reason, .connected(minutesAgo: 180))
     }
 
-    func testOneSecondPastThirtyMinutesIsStale() {
-        let status = ProfileHealth.evaluate(
-            profile: profile(), key: .stored,
-            lastTest: test(.ok(latencyMs: 1, model: nil), secondsAgo: ProfileHealth.freshWindow + 1), now: now
-        )
-        XCTAssertEqual(status.state, .untested)
-    }
-
-    func testFreshWindowIsThirtyMinutes() {
-        XCTAssertEqual(ProfileHealth.freshWindow, 30 * 60)
-    }
-
-    func testTestFromTheFutureIsNotTrusted() {
+    func testTestFromTheFutureCountsAsJustNow() {
         let future = TestRecord(outcome: .ok(latencyMs: 1, model: nil), testedAt: now.addingTimeInterval(60))
         let status = ProfileHealth.evaluate(profile: profile(), key: .stored, lastTest: future, now: now)
-        XCTAssertEqual(status.state, .untested)
+        XCTAssertEqual(status.state, .ready)
+        XCTAssertEqual(status.reason, .connected(minutesAgo: 0))
     }
 
     // MARK: - The key and the message never appear in a reason

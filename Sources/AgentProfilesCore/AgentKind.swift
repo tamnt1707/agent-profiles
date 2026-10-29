@@ -108,14 +108,42 @@ public enum AgentDetector {
         return result
     }
 
+    /// The PATH of the login shell, the one a terminal window has. Asked once,
+    /// then kept: the shell may take a while. `nil` when the shell does not answer.
+    public static func loginShellPath() -> String? {
+        pathCache.value { shellOutput("printf '%s' \"$PATH\"") }
+    }
+
+    private final class PathCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        private var path: String?
+
+        func value(_ make: () -> String?) -> String? {
+            lock.lock(); defer { lock.unlock() }
+            if !done {
+                path = make().flatMap { $0.isEmpty ? nil : $0 }
+                done = true
+            }
+            return path
+        }
+    }
+
+    private static let pathCache = PathCache()
+
     /// Asks a login, interactive shell where `name` is. Stops waiting after `lookupTimeout`.
     ///
     /// The shell is the one that opens terminal windows: its startup files hold
     /// the PATH of the user. It reads nothing from the keyboard.
     public static func shellLookup(_ name: String) -> String? {
+        shellOutput("command -v \(name)").flatMap(parseLookup)
+    }
+
+    /// What a command prints when the login shell runs it, `nil` when it does not answer in time.
+    static func shellOutput(_ command: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-i", "-c", "command -v \(name)"]
+        process.arguments = ["-l", "-i", "-c", command]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -129,6 +157,6 @@ public enum AgentDetector {
             return nil
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return parseLookup(String(decoding: data, as: UTF8.self))
+        return String(decoding: data, as: UTF8.self)
     }
 }

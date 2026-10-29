@@ -89,15 +89,4 @@ final class ProviderEndpointTests: XCTestCase {
         XCTAssertNil(none["x-api-key"])
         XCTAssertNil(none["content-type"])
     }
-
-    func testProbeModelOrder() {
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile()), "claude-haiku-4-5")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(opusModel: "o")), "o")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(opusModel: "o", sonnetModel: "s")), "s")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(sonnetModel: "s", haikuModel: "h")), "h")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: " main ", haikuModel: "h")), "main")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: "MiniMax-M3.1-Flash[1m]")), "MiniMax-M3.1-Flash")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: "[1M]", haikuModel: "h")), "h")
-        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: "  ")), "claude-haiku-4-5")
-    }
 }

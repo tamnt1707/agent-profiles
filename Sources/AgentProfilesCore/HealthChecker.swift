@@ -43,17 +43,19 @@ public final class HealthChecker {
 
     /// - Parameters:
     ///   - keys: where the stored keys are. Read only when a key is needed.
-    ///   - probe: the request. Defaults to `ConnectionProbe.testConnection`.
+    ///   - paths: where the profiles live. The CLI test needs the config folder of a profile.
+    ///   - probe: the request. Defaults to `HeadlessProbe.testConnection`.
     ///   - now: the clock that stamps each answer.
     ///   - readKey: reads the key of a profile. Defaults to the Keychain.
     public init(
         keys: KeyStore,
+        paths: Paths = Paths(),
         probe: Probe? = nil,
         now: @escaping @Sendable () -> Date = { Date() },
         readKey: KeyReader? = nil
     ) {
-        let connection = ConnectionProbe()
-        self.probe = probe ?? { try await connection.testConnection(profile: $0, key: $1) }
+        let headless = HeadlessProbe()
+        self.probe = probe ?? { try await headless.testConnection(profile: $0, key: $1, paths: paths) }
         self.now = now
         self.readKey = readKey ?? { profile in
             (try? ConnectionProbe.key(

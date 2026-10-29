@@ -8,9 +8,6 @@ public enum ProviderEndpoint {
     /// The Base URL used when the profile leaves the field empty.
     public static let defaultBaseURL = "https://api.anthropic.com"
 
-    /// The model of the test request when the profile names no model at all.
-    public static let fallbackProbeModel = "claude-haiku-4-5"
-
     /// The hosts that may receive the key over plain http.
     public static let localHosts: Set<String> = ["localhost", "127.0.0.1", "::1"]
 
@@ -77,22 +74,5 @@ public enum ProviderEndpoint {
         case .none: break
         }
         return headers
-    }
-
-    /// The model of the test request: the main model, then the haiku, sonnet
-    /// and opus mappings, then `claude-haiku-4-5`.
-    ///
-    /// A `[1m]` suffix is not part of the name: Claude Code reads it as "1M
-    /// context" and removes it before it calls the provider, so the test does too.
-    public static func probeModel(for profile: Profile) -> String {
-        [profile.model, profile.haikuModel, profile.sonnetModel, profile.opusModel]
-            .map { stripContextSuffix($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            .first { !$0.isEmpty } ?? fallbackProbeModel
-    }
-
-    /// The name without a trailing `[1m]` (any case).
-    static func stripContextSuffix(_ name: String) -> String {
-        guard name.lowercased().hasSuffix("[1m]") else { return name }
-        return String(name.dropLast(4)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

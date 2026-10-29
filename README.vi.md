@@ -28,8 +28,9 @@ toàn, và Claude Code thông thường của bạn không bị đụng tới.
 - **Claude Code của bạn vẫn như cũ.** Mỗi profile có cài đặt và lịch sử riêng, nên không có gì
   lẫn từ profile này sang profile khác. Nếu muốn, bạn có thể dùng chung hướng dẫn, kỹ năng và
   agent cho tất cả.
-- **Có nút cho biết kết nối có chạy không.** *Kiểm tra kết nối* gửi một yêu cầu rất nhỏ và nói
-  cho bạn biết lỗi ở đâu: key, địa chỉ, tên model hay mạng.
+- **Có chấm cho biết kết nối có chạy không.** *Kiểm tra kết nối* nhờ CLI trả lời một câu ngắn, giống cách lệnh của
+  bạn làm, và nói chỗ nào sai: key, địa chỉ, tên model, đăng nhập hay mạng. Kết quả được giữ giữa các lần mở, nên bạn
+  thấy ngay trạng thái của mọi profile khi mở ứng dụng.
 - **Chọn model từ danh sách.** Gõ tên model nào cũng được, hoặc chọn từ những model nhà cung cấp
   đưa ra.
 - **Mở ngay chỗ bạn làm việc.** Chạy profile trong Terminal hoặc iTerm2, vào thẳng thư mục dự án.
@@ -77,7 +78,9 @@ Bất kỳ nhà cung cấp nào có địa chỉ tương thích Claude. Các m�
 địa chỉ khác bạn gõ tay.
 
 **Kiểm tra kết nối tốn bao nhiêu?**
-Khoảng một token. Nó chỉ kiểm tra key và địa chỉ có chạy không.
+Một yêu cầu ngắn qua CLI: khoảng 1.500 token vào và vài token ra. Ứng dụng cũng làm vậy một lần cho profile chưa có
+kết quả khi mở; kết quả được giữ cho đến khi profile thay đổi hoặc bạn kiểm tra lại. Bạn có thể tắt việc kiểm tra khi
+mở trong Cài đặt.
 
 **Xóa một profile thì chuyện gì xảy ra?**
 Key, lệnh và lịch sử đã lưu của nó đều bị xóa. Nếu đó là profile cuối cùng, app cũng hỏi có gỡ phần

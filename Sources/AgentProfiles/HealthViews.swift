@@ -13,13 +13,14 @@ extension Loc {
         case .connected(let minutes):
             if minutes == 0 { return t("sidebar.health.connectedNow") }
             if minutes == 1 { return t("sidebar.health.connectedOne") }
-            return count("sidebar.health.connectedMany", minutes)
+            // The result is kept on disk, so it can be old: say it in the unit that reads best.
+            if minutes < 60 { return count("sidebar.health.connectedMany", minutes) }
+            if minutes < 60 * 48 { return count("sidebar.health.connectedHours", minutes / 60) }
+            return count("sidebar.health.connectedDays", minutes / (60 * 24))
         case .notTested:
             return t("sidebar.health.notTested")
         case .keychainUnreadable:
             return t("sidebar.health.keychainUnreadable")
-        case .staleTest(let minutes):
-            return count("sidebar.health.stale", minutes)
         case .testWarning(let outcome):
             return t("sidebar.health.warning", probeText(outcome))
         case .testFailed(let outcome):

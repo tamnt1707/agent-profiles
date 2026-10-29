@@ -18,7 +18,6 @@
 "sidebar.health.connectedMany" = "Connected %d minutes ago";
 "sidebar.health.notTested" = "Not tested yet";
 "sidebar.health.keychainUnreadable" = "Could not read the Keychain";
-"sidebar.health.stale" = "Last test was %d minutes ago. Test again to refresh.";
 "sidebar.health.warning" = "Last test gave a warning. %@";
 "sidebar.health.failed" = "Last test failed. %@";
 "sidebar.checkAll" = "Check all connections";
@@ -26,7 +25,7 @@
 "sidebar.checkAll.progress" = "%d of %d checked";
 "sidebar.checkAll.stop" = "Stop";
 "sidebar.checkAll.confirm.title" = "Check all connections?";
-"sidebar.checkAll.confirm.message" = "This sends one tiny request (about one token) to each provider.";
+"sidebar.checkAll.confirm.message" = "This runs the CLI once for each profile: a short request of about 1,500 tokens to each provider, with the key of that profile. The new results replace the saved ones.";
 "sidebar.checkAll.confirm.check" = "Check";
 
 /* Detail */
@@ -258,7 +257,7 @@
 
 /* Connection check and model list in the editor */
 "editor.test.button" = "Test connection";
-"editor.test.help" = "Sends one tiny request (about 1 token) to the Base URL with this key, to check that it works.";
+"editor.test.help" = "Asks the CLI for one short answer (about 1,500 tokens) with these settings, the way your own command does.";
 "editor.test.running" = "Testing…";
 "editor.models.fetching" = "Fetching…";
 "editor.models.choose" = "Choose from the provider's models";
@@ -423,3 +422,11 @@
 "terminal.confirm.restart.title" = "Restart this running session?";
 "terminal.confirm.close.title" = "Close this running session?";
 "terminal.confirm.message" = "The process in this session is still running. It will end.";
+"sidebar.health.connectedHours" = "Connected %d hours ago";
+"sidebar.health.connectedDays" = "Connected %d days ago";
+"probe.cliNotFound" = "The CLI is not installed on this Mac, so nothing could be tested. Nothing was sent.";
+"probe.notLoggedIn" = "The account is not signed in. Open this profile in the terminal and sign in.";
+"probe.cliFailed" = "The CLI failed and gave no clear reason.";
+"settings.autoCheck.section" = "Connection checks";
+"settings.autoCheck" = "Check the profiles that have no result when the app starts";
+"settings.autoCheck.hint" = "Each check runs the CLI once for a profile, about 1,500 tokens. The result is kept until the profile changes or you check again.";

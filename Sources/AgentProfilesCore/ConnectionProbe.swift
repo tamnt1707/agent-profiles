@@ -49,11 +49,17 @@ public enum ProbeOutcome: Equatable, Sendable {
     case crossHostRedirect
     /// The provider has no model list (or it is not a list).
     case unsupported
+    /// The CLI of the agent is not installed, so the test could not run.
+    case cliNotFound
+    /// The CLI says that the account is not signed in.
+    case notLoggedIn
+    /// The CLI failed in a way that none of the other outcomes describes.
+    case cliFailed
 
     public var severity: ProbeSeverity {
         switch self {
         case .ok: return .success
-        case .rateLimited, .unsupported, .cliLogin: return .warning
+        case .rateLimited, .unsupported, .cliLogin, .notLoggedIn: return .warning
         default: return .error
         }
     }
@@ -75,6 +81,9 @@ public enum ProbeOutcome: Equatable, Sendable {
         case .insecureURL: return "probe.insecureURL"
         case .missingKey: return "probe.missingKey"
         case .cliLogin: return "probe.cliLogin"
+        case .cliNotFound: return "probe.cliNotFound"
+        case .notLoggedIn: return "probe.notLoggedIn"
+        case .cliFailed: return "probe.cliFailed"
         case .crossHostRedirect: return "probe.crossHostRedirect"
         case .unsupported: return "probe.unsupported"
         }
@@ -136,53 +145,6 @@ public struct ConnectionProbe: Sendable {
         configuration.timeoutIntervalForRequest = timeout
         configuration.timeoutIntervalForResource = timeout
         return URLSession(configuration: configuration)
-    }
-
-    /// Sends one tiny message (`max_tokens` 1, about one token) with the profile's settings.
-    ///
-    /// Nothing is sent when the URL is invalid, when the key would travel over
-    /// plain http to a remote host, or when a key is needed and `key` is empty.
-    /// - Throws: `CancellationError` when the task is cancelled.
-    public func testConnection(profile: Profile, key: String) async throws -> ProbeReport {
-        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        if ProviderEndpoint.usesCliLogin(profile) {
-            return ProbeReport(outcome: .cliLogin)
-        }
-        guard let url = ProviderEndpoint.url(baseURL: profile.baseURL, path: "v1/messages") else {
-            return ProbeReport(outcome: .invalidURL)
-        }
-        if ProviderEndpoint.isInsecure(url) {
-            return ProbeReport(outcome: .insecureURL)
-        }
-        if profile.auth != .none && trimmedKey.isEmpty {
-            return ProbeReport(outcome: .missingKey)
-        }
-
-        var request = URLRequest(url: url, timeoutInterval: ConnectionProbe.timeout)
-        request.httpMethod = "POST"
-        for (name, value) in ProviderEndpoint.headers(auth: profile.auth, key: trimmedKey, json: true) {
-            request.setValue(value, forHTTPHeaderField: name)
-        }
-        let body: [String: Any] = [
-            "model": ProviderEndpoint.probeModel(for: profile),
-            "max_tokens": 1,
-            "messages": [["role": "user", "content": "ping"]],
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
-
-        let started = ContinuousClock.now
-        switch try await send(request) {
-        case .failed(let outcome):
-            return ProbeReport(outcome: outcome)
-        case .answer(let answer):
-            let latency = Int(started.duration(to: ContinuousClock.now) / Duration.milliseconds(1))
-            return ConnectionProbe.classify(
-                status: answer.status,
-                body: answer.body,
-                key: trimmedKey,
-                latencyMs: latency
-            )
-        }
     }
 
     /// Reads the model list of the provider: `GET v1/models`, or `models` when

@@ -220,6 +220,8 @@ public struct AppData: Codable, Equatable, Sendable {
     public var showMenuBar: Bool
     /// Open a profile in the terminal inside the app. On by default; only written when off.
     public var embeddedTerminal: Bool
+    /// Test the profiles that have no result when the app starts. On by default; only written when off.
+    public var autoCheckConnections: Bool
 
     public init(
         terminal: TerminalApp = .terminal,
@@ -230,7 +232,8 @@ public struct AppData: Codable, Equatable, Sendable {
         lastUpdateCheck: Date? = nil,
         pathPromptDeclined: Bool = false,
         showMenuBar: Bool = true,
-        embeddedTerminal: Bool = true
+        embeddedTerminal: Bool = true,
+        autoCheckConnections: Bool = true
     ) {
         self.terminal = terminal
         self.profiles = profiles
@@ -241,6 +244,7 @@ public struct AppData: Codable, Equatable, Sendable {
         self.pathPromptDeclined = pathPromptDeclined
         self.showMenuBar = showMenuBar
         self.embeddedTerminal = embeddedTerminal
+        self.autoCheckConnections = autoCheckConnections
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -253,6 +257,7 @@ public struct AppData: Codable, Equatable, Sendable {
         case pathPromptDeclined = "path_prompt_declined"
         case showMenuBar = "show_menu_bar"
         case embeddedTerminal = "embedded_terminal"
+        case autoCheckConnections = "auto_check_connections"
     }
 
     public init(from decoder: Decoder) throws {
@@ -276,6 +281,7 @@ public struct AppData: Codable, Equatable, Sendable {
         pathPromptDeclined = (try? c.decode(Bool.self, forKey: .pathPromptDeclined)) ?? false
         showMenuBar = MenuBarSetting.value(stored: try? c.decode(Bool.self, forKey: .showMenuBar))
         embeddedTerminal = (try? c.decode(Bool.self, forKey: .embeddedTerminal)) ?? true
+        autoCheckConnections = (try? c.decode(Bool.self, forKey: .autoCheckConnections)) ?? true
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
@@ -317,6 +323,9 @@ public struct AppData: Codable, Equatable, Sendable {
         }
         if !embeddedTerminal {
             try c.encode(false, forKey: .embeddedTerminal)
+        }
+        if !autoCheckConnections {
+            try c.encode(false, forKey: .autoCheckConnections)
         }
     }
 }

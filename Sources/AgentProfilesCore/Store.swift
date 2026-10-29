@@ -692,6 +692,9 @@ enum JSONText {
         if !data.embeddedTerminal {
             out += ",\n  \"embedded_terminal\": false"
         }
+        if !data.autoCheckConnections {
+            out += ",\n  \"auto_check_connections\": false"
+        }
         if let lastUpdateCheck = data.lastUpdateCheck {
             out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"
         }

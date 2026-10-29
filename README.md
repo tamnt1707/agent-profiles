@@ -28,8 +28,9 @@ keys stay safe, and your normal Claude Code setup is never touched.
 - **Your own Claude Code stays as it is.** Each profile keeps its own settings and history,
   so nothing leaks from one to another. If you like, you can share your instructions, skills
   and agents across all of them.
-- **A button that tells you if it works.** *Test connection* sends one tiny request and tells
-  you what is wrong: the key, the address, the model name or the network.
+- **A dot that tells you if it works.** *Test connection* asks the CLI for one short answer, the way your
+  own command does, and tells you what is wrong: the key, the address, the model name, the sign-in or the
+  network. The result is kept between runs, so you see the state of every profile as soon as you open the app.
 - **Pick the model from a list.** Type any model name, or choose from the ones your provider
   offers.
 - **Opens right where you work.** Start a profile in Terminal or iTerm2, straight in your
@@ -78,7 +79,9 @@ Any provider that offers a Claude-compatible address. The templates cover the po
 you can type any other address by hand.
 
 **What does *Test connection* cost?**
-About one token. It only checks that the key and the address work.
+One short request through the CLI: about 1,500 tokens in and a few out. The app also does it once for a profile
+that has no result yet when it starts; the result is kept until the profile changes or you check again. You can
+turn the check at start off in Settings.
 
 **What happens when I delete a profile?**
 Its key, its command and its saved history are all removed. If it was your last profile, the app

@@ -1,10 +1,11 @@
+import CryptoKit
 import Foundation
 
 /// The four states of the health dot in the sidebar.
 public enum HealthState: String, Equatable, Sendable, CaseIterable {
-    /// Green: the key is stored when one is needed, and the last test succeeded recently.
+    /// Green: the key is stored when one is needed, and the last test succeeded.
     case ready
-    /// Grey: no problem is known, but no recent test succeeded.
+    /// Grey: no problem is known, but the profile was never tested.
     case untested
     /// Orange: the last test was rate limited, or answered with a warning.
     case attention
@@ -20,8 +21,6 @@ public enum HealthReason: Equatable, Sendable {
     case notTested
     /// The Keychain could not be read. Nothing is known about the key.
     case keychainUnreadable
-    /// A test exists but is older than `ProfileHealth.freshWindow`.
-    case staleTest(minutesAgo: Int)
     case testWarning(ProbeOutcome)
     case testFailed(ProbeOutcome)
 }
@@ -52,9 +51,6 @@ public struct TestRecord: Equatable, Sendable {
 /// Turns the facts about a profile into its health. Pure: no network, no
 /// Keychain, no clock except the `now` that is passed in.
 public enum ProfileHealth {
-    /// A test older than this counts as not tested. Exactly this age is still fresh.
-    public static let freshWindow: TimeInterval = 30 * 60
-
     /// - Parameters:
     ///   - key: what is known about the stored key of the profile.
     ///   - lastTest: the last test kept for this profile, if any.
@@ -74,12 +70,10 @@ public enum ProfileHealth {
         guard let lastTest else {
             return HealthStatus(state: .untested, reason: .notTested)
         }
-        let age = now.timeIntervalSince(lastTest.testedAt)
-        let minutes = max(0, Int(age / 60))
-        // A test from the future (the clock went back) is not trusted either.
-        guard age >= 0, age <= freshWindow else {
-            return HealthStatus(state: .untested, reason: .staleTest(minutesAgo: minutes))
-        }
+        // The last result stays until the settings change or the profile is tested
+        // again: it is kept on disk, and an old result is still the last thing known.
+        // A clock that went back makes an age below zero: it counts as just now.
+        let minutes = max(0, Int(now.timeIntervalSince(lastTest.testedAt) / 60))
         switch lastTest.outcome.severity {
         case .success:
             return HealthStatus(state: .ready, reason: .connected(minutesAgo: minutes))
@@ -109,8 +103,8 @@ public enum ProfileHealth {
 /// would land in the dot of the new settings.
 public struct HealthBook: Equatable, Sendable {
     private struct Entry: Equatable, Sendable {
-        var baseURL: String
-        var auth: AuthKind
+        /// The settings the test was made with: see `fingerprint(of:)`.
+        var fingerprint: String
         var test: TestRecord
     }
 
@@ -119,16 +113,30 @@ public struct HealthBook: Equatable, Sendable {
     /// They are kept for every profile, also for one that was never tested:
     /// the generation of a profile that changed has to rise, so an answer of
     /// a running check cannot land in the dot of the new settings.
-    private struct Settings: Equatable, Sendable {
-        var baseURL: String
-        var auth: AuthKind
-    }
-
     private var entries: [String: Entry] = [:]
-    private var settings: [String: Settings] = [:]
+    private var settings: [String: String] = [:]
     private var generations: [String: Int] = [:]
 
     public init() {}
+
+    /// What a test depends on, as one string: the address, the way of signing in,
+    /// the model names, the extra environment and the config folder. A test is
+    /// only good for the profile that has the same fingerprint.
+    ///
+    /// It is a hash, so the extra environment (which can hold a token) is never
+    /// written to the cache file as it is.
+    public static func fingerprint(of profile: Profile) -> String {
+        let fields = [
+            profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            profile.auth.rawValue,
+            profile.model, profile.opusModel, profile.sonnetModel, profile.haikuModel,
+            profile.extraEnv,
+            profile.isolate ? "isolated" : "shared",
+            profile.agent.rawValue,
+        ]
+        let joined = fields.joined(separator: "\u{1F}")
+        return SHA256.hash(data: Data(joined.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
 
     /// The generation of a slug. It is 0 for a profile that never changed.
     public func generation(for slug: String) -> Int {
@@ -157,18 +165,41 @@ public struct HealthBook: Equatable, Sendable {
         guard let profile else { return false }
         guard self.generation(for: profile.slug) == generation else { return false }
         entries[profile.slug] = Entry(
-            baseURL: profile.baseURL,
-            auth: profile.auth,
+            fingerprint: Self.fingerprint(of: profile),
             test: TestRecord(outcome: outcome, testedAt: date)
         )
         return true
     }
 
+    /// The tests that are kept, for the cache file.
+    public var storedTests: [String: StoredTest] {
+        entries.mapValues {
+            StoredTest(fingerprint: $0.fingerprint, outcome: StoredOutcome($0.test.outcome), testedAt: $0.test.testedAt)
+        }
+    }
+
+    /// The tests of a cache file, kept for the profiles they still describe.
+    ///
+    /// A test is taken only when the profile exists and has the settings it was
+    /// made with. The settings of every profile are remembered, as for a list that was read.
+    public mutating func restore(_ tests: [String: StoredTest], profiles: [Profile]) {
+        for profile in profiles {
+            let current = Self.fingerprint(of: profile)
+            settings[profile.slug] = current
+            if let stored = tests[profile.slug], stored.fingerprint == current,
+               let outcome = stored.outcome.outcome {
+                entries[profile.slug] = Entry(
+                    fingerprint: current,
+                    test: TestRecord(outcome: outcome, testedAt: stored.testedAt)
+                )
+            }
+        }
+    }
+
     /// The last test of `profile`, or `nil` when none was kept or its Base URL or auth kind changed since.
     public func lastTest(for profile: Profile) -> TestRecord? {
         guard let entry = entries[profile.slug],
-              entry.baseURL == profile.baseURL,
-              entry.auth == profile.auth
+              entry.fingerprint == Self.fingerprint(of: profile)
         else { return nil }
         return entry.test
     }
@@ -193,7 +224,7 @@ public struct HealthBook: Equatable, Sendable {
             forget(slug: new.slug)
             bump(slug: new.slug)
         }
-        settings[new.slug] = Settings(baseURL: new.baseURL, auth: new.auth)
+        settings[new.slug] = Self.fingerprint(of: new)
     }
 
     /// The profile is gone.
@@ -232,7 +263,7 @@ public struct HealthBook: Equatable, Sendable {
         // has no result, but its generation rises too: an answer of a running
         // check is about the old settings.
         for profile in profiles {
-            let current = Settings(baseURL: profile.baseURL, auth: profile.auth)
+            let current = Self.fingerprint(of: profile)
             if let known = settings[profile.slug], known != current {
                 forget(slug: profile.slug)
                 bump(slug: profile.slug)
@@ -252,6 +283,6 @@ public struct HealthBook: Equatable, Sendable {
     public static func canRecordEditorTest(draft: Profile, saved: Profile?, typedKey: String) -> Bool {
         guard let saved else { return false }
         guard typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        return draft.baseURL == saved.baseURL && draft.auth == saved.auth
+        return fingerprint(of: draft) == fingerprint(of: saved)
     }
 }

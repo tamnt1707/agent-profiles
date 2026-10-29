@@ -24,6 +24,14 @@ Two new provider templates, and the colors of the connection checks now show.
   saved with an empty Base URL and no key.
 - **Xiaomi MiMo template.**
 - **Health dots in the menu bar.** Each profile in the menu bar launcher has the same dot as in the sidebar.
+- **Connection checks go through the CLI, and are remembered.** *Test connection*, *Check all connections* and the
+  dots now ask the CLI for one short answer (about 1,500 tokens) with the settings of the profile, instead of calling the
+  provider directly. That is the request your own command makes, so the model name is used as it is declared (with
+  `[1m]`), a Claude subscription can be tested (it says when the account is not signed in), and the answer is the one
+  you would get. The result of each profile is kept in `~/.claude-profiles/health-cache.json` (no key, no text of the
+  provider) until its settings change or you check it again, so the dots are there as soon as the app opens. When the
+  app starts it checks the profiles that have no result yet, once, without asking; turn that off in Settings. This
+  replaces the earlier rule that no request was ever sent without a click.
 - **Choose the CLI of a profile.** A new profile now has a *CLI* choice that lists the command line agents installed
   on this Mac (found in the usual folders and through your login shell), with where each was found, or a warning and
   *Check again* when it is missing. Only Claude Code is supported for now; other CLIs can be added later. The choice
@@ -67,6 +75,13 @@ Two new provider templates, and the colors of the connection checks now show.
   *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
   *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
 - **Template Xiaomi MiMo.**
+- **Kiểm tra kết nối đi qua CLI, và được ghi nhớ.** *Kiểm tra kết nối*, *Kiểm tra tất cả kết nối* và các chấm giờ nhờ
+  CLI trả lời một câu ngắn (khoảng 1.500 token) với cài đặt của profile, thay vì gọi thẳng nhà cung cấp. Đó là yêu cầu mà
+  lệnh của bạn gửi, nên tên model được dùng đúng như đã khai báo (kể cả `[1m]`), gói đăng ký Claude cũng kiểm tra được
+  (báo khi tài khoản chưa đăng nhập), và kết quả là kết quả bạn sẽ nhận. Kết quả của mỗi profile được giữ trong
+  `~/.claude-profiles/health-cache.json` (không có key, không có chữ của nhà cung cấp) cho đến khi cài đặt của nó thay
+  đổi hoặc bạn kiểm tra lại, nên các chấm có sẵn ngay khi mở ứng dụng. Khi mở, ứng dụng kiểm tra các profile chưa có kết
+  quả, một lần, không hỏi; tắt trong Cài đặt. Điều này thay cho quy tắc trước đây là không gửi yêu cầu nào nếu chưa bấm.
 - **Chọn CLI cho profile.** Profile mới có mục *CLI* liệt kê các agent dòng lệnh đã cài trên máy này (tìm trong các thư
   mục thường dùng và qua login shell của bạn), kèm nơi tìm thấy, hoặc cảnh báo và nút *Kiểm tra lại* khi chưa cài. Hiện
   chỉ hỗ trợ Claude Code; các CLI khác sẽ thêm sau. Lựa chọn chỉ được ghi vào `profiles.json` khi khác Claude Code, nên

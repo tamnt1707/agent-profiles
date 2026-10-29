@@ -31,7 +31,10 @@ struct ContentView: View {
         }
         .navigationTitle(model.loc.t("app.title"))
         // Which agents are installed is known before the first profile is created.
-        .task { model.refreshAgents() }
+        .task {
+            model.refreshAgents()
+            model.autoCheckOnLaunch()
+        }
         .onChange(of: model.selectedSlug) { _, slug in
             model.sidebarSelectionChanged(to: slug)
         }

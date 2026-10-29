@@ -6,8 +6,9 @@ public enum HealthInvalidation {
     /// any more, so the result must be dropped.
     ///
     /// A typed key is a new key that is not stored yet: the old result says
-    /// nothing about it. A new Base URL, a new auth kind or a new name make
-    /// the old result describe another provider or another account. A profile
+    /// nothing about it. A new Base URL, a new auth kind, other model names,
+    /// other environment or a new name make the old result describe another
+    /// provider or another account. A profile
     /// that was never saved has no result of its own, but its slug may have
     /// been used before, so nothing is kept for it either.
     ///
@@ -16,6 +17,7 @@ public enum HealthInvalidation {
     public static func shouldForget(old: Profile?, new: Profile, typedKey: String) -> Bool {
         if !typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
         guard let old else { return true }
-        return old.baseURL != new.baseURL || old.auth != new.auth || old.slug != new.slug
+        // Whatever the test depends on: see `HealthBook.fingerprint(of:)`.
+        return HealthBook.fingerprint(of: old) != HealthBook.fingerprint(of: new) || old.slug != new.slug
     }
 }

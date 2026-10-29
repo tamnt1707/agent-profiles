@@ -53,6 +53,14 @@ struct SettingsView: View {
                 .disabled(model.data.embeddedTerminal)
             }
 
+            Section(model.loc.t("settings.autoCheck.section")) {
+                Toggle(model.loc.t("settings.autoCheck"), isOn: autoCheckBinding2)
+                Text(model.loc.t("settings.autoCheck.hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section(model.loc.t("menubar.section")) {
                 Toggle(model.loc.t("menubar.show"), isOn: menuBarBinding)
             }
@@ -204,6 +212,10 @@ struct SettingsView: View {
 
     private var menuBarBinding: Binding<Bool> {
         Binding(get: { model.data.showMenuBar }, set: { model.setShowMenuBar($0) })
+    }
+
+    private var autoCheckBinding2: Binding<Bool> {
+        Binding(get: { model.data.autoCheckConnections }, set: { model.setAutoCheckConnections($0) })
     }
 
     private var autoCheckBinding: Binding<Bool> {
