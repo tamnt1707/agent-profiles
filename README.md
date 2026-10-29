@@ -42,6 +42,11 @@ called Agent Profiles.
 - **Orchestration kit.** One button adds a set of subagents (scout, researcher, builder, tester,
   reviewer, committer) and the instructions for the main session to one profile, so a strong model
   can plan while cheaper ones do the reading and the typing. Nothing outside that profile is touched.
+- **Heartbeat for your 5 hour window.** Pick the times (and days) at which the app sends one tiny `ping`
+  through a profile's CLI, so the usage window of your subscription starts when you want it to. It runs even
+  when the app is closed, and shows you when the last ping went out and how it ended.
+- **Your own Claude Code is in the list too.** *Default* (your `~/.claude`) sits under the profiles the app
+  created, with a terminal, usage and the same dot. It can never be deleted from the app.
 - **A launcher in the menu bar.** Open any profile in one click, in its own folder or in one of the
   five you used last.
 - **Token usage per profile.** See today, the last 7 days and all time, counted on your Mac from the
