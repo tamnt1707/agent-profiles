@@ -737,6 +737,9 @@ enum JSONText {
         if profile.agent != .default {
             fields.append("\"agent\": \(escape(profile.agent.rawValue))")
         }
+        if profile.heartbeat != .off {
+            fields.append("\"heartbeat\": " + profile.heartbeat.jsonText(indent: indent + 2, escape: escape))
+        }
         var out = pad + "{\n"
         out += fields.map { inner + $0 }.joined(separator: ",\n") + "\n"
         out += "\(pad)}"

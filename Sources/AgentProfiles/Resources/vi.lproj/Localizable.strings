@@ -390,6 +390,8 @@
 
 /* Terminal inside the app */
 "terminal.tab.settings" = "Cấu hình";
+"terminal.tab.usage" = "Mức dùng";
+"terminal.tab.orchestration" = "Điều phối";
 "terminal.tab.terminal" = "Terminal";
 "terminal.state.running" = "Đang chạy";
 "terminal.state.exited" = "Đã kết thúc";
@@ -430,3 +432,27 @@
 "settings.autoCheck.section" = "Kiểm tra kết nối";
 "settings.autoCheck" = "Kiểm tra các profile chưa có kết quả khi mở ứng dụng";
 "settings.autoCheck.hint" = "Mỗi lần kiểm tra chạy CLI một lần cho một profile, khoảng 1.500 token. Kết quả được giữ cho đến khi profile thay đổi hoặc bạn kiểm tra lại.";
+
+/* Heartbeat */
+"heartbeat.section" = "Heartbeat";
+"heartbeat.enabled" = "Gửi ping theo lịch";
+"heartbeat.hint" = "Gửi một yêu cầu ngắn qua CLI của profile này vào các giờ bên dưới (theo giờ của máy), để cửa sổ dùng 5 giờ bắt đầu đúng lúc đó. Muốn cửa sổ reset lúc 10:00 thì cho nó bắt đầu lúc 05:00. Chạy cả khi app đã đóng; máy đang ngủ thì chạy khi thức dậy.";
+"heartbeat.time" = "Giờ";
+"heartbeat.window" = "cửa sổ %@ → %@";
+"heartbeat.add" = "Thêm giờ";
+"heartbeat.remove" = "Xoá giờ này";
+"heartbeat.runNow" = "Chạy ngay";
+"heartbeat.runNow.help" = "Gửi ping ngay để thử lịch. Hãy lưu profile trước.";
+"heartbeat.days" = "Ngày";
+"heartbeat.days.all" = "Không chọn ngày nào: chạy mỗi ngày.";
+"heartbeat.days.some" = "Chỉ chạy vào các ngày đã chọn.";
+"heartbeat.day.1" = "T2";
+"heartbeat.day.2" = "T3";
+"heartbeat.day.3" = "T4";
+"heartbeat.day.4" = "T5";
+"heartbeat.day.5" = "T6";
+"heartbeat.day.6" = "T7";
+"heartbeat.day.7" = "CN";
+"heartbeat.ran" = "Đã gửi ping. Câu trả lời nằm trong ~/.claude-profiles/heartbeat/.";
+"heartbeat.failed" = "Không thiết lập được lịch cho: %@";
+"error.heartbeat" = "Không thiết lập được heartbeat: %@";

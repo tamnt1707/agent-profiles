@@ -66,6 +66,8 @@ public struct Profile: Codable, Equatable, Sendable {
     public var priceOutputPerMillion: Double?
     /// The command line agent this profile runs. Written only when it is not Claude Code.
     public var agent: AgentKind
+    /// The schedule that starts the usage window. Written only when it is not off.
+    public var heartbeat: Heartbeat
 
     public init(
         name: String = "",
@@ -83,7 +85,8 @@ public struct Profile: Codable, Equatable, Sendable {
         recentDirs: [String] = [],
         priceInputPerMillion: Double? = nil,
         priceOutputPerMillion: Double? = nil,
-        agent: AgentKind = .default
+        agent: AgentKind = .default,
+        heartbeat: Heartbeat = .off
     ) {
         self.name = name
         self.slug = slug
@@ -101,6 +104,7 @@ public struct Profile: Codable, Equatable, Sendable {
         self.priceInputPerMillion = priceInputPerMillion
         self.priceOutputPerMillion = priceOutputPerMillion
         self.agent = agent
+        self.heartbeat = heartbeat
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -120,6 +124,7 @@ public struct Profile: Codable, Equatable, Sendable {
         case priceInputPerMillion = "price_input_per_million"
         case priceOutputPerMillion = "price_output_per_million"
         case agent
+        case heartbeat
     }
 
     public init(from decoder: Decoder) throws {
@@ -158,6 +163,8 @@ public struct Profile: Codable, Equatable, Sendable {
         priceOutputPerMillion = Self.lenientPrice(c, forKey: .priceOutputPerMillion)
         // A file written before agents existed has no key: the profile runs Claude Code.
         agent = (try? c.decode(AgentKind.self, forKey: .agent)) ?? .default
+        // Lenient too: a broken schedule is dropped, the profile still loads.
+        heartbeat = (try? c.decode(Heartbeat.self, forKey: .heartbeat)) ?? .off
     }
 
     /// The price of the file, or `nil` when it is not there or is broken.
@@ -198,6 +205,9 @@ public struct Profile: Codable, Equatable, Sendable {
         // Written only when it is not the default, so a file stays as the older app wrote it.
         if agent != .default {
             try c.encode(agent, forKey: .agent)
+        }
+        if heartbeat != .off {
+            try c.encode(heartbeat, forKey: .heartbeat)
         }
     }
 }

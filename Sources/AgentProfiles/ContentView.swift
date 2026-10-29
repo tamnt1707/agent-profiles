@@ -34,6 +34,8 @@ struct ContentView: View {
         .task {
             model.refreshAgents()
             model.autoCheckOnLaunch()
+            // A moved app, a deleted profile or a hand edited file leave no stale agent.
+            model.syncHeartbeats()
         }
         .onChange(of: model.selectedSlug) { _, slug in
             model.sidebarSelectionChanged(to: slug)

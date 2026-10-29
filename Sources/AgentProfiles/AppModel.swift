@@ -102,6 +102,8 @@ final class AppModel {
     enum DetailTab: Equatable {
         case settings
         case terminal
+        case usage
+        case orchestration
     }
 
     /// The tab of each profile. A profile that is not here shows its settings.
@@ -640,6 +642,9 @@ final class AppModel {
             command.input = Slug.slugify(draft.name)
         }
         draft.slug = command.slug
+        // Sorted and without duplicates, whatever order the rows were edited in.
+        let schedule = draft.heartbeat
+        draft.heartbeat = Heartbeat(enabled: schedule.enabled, times: schedule.times, days: schedule.days)
 
         do {
             let result = try store.saveProfile(
@@ -687,6 +692,8 @@ final class AppModel {
             refreshMenuBarFolders()
             // The counted tokens of the old settings are gone with them.
             forgetUsage(before: previousProfile, after: draft)
+            // The schedule of the profile, and the agent of a name it left.
+            syncHeartbeats()
             // A profile that was renamed leaves nothing behind in the menu.
             if let previousProfile, previousProfile.slug != draft.slug {
                 forgetMenuBarState(for: previousProfile.slug)
@@ -706,6 +713,47 @@ final class AppModel {
         } catch {
             report(error)
             return false
+        }
+    }
+
+    // MARK: - Heartbeat
+
+    /// Brings the LaunchAgents in line with the schedules of the profiles. The
+    /// work (`launchctl`) is done off the main thread; a failure is shown once
+    /// it is known.
+    func syncHeartbeats() {
+        guard !dataFailed else { return }
+        let profiles = data.profiles
+        let paths = store.paths
+        Task.detached(priority: .utility) { [model = self] in
+            let failed = HeartbeatAgent(paths: paths).sync(profiles)
+            guard !failed.isEmpty else { return }
+            await MainActor.run {
+                model.status = Status(kind: .failure, text: model.loc.t("heartbeat.failed", failed.joined(separator: ", ")))
+            }
+        }
+    }
+
+    /// Runs the agent of the saved profile once, to try the schedule.
+    func runHeartbeatNow() {
+        guard let profile = currentProfile, profile.heartbeat.isActive else { return }
+        let slug = profile.slug
+        let paths = store.paths
+        Task.detached(priority: .utility) { [model = self] in
+            let failure: Error?
+            do {
+                try HeartbeatAgent(paths: paths).runNow(slug: slug)
+                failure = nil
+            } catch {
+                failure = error
+            }
+            await MainActor.run {
+                if let failure {
+                    model.report(failure)
+                } else {
+                    model.status = Status(kind: .success, text: model.loc.t("heartbeat.ran"))
+                }
+            }
         }
     }
 
@@ -1418,6 +1466,7 @@ final class AppModel {
         // The numbers of a profile that is gone are gone with it: a profile
         // that is added again with the same name starts at zero.
         cancelUsage(for: profile.slug)
+        syncHeartbeats()
         do {
             try store.save(data)
         } catch {
@@ -2280,6 +2329,8 @@ extension ProfileError {
             return loc.t("error.unsafeFolder.save", FolderPathSafety.visible(path))
         case .invalidPrice:
             return loc.t("error.invalidPrice")
+        case .heartbeatFailed(let message):
+            return loc.t("error.heartbeat", message)
         }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 import AgentProfilesCore
 
-/// The right side of the window for one profile: its settings or its terminal.
+/// The right side of the window for one profile: its settings, terminal, usage or orchestration.
 ///
 /// The terminals of a profile keep running while another profile is shown, so
 /// the switch says which profile has a process and the sidebar marks it.
@@ -14,10 +14,11 @@ struct ProfileDetailView: View {
             if let slug = model.currentProfile?.slug {
                 tabBar(slug)
                 Divider()
-                if model.detailTab(for: slug) == .terminal {
+                switch model.detailTab(for: slug) {
+                case .terminal:
                     TerminalPane(model: model, slug: slug)
-                } else {
-                    ProfileEditorView(model: model)
+                case let page:
+                    ProfileEditorView(model: model, page: page)
                 }
             } else {
                 ProfileEditorView(model: model)
@@ -37,10 +38,12 @@ struct ProfileDetailView: View {
                 Text(model.loc.t("terminal.tab.settings")).tag(AppModel.DetailTab.settings)
                 Label(model.loc.t("terminal.tab.terminal"), systemImage: running ? "circle.fill" : "terminal")
                     .tag(AppModel.DetailTab.terminal)
+                Text(model.loc.t("terminal.tab.usage")).tag(AppModel.DetailTab.usage)
+                Text(model.loc.t("terminal.tab.orchestration")).tag(AppModel.DetailTab.orchestration)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(maxWidth: 280)
+            .frame(maxWidth: 460)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)

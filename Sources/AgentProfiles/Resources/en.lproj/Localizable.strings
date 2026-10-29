@@ -390,6 +390,8 @@
 
 /* Terminal inside the app */
 "terminal.tab.settings" = "Settings";
+"terminal.tab.usage" = "Usage";
+"terminal.tab.orchestration" = "Orchestration";
 "terminal.tab.terminal" = "Terminal";
 "terminal.state.running" = "Running";
 "terminal.state.exited" = "Ended";
@@ -430,3 +432,27 @@
 "settings.autoCheck.section" = "Connection checks";
 "settings.autoCheck" = "Check the profiles that have no result when the app starts";
 "settings.autoCheck.hint" = "Each check runs the CLI once for a profile, about 1,500 tokens. The result is kept until the profile changes or you check again.";
+
+/* Heartbeat */
+"heartbeat.section" = "Heartbeat";
+"heartbeat.enabled" = "Send a ping on a schedule";
+"heartbeat.hint" = "Sends one short request through this profile's CLI at the times below (clock of this Mac), so the 5 hour usage window starts then. To have the window reset at 10:00, start it at 05:00. It runs even when this app is closed; a Mac that is asleep runs it when it wakes up.";
+"heartbeat.time" = "Time";
+"heartbeat.window" = "window %@ → %@";
+"heartbeat.add" = "Add time";
+"heartbeat.remove" = "Remove this time";
+"heartbeat.runNow" = "Run now";
+"heartbeat.runNow.help" = "Send the ping now, to try the schedule. Save the profile first.";
+"heartbeat.days" = "Days";
+"heartbeat.days.all" = "No day selected: it runs every day.";
+"heartbeat.days.some" = "It runs only on the selected days.";
+"heartbeat.day.1" = "Mon";
+"heartbeat.day.2" = "Tue";
+"heartbeat.day.3" = "Wed";
+"heartbeat.day.4" = "Thu";
+"heartbeat.day.5" = "Fri";
+"heartbeat.day.6" = "Sat";
+"heartbeat.day.7" = "Sun";
+"heartbeat.ran" = "The ping was sent. The answer is in ~/.claude-profiles/heartbeat/.";
+"heartbeat.failed" = "The schedule could not be set up for: %@";
+"error.heartbeat" = "The heartbeat could not be set up: %@";

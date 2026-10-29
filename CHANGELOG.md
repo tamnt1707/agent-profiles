@@ -4,6 +4,12 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [Unreleased]
+
+- **Heartbeat**: a schedule per profile that sends one `ping` through its CLI at times of day you choose (clock of the Mac, optional weekdays), so the 5 hour usage window starts when you want it to. It is a LaunchAgent, so it runs with the app closed.
+- Usage and Orchestration are tabs of their own next to Settings and Terminal.
+- The Test connection button sits below the model fields.
+
 ## [0.3.0] - 2026-10-29
 
 The app is now **Agent Profiles**, with a terminal inside the window, a choice of CLI, connection checks that go
