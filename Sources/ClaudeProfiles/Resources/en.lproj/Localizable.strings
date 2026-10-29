@@ -354,3 +354,37 @@
 "pathSetup.status.stray" = "Partly added. A block is in %@, which bash no longer reads.";
 "pathSetup.partial" = "Already changed: %@. Nothing more was written. Use Remove to undo the change in those files.";
 "pathSetup.elsewhere" = "A Claude Profiles block is in %@, which bash no longer reads. Remove the Claude Profiles lines first, then add them again.";
+
+/* Orchestration kit */
+"orch.section" = "Orchestration";
+"orch.hint" = "Six subagents (scout, researcher, builder, tester, reviewer, committer) and the instructions of the orchestrator, installed into this profile only. Your other profiles and ~/.claude are not touched.";
+"orch.install" = "Install in this profile";
+"orch.update" = "Update";
+"orch.remove" = "Remove";
+"orch.status.none" = "Not installed.";
+"orch.status.current" = "Installed and up to date.";
+"orch.status.outdated" = "Installed, but not up to date. Update to write the current files.";
+"orch.status.partial" = "Partly installed: %d of %d agents.";
+"orch.mode.tiered" = "Models: scout and committer use Haiku, the others Sonnet.";
+"orch.mode.inherit" = "Models: every agent uses the model of the session, because %@.";
+"orch.reason.noMapping" = "this provider (%@) has no opus/sonnet/haiku mapping";
+"orch.reason.sameModel" = "all three aliases map to %@";
+"orch.reason.partial" = "this provider (%@) maps only some of the aliases";
+"orch.notIsolated" = "This profile has no config folder of its own, so the agents would go to ~/.claude. Turn on \"Isolate\" below, save, then install.";
+"orch.unsaved" = "There are unsaved changes: the install uses the saved profile.";
+"orch.unsavedProfile" = "Save the profile first.";
+"orch.shared.agents" = "The agents folder is a link to ~/.claude, so this profile reads the agents of ~/.claude. Nothing is written through it.";
+"orch.shared.claudeMd" = "CLAUDE.md is a link to ~/.claude. Nothing is written through it, so the orchestrator instructions are not added.";
+"orch.shared.own" = "Give this profile its own copy";
+"orch.unshare.title" = "Give this profile its own copy?";
+"orch.unshare.confirm" = "Copy and install";
+"orch.unshare.message" = "The link is replaced with a copy of what it points to, then the kit is installed. This profile no longer follows ~/.claude for this item. ~/.claude itself is not changed.";
+"orch.result.installed" = "Orchestration installed in this profile.";
+"orch.result.installedAgentsOnly" = "Agents installed. CLAUDE.md is shared with ~/.claude and was left alone.";
+"orch.result.installedBlockOnly" = "Instructions written. The agents folder is shared with ~/.claude and was left alone.";
+"orch.result.nothing" = "Nothing was written: the agents and CLAUDE.md are shared with ~/.claude.";
+"orch.result.removed" = "Orchestration removed from this profile.";
+"orch.result.removedAgentsOnly" = "Agents removed. CLAUDE.md is shared with ~/.claude and was left alone.";
+"orch.result.removedBlockOnly" = "Instructions removed. The agents folder is shared with ~/.claude and was left alone.";
+"orch.error.notIsolated" = "This profile has no config folder of its own: turn on isolation and save first.";
+"orch.error.io" = "Could not change %@.";

@@ -17,6 +17,12 @@ Two new provider templates, and the colors of the connection checks now show.
   saved with an empty Base URL and no key.
 - **Xiaomi MiMo template.**
 - **Health dots in the menu bar.** Each profile in the menu bar launcher has the same dot as in the sidebar.
+- **Orchestration kit, per profile.** A new *Orchestration* section installs six subagents (scout, researcher, builder,
+  tester, reviewer, committer) and the instructions of the orchestrator into the config folder of the profile, with
+  *Install*, *Update* and *Remove*. Only that profile changes. The models follow the provider: Haiku and Sonnet for
+  Anthropic, the model of the session for a provider without separate models. A profile that shares `agents` or
+  `CLAUDE.md` with `~/.claude` through a link is never written through; *Give this profile its own copy* replaces the
+  link with a copy (after you confirm) so the kit can go in. `~/.claude` is not changed.
 - **Delete in the sidebar menu.** Right-click a profile and choose *Delete*: the same question as the button asks first.
 
 **Fixed**
@@ -35,6 +41,12 @@ Two new provider templates, and the colors of the connection checks now show.
   *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
   *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
 - **Template Xiaomi MiMo.**
+- **Bộ Orchestration cho từng profile.** Mục *Orchestration* mới cài sáu subagent (scout, researcher, builder, tester,
+  reviewer, committer) và hướng dẫn cho orchestrator vào thư mục cấu hình của profile, với *Cài*, *Cập nhật* và *Gỡ*.
+  Chỉ profile đó thay đổi. Model theo nhà cung cấp: Haiku và Sonnet với Anthropic, model của phiên với nhà cung cấp không
+  có model riêng từng bậc. Profile dùng chung `agents` hoặc `CLAUDE.md` với `~/.claude` qua liên kết thì không bao giờ bị
+  ghi xuyên qua; *Tạo bản sao riêng cho profile này* thay liên kết bằng một bản sao (sau khi bạn xác nhận) để cài được
+  bộ kit. `~/.claude` không bị thay đổi.
 - **Chấm trạng thái trên thanh menu.** Mỗi profile trong trình khởi chạy trên thanh menu có chấm giống ở cột bên.
 - **Xóa trong menu của cột bên.** Nhấp chuột phải vào profile và chọn *Xóa*: hỏi xác nhận giống nút Xóa trong trình chỉnh sửa.
 

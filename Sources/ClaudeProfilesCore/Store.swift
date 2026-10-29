@@ -576,7 +576,7 @@ public struct Store {
     /// The slug has to be a single harmless path component and the folder has
     /// to be a direct child of `<root>/homes/`. A folder that is a symbolic
     /// link is allowed: only the link itself is removed.
-    private func validatedHomePath(for slug: String) throws -> URL {
+    func validatedHomePath(for slug: String) throws -> URL {
         let home = paths.home(for: slug)
         guard Slug.isSafe(slug) else {
             throw ProfileError.unsafeDeletePath(home.path)

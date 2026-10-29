@@ -14,6 +14,7 @@ struct ProfileEditorView: View {
             providerSection
             modelsSection
             usageSection
+            orchestrationSection
             environmentSection
             workspaceSection
             isolationSection
@@ -148,6 +149,103 @@ struct ProfileEditorView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Orchestration kit
+
+    /// The six subagents and the orchestrator instructions, installed into this profile only.
+    private var orchestrationSection: some View {
+        Section(model.loc.t("orch.section")) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.loc.t("orch.hint"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                orchestrationContent
+            }
+        }
+        .alert(model.loc.t("orch.unshare.title"), isPresented: $model.isConfirmingUnshare) {
+            Button(model.loc.t("orch.unshare.confirm")) { model.confirmUnshare() }
+            Button(model.loc.t("actions.cancel"), role: .cancel) { model.cancelUnshare() }
+        } message: {
+            Text(model.loc.t("orch.unshare.message"))
+        }
+    }
+
+    @ViewBuilder
+    private var orchestrationContent: some View {
+        if let profile = model.currentProfile, let state = model.orchestration {
+            if !profile.isolate {
+                Text(model.loc.t("orch.notIsolated"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(orchestrationStatusText(state))
+                    .font(.callout)
+                Text(orchestrationModeText(state))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if state.agentsRefusal == .shared {
+                    sharedNotice("orch.shared.agents", item: .agents)
+                }
+                if state.claudeMdRefusal == .shared {
+                    sharedNotice("orch.shared.claudeMd", item: .claudeMd)
+                }
+                HStack(spacing: 8) {
+                    Button(model.loc.t(state.isEmpty ? "orch.install" : "orch.update")) {
+                        model.installOrchestration()
+                    }
+                    .disabled(state.isCurrent && !state.isEmpty)
+                    if !state.isEmpty {
+                        Button(model.loc.t("orch.remove")) { model.removeOrchestration() }
+                    }
+                }
+                if model.hasUnsavedChanges {
+                    Text(model.loc.t("orch.unsaved"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Text(model.loc.t("orch.unsavedProfile"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func sharedNotice(_ key: String, item: OrchestrationItem) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(model.loc.t(key), systemImage: "link")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(model.loc.t("orch.shared.own")) { model.requestUnshare(item) }
+                .buttonStyle(.link)
+                .font(.callout)
+        }
+    }
+
+    private func orchestrationStatusText(_ state: OrchestrationStatus) -> String {
+        if state.isEmpty { return model.loc.t("orch.status.none") }
+        if state.isCurrent { return model.loc.t("orch.status.current") }
+        if state.agentsPresent > 0, state.agentsPresent < OrchestrationKit.agentNames.count {
+            return model.loc.count("orch.status.partial", state.agentsPresent, OrchestrationKit.agentNames.count)
+        }
+        return model.loc.t("orch.status.outdated")
+    }
+
+    private func orchestrationModeText(_ state: OrchestrationStatus) -> String {
+        switch state.reason {
+        case .anthropic, .distinctModels:
+            return model.loc.t("orch.mode.tiered")
+        case .noMapping(let host):
+            return model.loc.t("orch.mode.inherit", model.loc.t("orch.reason.noMapping", host))
+        case .sameModel(let name):
+            return model.loc.t("orch.mode.inherit", model.loc.t("orch.reason.sameModel", name))
+        case .partialMapping(let host):
+            return model.loc.t("orch.mode.inherit", model.loc.t("orch.reason.partial", host))
         }
     }
 

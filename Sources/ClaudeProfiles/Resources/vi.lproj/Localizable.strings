@@ -354,3 +354,37 @@
 "pathSetup.status.stray" = "Mới thêm một phần. Có khối trong %@, nơi bash không còn đọc nữa.";
 "pathSetup.partial" = "Đã đổi rồi: %@. Không ghi thêm gì nữa. Hãy dùng Gỡ để hoàn tác thay đổi trong các file đó.";
 "pathSetup.elsewhere" = "Có khối của Claude Profiles trong %@, nơi bash không còn đọc nữa. Hãy gỡ các dòng của Claude Profiles trước, rồi thêm lại.";
+
+/* Orchestration kit */
+"orch.section" = "Điều phối (Orchestration)";
+"orch.hint" = "Sáu subagent (scout, researcher, builder, tester, reviewer, committer) và hướng dẫn cho orchestrator, chỉ cài vào profile này. Các profile khác và ~/.claude không bị đụng tới.";
+"orch.install" = "Cài vào profile này";
+"orch.update" = "Cập nhật";
+"orch.remove" = "Gỡ";
+"orch.status.none" = "Chưa cài.";
+"orch.status.current" = "Đã cài và là bản mới nhất.";
+"orch.status.outdated" = "Đã cài nhưng chưa phải bản mới nhất. Bấm Cập nhật để ghi các file hiện tại.";
+"orch.status.partial" = "Cài dở: %d trên %d agent.";
+"orch.mode.tiered" = "Model: scout và committer dùng Haiku, các agent còn lại dùng Sonnet.";
+"orch.mode.inherit" = "Model: mọi agent dùng model của phiên, vì %@.";
+"orch.reason.noMapping" = "nhà cung cấp này (%@) không ánh xạ opus/sonnet/haiku";
+"orch.reason.sameModel" = "cả ba alias cùng ánh xạ tới %@";
+"orch.reason.partial" = "nhà cung cấp này (%@) chỉ ánh xạ một phần các alias";
+"orch.notIsolated" = "Profile này chưa có thư mục cấu hình riêng nên các agent sẽ vào ~/.claude. Hãy bật \"Tách biệt\" bên dưới, lưu rồi cài.";
+"orch.unsaved" = "Có thay đổi chưa lưu: việc cài dùng profile đã lưu.";
+"orch.unsavedProfile" = "Hãy lưu profile trước.";
+"orch.shared.agents" = "Thư mục agents là một liên kết tới ~/.claude nên profile này đang đọc agent của ~/.claude. Không có gì được ghi xuyên qua liên kết.";
+"orch.shared.claudeMd" = "CLAUDE.md là một liên kết tới ~/.claude. Không có gì được ghi xuyên qua liên kết, nên hướng dẫn orchestrator chưa được thêm.";
+"orch.shared.own" = "Tạo bản sao riêng cho profile này";
+"orch.unshare.title" = "Tạo bản sao riêng cho profile này?";
+"orch.unshare.confirm" = "Sao chép và cài";
+"orch.unshare.message" = "Liên kết được thay bằng một bản sao của nơi nó trỏ tới, rồi bộ kit được cài. Profile này không còn theo ~/.claude cho mục đó. Bản thân ~/.claude không bị thay đổi.";
+"orch.result.installed" = "Đã cài Orchestration vào profile này.";
+"orch.result.installedAgentsOnly" = "Đã cài các agent. CLAUDE.md đang dùng chung với ~/.claude nên được giữ nguyên.";
+"orch.result.installedBlockOnly" = "Đã ghi hướng dẫn. Thư mục agents đang dùng chung với ~/.claude nên được giữ nguyên.";
+"orch.result.nothing" = "Chưa ghi gì: agents và CLAUDE.md đang dùng chung với ~/.claude.";
+"orch.result.removed" = "Đã gỡ Orchestration khỏi profile này.";
+"orch.result.removedAgentsOnly" = "Đã gỡ các agent. CLAUDE.md đang dùng chung với ~/.claude nên được giữ nguyên.";
+"orch.result.removedBlockOnly" = "Đã gỡ hướng dẫn. Thư mục agents đang dùng chung với ~/.claude nên được giữ nguyên.";
+"orch.error.notIsolated" = "Profile này chưa có thư mục cấu hình riêng: hãy bật tách biệt rồi lưu trước.";
+"orch.error.io" = "Không thay đổi được %@.";

@@ -33,7 +33,10 @@ final class AppModel {
     var draft: Profile?
 
     /// Index of the edited profile in `data.profiles`, `nil` for a new profile.
-    private(set) var draftIndex: Int?
+    private(set) var draftIndex: Int? {
+        // The kit status belongs to the saved profile at this index.
+        didSet { refreshOrchestration() }
+    }
 
     /// The editable command name of the edited profile.
     var command = CommandNameDraft()
@@ -63,6 +66,15 @@ final class AppModel {
     /// drawn: the size of the config folder is measured away from the main
     /// thread, so asking for it while drawing would freeze the app.
     private(set) var deleteDialogText: String = ""
+
+    /// What the orchestration kit has in the config folder of the saved profile,
+    /// `nil` when no profile is open. Read when something changes, never while drawing.
+    private(set) var orchestration: OrchestrationStatus?
+
+    /// The shared item (a link to `~/.claude`) the user is asked to copy, if any.
+    var orchestrationUnshare: OrchestrationItem?
+    /// Set while the question about the copy is open.
+    var isConfirmingUnshare: Bool = false
 
     /// The updater of the app: it checks the releases and installs them.
     let updater: UpdateController
@@ -343,6 +355,7 @@ final class AppModel {
         cancelDelete()
         // The name of the command of the new profile is looked at.
         refreshForeignCommandPath()
+        refreshOrchestration()
     }
 
     /// The sidebar selection changed. The user may switch to another profile
@@ -584,6 +597,8 @@ final class AppModel {
             command = CommandNameDraft(profile: draft)
             keyInput = ""
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
+            // The config folder may have moved with a rename.
+            refreshOrchestration()
             // The launcher of the profile was written: the name of the
             // command is looked at again, now that it belongs to this profile.
             refreshForeignCommandPath()
@@ -718,6 +733,91 @@ final class AppModel {
         guard save() else { return }
         guard let draft else { return }
         launch(draft, MenuLaunchPlan.profile(draft.slug))
+    }
+
+    // MARK: - Orchestration kit
+
+    /// Reads what the kit has in the config folder of the saved profile.
+    func refreshOrchestration() {
+        guard let profile = currentProfile else {
+            orchestration = nil
+            return
+        }
+        orchestration = store.orchestrationStatus(for: profile)
+    }
+
+    /// Installs (or updates) the agents and the instructions into the saved profile.
+    func installOrchestration() {
+        guard let profile = currentProfile else { return }
+        do {
+            let result = try store.installOrchestration(for: profile)
+            status = Status(kind: .success, text: orchestrationText(result, removing: false))
+        } catch {
+            reportOrchestration(error)
+        }
+        refreshOrchestration()
+    }
+
+    /// Takes the agents and the instructions out of the saved profile.
+    func removeOrchestration() {
+        guard let profile = currentProfile else { return }
+        do {
+            let result = try store.removeOrchestration(for: profile)
+            status = Status(kind: .success, text: orchestrationText(result, removing: true))
+        } catch {
+            reportOrchestration(error)
+        }
+        refreshOrchestration()
+    }
+
+    /// Asks before a link to `~/.claude` is replaced with a copy.
+    func requestUnshare(_ item: OrchestrationItem) {
+        orchestrationUnshare = item
+        isConfirmingUnshare = true
+    }
+
+    /// Replaces the link with a copy, then installs the kit.
+    func confirmUnshare() {
+        isConfirmingUnshare = false
+        guard let item = orchestrationUnshare, let profile = currentProfile else { return }
+        orchestrationUnshare = nil
+        do {
+            try store.unshareOrchestrationItem(item, for: profile)
+        } catch {
+            reportOrchestration(error)
+            refreshOrchestration()
+            return
+        }
+        installOrchestration()
+    }
+
+    func cancelUnshare() {
+        isConfirmingUnshare = false
+        orchestrationUnshare = nil
+    }
+
+    private func orchestrationText(_ result: OrchestrationReport, removing: Bool) -> String {
+        switch (result.agents, result.claudeMd) {
+        case (.refused, .refused):
+            return loc.t("orch.result.nothing")
+        case (.done, .refused):
+            return loc.t(removing ? "orch.result.removedAgentsOnly" : "orch.result.installedAgentsOnly")
+        case (.refused, .done):
+            return loc.t(removing ? "orch.result.removedBlockOnly" : "orch.result.installedBlockOnly")
+        case (.done, .done):
+            return loc.t(removing ? "orch.result.removed" : "orch.result.installed")
+        }
+    }
+
+    private func reportOrchestration(_ error: Error) {
+        switch error as? OrchestrationError {
+        case .notIsolated:
+            status = Status(kind: .failure, text: loc.t("orch.error.notIsolated"))
+        case .homeNotAFolder(let path), .ioFailed(let path):
+            status = Status(kind: .failure, text: loc.t("orch.error.io", path))
+        case nil:
+            report(error)
+        }
     }
 
     // MARK: - Menu bar launcher

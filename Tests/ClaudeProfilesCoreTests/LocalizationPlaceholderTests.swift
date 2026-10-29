@@ -25,6 +25,7 @@ final class LocalizationPlaceholderTests: XCTestCase {
         "sidebar.health.connectedMany": [.integer],
         "sidebar.health.stale": [.integer],
         "sidebar.checkAll.progress": [.integer, .integer],
+        "orch.status.partial": [.integer, .integer],
         "error.envMissingEquals": [.integer, .object],
         "error.invalidEnvName": [.integer, .object],
         "error.update.httpError": [.integer]
