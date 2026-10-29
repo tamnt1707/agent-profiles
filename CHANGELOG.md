@@ -6,7 +6,8 @@ version as the notes of the GitHub release.
 
 ## [0.3.0] - 2026-10-29
 
-Two new provider templates, and the colors of the connection checks now show.
+The app is now **Agent Profiles**, with a terminal inside the window, a choice of CLI, connection checks that go
+through the CLI and are remembered, an orchestration kit per profile, and two new provider templates.
 
 ### English
 
