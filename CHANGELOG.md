@@ -4,6 +4,40 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.3.0] - 2026-10-29
+
+Two new provider templates, and the colors of the connection checks now show.
+
+### English
+
+**New**
+- **Claude subscription template.** Add a Claude account without an address or a key: the Base URL, the
+  authentication and *Test connection* are hidden, the profile gets its own config folder, and Claude Code asks you to
+  sign in the first time you open it. *Use another provider instead* brings the fields back. Such a profile is always
+  saved with an empty Base URL and no key.
+- **Xiaomi MiMo template.**
+
+**Fixed**
+- The health dots in the sidebar stayed grey after a check until the next minute. They now change as soon as the answer
+  arrives.
+- The result line of *Test connection* showed in white instead of green, orange or red.
+- A model name that ends in `[1m]` (the mark of a 1M context in Claude Code) is no longer sent to the provider by the
+  connection check, which the provider refused as an unknown model. The saved model and the launcher are unchanged.
+
+### Tiếng Việt
+
+**Mới**
+- **Template Claude subscription.** Thêm tài khoản Claude mà không cần địa chỉ hay key: Base URL, xác thực và
+  *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
+  *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
+- **Template Xiaomi MiMo.**
+
+**Đã sửa**
+- Chấm trạng thái ở cột bên vẫn xám sau khi kiểm tra cho đến phút kế tiếp. Giờ chấm đổi ngay khi có kết quả.
+- Dòng kết quả của *Kiểm tra kết nối* hiện màu trắng thay vì xanh, cam hoặc đỏ.
+- Tên model kết thúc bằng `[1m]` (dấu hiệu context 1M của Claude Code) không còn được gửi tới nhà cung cấp khi kiểm tra
+  kết nối, trước đây bị từ chối là model không tồn tại. Model đã lưu và lệnh khởi chạy không đổi.
+
 ## [0.2.0] - 2026-10-22
 
 Three new things to see and use: a health dot for every profile, a menu bar launcher and token usage
