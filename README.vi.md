@@ -50,7 +50,7 @@ toàn, và Claude Code thông thường của bạn không bị đụng tới.
 Bạn cần một máy Mac **Apple Silicon** chạy **macOS 14 trở lên**.
 
 1. Tải file `Agent-Profiles-<phiên bản>.dmg` mới nhất ở
-   [trang Releases](https://github.com/tamnt1707/cl-profiles/releases/latest).
+   [trang Releases](https://github.com/tamnt1707/agent-profiles/releases/latest).
 2. Mở file và kéo **Agent Profiles** vào **Applications**.
 3. Lần đầu, bấm chuột phải vào app rồi chọn **Mở**. macOS chỉ hỏi một lần, vì app chưa được Apple
    notarize.

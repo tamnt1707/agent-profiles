@@ -51,7 +51,7 @@ keys stay safe, and your normal Claude Code setup is never touched.
 You need a Mac with **Apple Silicon** running **macOS 14 or later**.
 
 1. Download the latest `Agent-Profiles-<version>.dmg` from the
-   [Releases page](https://github.com/tamnt1707/cl-profiles/releases/latest).
+   [Releases page](https://github.com/tamnt1707/agent-profiles/releases/latest).
 2. Open it and drag **Agent Profiles** into **Applications**.
 3. The first time, right-click the app and choose **Open**. macOS asks once because the app is
    not notarized by Apple yet.
