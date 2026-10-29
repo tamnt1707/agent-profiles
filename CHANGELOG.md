@@ -4,6 +4,24 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.5.0] - 2026-10-29
+
+See which account a profile is signed in with.
+
+### English
+
+**New**
+- **Account.** The Settings tab of *Default* and of a Claude subscription profile shows the account it is signed in
+  with (email, plan and organization), or says that it is not signed in. It is read with `claude auth status`, which
+  reads the local sign-in and costs no tokens. The refresh button asks again.
+
+### Tiếng Việt
+
+**Mới**
+- **Tài khoản.** Tab Cài đặt của *Mặc định* và của profile Claude subscription hiện tài khoản đang đăng nhập (email,
+  gói và tổ chức), hoặc báo là chưa đăng nhập. Thông tin đọc bằng `claude auth status`, chỉ đọc đăng nhập ở máy nên
+  không tốn token. Nút làm mới sẽ hỏi lại.
+
 ## [0.4.1] - 2026-10-29
 
 A fix for the connection check of the **Default** Claude Code.

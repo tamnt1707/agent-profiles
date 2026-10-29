@@ -727,6 +727,34 @@ final class AppModel {
         }
     }
 
+    // MARK: - Account
+
+    /// What is known about the account of a profile.
+    enum AccountState: Equatable {
+        case loading
+        case known(AccountInfo)
+        /// The CLI did not answer.
+        case unavailable
+    }
+
+    /// The account of each profile, asked of the CLI. Kept in memory only.
+    private(set) var accounts: [String: AccountState] = [:]
+    private var accountTasks: [String: Task<Void, Never>] = [:]
+
+    /// Asks the CLI who the profile is signed in with. A second call while one runs does nothing.
+    func refreshAccount(of profile: Profile) {
+        let slug = profile.slug
+        guard accountTasks[slug] == nil else { return }
+        accounts[slug] = .loading
+        let paths = store.paths
+        accountTasks[slug] = Task { [weak self] in
+            let info = await AccountProbe().fetch(profile: profile, paths: paths)
+            guard let self else { return }
+            self.accounts[slug] = info.map(AccountState.known) ?? .unavailable
+            self.accountTasks[slug] = nil
+        }
+    }
+
     // MARK: - Heartbeat
 
     /// Brings the LaunchAgents in line with the schedules of the profiles. The

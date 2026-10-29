@@ -93,6 +93,10 @@ struct ProfileEditorView: View {
                         model.draft?.auth = .bearer
                     }
                     .buttonStyle(.link)
+                    // The account is read from the saved profile's own config folder.
+                    if let saved = model.currentProfile, ProviderEndpoint.usesCliLogin(saved) {
+                        AccountView(model: model, profile: saved)
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {

@@ -472,3 +472,10 @@
 "heartbeat.last.ok" = "Ping gần nhất: %@, đã có phản hồi";
 "heartbeat.last.failed" = "Ping gần nhất: %@, thất bại (mã %@)";
 "heartbeat.last.none" = "Chưa có lần ping nào chạy.";
+
+/* Account */
+"account.label" = "Tài khoản";
+"account.refresh" = "Làm mới";
+"account.unavailable" = "Không đọc được tài khoản";
+"account.notSignedIn" = "Chưa đăng nhập. Mở profile trong terminal và đăng nhập.";
+"account.signedIn" = "Đã đăng nhập";
