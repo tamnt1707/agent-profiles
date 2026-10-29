@@ -79,6 +79,27 @@ final class HeadlessProbeTests: XCTestCase {
         XCTAssertNil(runner.requests.first?.environment["CLAUDE_CONFIG_DIR"])
     }
 
+    func testTheDefaultSetupRunsPlainClaudeInTheLoginShell() async throws {
+        let (probe, runner) = probe()
+        _ = try await probe.testConnection(profile: .defaultClaude, key: "", paths: paths)
+        let request = try XCTUnwrap(runner.requests.first)
+        XCTAssertEqual(request.executable, "/bin/zsh")
+        XCTAssertEqual(Array(request.arguments.prefix(3)), ["-l", "-i", "-c"])
+        let command = try XCTUnwrap(request.arguments.last)
+        XCTAssertTrue(command.hasPrefix("claude '-p' 'ping'"), command)
+        XCTAssertTrue(command.contains("'--output-format' 'json'"))
+    }
+
+    func testTheDefaultSetupGetsTheEnvironmentOfTheUserAndNothingElse() throws {
+        let inherited = ["HOME": "/Users/x", "FOO": "bar"]
+        let request = try HeadlessProbe.request(
+            profile: .defaultClaude, key: "", paths: paths,
+            executable: "/bin/claude", environment: ["PATH": "/should/not/be/used"],
+            inherited: inherited
+        )
+        XCTAssertEqual(request.environment, inherited)
+    }
+
     func testAnAccountProfileNeedsNeitherAddressNorKey() async throws {
         let (probe, runner) = probe()
         let report = try await probe.testConnection(profile: profile(baseURL: "", auth: .none), key: "", paths: paths)
@@ -165,6 +186,10 @@ final class HeadlessProbeTests: XCTestCase {
             report(#"{"is_error":true,"api_error_status":null,"result":"\#(text)"}"#).outcome
         }
         XCTAssertEqual(outcome("Not logged in · Please run /login"), .notLoggedIn)
+        XCTAssertEqual(
+            outcome("Failed to authenticate: OAuth session expired and could not be refreshed"),
+            .notLoggedIn
+        )
         XCTAssertEqual(outcome("API Error: getaddrinfo ENOTFOUND host"), .network(.dns))
         XCTAssertEqual(outcome("API Error: Connection refused (ECONNREFUSED)"), .network(.other))
         XCTAssertEqual(outcome("request timed out"), .timeout)
