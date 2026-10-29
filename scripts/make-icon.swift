@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
 //
-// Generates the app icon of Claude Profiles.
+// Generates the app icon of Agent Profiles.
 //
 //   swift scripts/make-icon.swift <out-dir>
 //

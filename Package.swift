@@ -2,30 +2,30 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeProfiles",
+    name: "AgentProfiles",
     defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "ClaudeProfilesCore", targets: ["ClaudeProfilesCore"]),
-        .executable(name: "ClaudeProfiles", targets: ["ClaudeProfiles"]),
+        .library(name: "AgentProfilesCore", targets: ["AgentProfilesCore"]),
+        .executable(name: "AgentProfiles", targets: ["AgentProfiles"]),
     ],
     targets: [
         .target(
-            name: "ClaudeProfilesCore",
-            path: "Sources/ClaudeProfilesCore"
+            name: "AgentProfilesCore",
+            path: "Sources/AgentProfilesCore"
         ),
         .executableTarget(
-            name: "ClaudeProfiles",
-            dependencies: ["ClaudeProfilesCore"],
-            path: "Sources/ClaudeProfiles",
+            name: "AgentProfiles",
+            dependencies: ["AgentProfilesCore"],
+            path: "Sources/AgentProfiles",
             resources: [
                 .process("Resources")
             ]
         ),
         .testTarget(
-            name: "ClaudeProfilesCoreTests",
-            dependencies: ["ClaudeProfilesCore"],
-            path: "Tests/ClaudeProfilesCoreTests",
+            name: "AgentProfilesCoreTests",
+            dependencies: ["AgentProfilesCore"],
+            path: "Tests/AgentProfilesCoreTests",
             resources: [
                 .copy("Fixtures")
             ]

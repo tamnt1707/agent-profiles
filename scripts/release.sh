@@ -1,5 +1,5 @@
 #!/bin/bash
-# Makes a release of Claude Profiles.
+# Makes a release of Agent Profiles.
 #
 #   scripts/release.sh                 prepare everything and print the gh command
 #   scripts/release.sh --create-draft  also publish the release as a draft
@@ -8,7 +8,7 @@
 #   * reads the version from the VERSION file,
 #   * checks that the git tree is clean and that the tag does not exist yet,
 #   * runs the tests and builds the app with ./build-mac.sh --no-install,
-#   * packs the app into build/Claude-Profiles-<version>-macos.zip,
+#   * packs the app into build/Agent-Profiles-<version>-macos.zip,
 #   * signs the archive with the private key of $RELEASE_KEY_FILE,
 #   * prints the SHA-256 sums,
 #   * takes the release notes from the section of this version in CHANGELOG.md,
@@ -71,9 +71,9 @@ fi
 swift test
 ./build-mac.sh --no-install
 
-APP="build/Claude Profiles.app"
-ARCHIVE="build/Claude-Profiles-$VERSION-macos.zip"
-DISK_IMAGE="build/Claude-Profiles-$VERSION.dmg"
+APP="build/Agent Profiles.app"
+ARCHIVE="build/Agent-Profiles-$VERSION-macos.zip"
+DISK_IMAGE="build/Agent-Profiles-$VERSION.dmg"
 if [[ ! -d "$APP" ]]; then
   echo "the app was not built" >&2
   exit 1
@@ -119,7 +119,7 @@ if [[ ! -s "$NOTES" ]]; then
 fi
 
 COMMAND=(gh release create "$TAG" "$ARCHIVE" "$ARCHIVE.sig" "$DISK_IMAGE" --repo "$REPO"
-         --title "Claude Profiles $VERSION" --notes-file "$NOTES")
+         --title "Agent Profiles $VERSION" --notes-file "$NOTES")
 
 echo ""
 if [[ $CREATE_DRAFT -eq 1 ]]; then

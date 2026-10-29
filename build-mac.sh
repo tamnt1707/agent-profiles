@@ -1,10 +1,10 @@
 #!/bin/zsh
-# Build Claude Profiles.app (SwiftPM) and install it into ~/Applications.
+# Build Agent Profiles.app (SwiftPM) and install it into ~/Applications.
 #
 #   ./build-mac.sh              build the release and install into ~/Applications
 #   ./build-mac.sh --no-install  build the release only, into ./build
 #   ./build-mac.sh --dmg         build into ./build and also make a disk image
-#                                (build/Claude-Profiles-<version>.dmg)
+#                                (build/Agent-Profiles-<version>.dmg)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -28,9 +28,9 @@ done
 
 swift build -c release
 
-BINARY=".build/release/ClaudeProfiles"
-RESOURCE_BUNDLE=".build/release/ClaudeProfiles_ClaudeProfiles.bundle"
-ICON="Sources/ClaudeProfiles/Resources/AppIcon.icns"
+BINARY=".build/release/AgentProfiles"
+RESOURCE_BUNDLE=".build/release/AgentProfiles_AgentProfiles.bundle"
+ICON="Sources/AgentProfiles/Resources/AppIcon.icns"
 
 # The version of the app: the VERSION file is the one place where it is
 # written down. The build number is the number of commits.
@@ -68,15 +68,15 @@ APP_UPDATE_REPO="$(xml_escape "$UPDATE_REPO")"
 APP_UPDATE_KEY="$(xml_escape "$UPDATE_PUBLIC_KEY")"
 
 if [[ $INSTALL -eq 1 ]]; then
-  APP="$HOME/Applications/Claude Profiles.app"
+  APP="$HOME/Applications/Agent Profiles.app"
 else
-  APP="$PWD/build/Claude Profiles.app"
+  APP="$PWD/build/Agent Profiles.app"
 fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BINARY" "$APP/Contents/MacOS/ClaudeProfiles"
+cp "$BINARY" "$APP/Contents/MacOS/AgentProfiles"
 # The SwiftPM resource bundle holds the localized strings; the app finds it
 # through Bundle.module and through Contents/Resources.
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
@@ -85,10 +85,10 @@ cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"
 # The permission dialog for Terminal / iTerm2, in both languages.
 mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/vi.lproj"
 cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" <<'STRINGS'
-"NSAppleEventsUsageDescription" = "Claude Profiles opens Terminal or iTerm2 to run Claude Code with the selected profile.";
+"NSAppleEventsUsageDescription" = "Agent Profiles opens Terminal or iTerm2 to run Claude Code with the selected profile.";
 STRINGS
 cat > "$APP/Contents/Resources/vi.lproj/InfoPlist.strings" <<'STRINGS'
-"NSAppleEventsUsageDescription" = "Claude Profiles mở Terminal hoặc iTerm2 để chạy Claude Code với profile đã chọn.";
+"NSAppleEventsUsageDescription" = "Agent Profiles mở Terminal hoặc iTerm2 để chạy Claude Code với profile đã chọn.";
 STRINGS
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -96,10 +96,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Claude Profiles</string>
-  <key>CFBundleDisplayName</key><string>Claude Profiles</string>
-  <key>CFBundleIdentifier</key><string>local.claude-profiles</string>
-  <key>CFBundleExecutable</key><string>ClaudeProfiles</string>
+  <key>CFBundleName</key><string>Agent Profiles</string>
+  <key>CFBundleDisplayName</key><string>Agent Profiles</string>
+  <key>CFBundleIdentifier</key><string>local.agent-profiles</string>
+  <key>CFBundleExecutable</key><string>AgentProfiles</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
   <key>CFBundleVersion</key><string>$APP_BUILD</string>
@@ -115,7 +115,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSAppleEventsUsageDescription</key><string>Claude Profiles opens Terminal or iTerm2 to run Claude Code with the selected profile.</string>
+  <key>NSAppleEventsUsageDescription</key><string>Agent Profiles opens Terminal or iTerm2 to run Claude Code with the selected profile.</string>
 </dict>
 </plist>
 PLIST
@@ -126,13 +126,13 @@ codesign --force --deep --sign - "$APP"
 # Check that the localized strings really load from the assembled app.
 echo ""
 echo "--- self test of the assembled app ---"
-"$APP/Contents/MacOS/ClaudeProfiles" --self-test
+"$APP/Contents/MacOS/AgentProfiles" --self-test
 
 if [[ $INSTALL -eq 1 ]]; then
   mkdir -p "$HOME/.claude-profiles/bin"
   echo ""
   echo "Đã cài: $APP"
-  echo "Mở bằng Spotlight (gõ: Claude Profiles) hoặc: open \"$APP\""
+  echo "Mở bằng Spotlight (gõ: Agent Profiles) hoặc: open \"$APP\""
 else
   echo ""
   echo "Đã build (chưa cài): $APP"
@@ -142,12 +142,12 @@ fi
 if [[ $MAKE_DMG -eq 1 ]]; then
   echo ""
   echo "--- disk image ---"
-  scripts/make-dmg.sh "$APP" "$PWD/build/Claude-Profiles-$VERSION.dmg"
+  scripts/make-dmg.sh "$APP" "$PWD/build/Agent-Profiles-$VERSION.dmg"
 fi
 
 if [[ ":$PATH:" != *":$HOME/.claude-profiles/bin:"* ]]; then
   echo ""
-  echo "Để gọi claude-<tên-profile> từ mọi terminal: mở Claude Profiles, lưu một profile,"
+  echo "Để gọi claude-<tên-profile> từ mọi terminal: mở Agent Profiles, lưu một profile,"
   echo "rồi chọn Thêm khi app hỏi về lệnh trong terminal (hoặc Cài đặt > Lệnh trong terminal)."
   # Fallback only for a shell the app does not edit (nushell, csh, ...): add this line by hand.
   # export PATH="$HOME/.claude-profiles/bin${PATH:+:$PATH}"

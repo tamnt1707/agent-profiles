@@ -1,18 +1,18 @@
-# Claude Profiles
+# Agent Profiles
 
 **Run Claude Code with any AI provider, each one in its own profile.**
 
 English · [Tiếng Việt](README.vi.md)
 
 <p align="center">
-  <img src="docs/images/main-dark.png" alt="Claude Profiles: a list of profiles on the left and the settings of the selected profile on the right" width="760">
+  <img src="docs/images/main-dark.png" alt="Agent Profiles: a list of profiles on the left and the settings of the selected profile on the right" width="760">
 </p>
 
 Claude Code can work with many AI providers, not only one. The catch is that every
 provider needs its own address, its own key and its own model names, and switching between
 them usually means editing settings by hand or keeping a pile of scripts.
 
-Claude Profiles turns each provider into a **profile** you can create in a minute. Every
+Agent Profiles turns each provider into a **profile** you can create in a minute. Every
 profile gets its own command. Type `claude-work-glm` in any terminal and you are working
 with that provider. Type `claude-side-deepseek` and you are working with another one. Your
 keys stay safe, and your normal Claude Code setup is never touched.
@@ -49,9 +49,9 @@ keys stay safe, and your normal Claude Code setup is never touched.
 
 You need a Mac with **Apple Silicon** running **macOS 14 or later**.
 
-1. Download the latest `Claude-Profiles-<version>.dmg` from the
+1. Download the latest `Agent-Profiles-<version>.dmg` from the
    [Releases page](https://github.com/tamnt1707/cl-profiles/releases/latest).
-2. Open it and drag **Claude Profiles** into **Applications**.
+2. Open it and drag **Agent Profiles** into **Applications**.
 3. The first time, right-click the app and choose **Open**. macOS asks once because the app is
    not notarized by Apple yet.
 
@@ -92,5 +92,5 @@ Not yet. Version 0.1 runs on Apple Silicon only.
 - [What is new in each version](CHANGELOG.md)
 - [Building the app yourself](docs/BUILDING.md)
 
-Claude Profiles is an independent project. It is not made by, or affiliated with, Anthropic or
+Agent Profiles is an independent project. It is not made by, or affiliated with, Anthropic or
 any of the providers it can connect to. All product names belong to their owners.

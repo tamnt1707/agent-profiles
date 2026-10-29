@@ -1,4 +1,4 @@
-# Releasing Claude Profiles / Phát hành Claude Profiles
+# Releasing Agent Profiles / Phát hành Agent Profiles
 
 English | [Tiếng Việt](#tiếng-việt)
 
@@ -63,9 +63,9 @@ The script
    `v<version>` does not exist yet,
 2. runs `swift test`,
 3. builds the app with `./build-mac.sh --no-install`,
-4. packs it into `build/Claude-Profiles-<version>-macos.zip` with
+4. packs it into `build/Agent-Profiles-<version>-macos.zip` with
    `ditto -c -k --keepParent`,
-5. signs the archive into `build/Claude-Profiles-<version>-macos.zip.sig`,
+5. signs the archive into `build/Agent-Profiles-<version>-macos.zip.sig`,
 6. prints the SHA-256 sums of both files,
 7. takes the notes from the section of this version in `CHANGELOG.md`,
 8. prints the `gh release create` command.
@@ -86,8 +86,8 @@ assets and the notes, then publish the draft when it is good.
 
 The release needs two assets:
 
-- `Claude-Profiles-<version>-macos.zip`
-- `Claude-Profiles-<version>-macos.zip.sig`
+- `Agent-Profiles-<version>-macos.zip`
+- `Agent-Profiles-<version>-macos.zip.sig`
 
 A draft and a pre-release are ignored by the app, so a release that is not
 ready simply does not show up.
@@ -105,7 +105,7 @@ ready simply does not show up.
 4. The signature is checked with the public key of the app over the exact
    bytes of the archive. A missing or wrong signature deletes the downloads and
    stops everything.
-5. The archive is unpacked. It has to hold exactly one `Claude Profiles.app`
+5. The archive is unpacked. It has to hold exactly one `Agent Profiles.app`
    with the same bundle identifier, a higher version and the same public key.
    `codesign --verify --deep` has to pass.
 6. A helper script waits for the app to quit, moves the old bundle aside,
@@ -173,9 +173,9 @@ Kịch bản này
 1. đọc `VERSION`, kiểm tra cây git sạch và thẻ `v<phiên-bản>` chưa tồn tại,
 2. chạy `swift test`,
 3. build ứng dụng bằng `./build-mac.sh --no-install`,
-4. nén thành `build/Claude-Profiles-<phiên-bản>-macos.zip` bằng
+4. nén thành `build/Agent-Profiles-<phiên-bản>-macos.zip` bằng
    `ditto -c -k --keepParent`,
-5. ký tệp nén thành `build/Claude-Profiles-<phiên-bản>-macos.zip.sig`,
+5. ký tệp nén thành `build/Agent-Profiles-<phiên-bản>-macos.zip.sig`,
 6. in ra giá trị SHA-256 của cả hai tệp,
 7. lấy ghi chú từ mục của phiên bản này trong `CHANGELOG.md`,
 8. in ra lệnh `gh release create`.
@@ -196,8 +196,8 @@ tệp đính kèm và ghi chú rồi mới công bố bản nháp.
 
 Bản phát hành cần hai tệp đính kèm:
 
-- `Claude-Profiles-<phiên-bản>-macos.zip`
-- `Claude-Profiles-<phiên-bản>-macos.zip.sig`
+- `Agent-Profiles-<phiên-bản>-macos.zip`
+- `Agent-Profiles-<phiên-bản>-macos.zip.sig`
 
 Bản nháp và bản pre-release bị ứng dụng bỏ qua, nên một bản phát hành chưa
 xong sẽ không hiện ra.
@@ -213,7 +213,7 @@ xong sẽ không hiện ra.
    và tệp tải xuống bị dừng ở 200 MB.
 4. Chữ ký được kiểm tra bằng khoá công khai của ứng dụng trên đúng những byte
    của tệp nén. Chữ ký thiếu hoặc sai sẽ xoá tệp đã tải và dừng mọi thứ.
-5. Tệp nén được giải nén. Bên trong phải có đúng một `Claude Profiles.app` với
+5. Tệp nén được giải nén. Bên trong phải có đúng một `Agent Profiles.app` với
    cùng bundle identifier, phiên bản cao hơn và cùng khoá công khai.
    `codesign --verify --deep` phải thành công.
 6. Một kịch bản trợ giúp chờ ứng dụng thoát, chuyển bản cũ sang bên cạnh,

@@ -1,5 +1,5 @@
 #!/usr/bin/env swift
-// Creates the key pair that signs the releases of Claude Profiles.
+// Creates the key pair that signs the releases of Agent Profiles.
 //
 //   swift scripts/release-keygen.swift [private-key-file]
 //

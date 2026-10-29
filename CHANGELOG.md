@@ -10,6 +10,13 @@ Two new provider templates, and the colors of the connection checks now show.
 
 ### English
 
+**Renamed**
+- The app is now **Agent Profiles** (it was Claude Profiles), so the name does not collide with Claude and other
+  agents can be added later. Your profiles, keys and the `claude-<name>` commands are unchanged: the data stays in
+  `~/.claude-profiles`, the keys stay in the Keychain, and the PATH lines in your shell keep working. The app is now
+  `Agent Profiles.app`: remove the old `Claude Profiles.app` once you have moved over. A 0.2.0 app cannot update
+  itself to this one, because the archive holds a differently named app: download this version once by hand.
+
 **New**
 - **Claude subscription template.** Add a Claude account without an address or a key: the Base URL, the
   authentication and *Test connection* are hidden, the profile gets its own config folder, and Claude Code asks you to
@@ -35,6 +42,13 @@ Two new provider templates, and the colors of the connection checks now show.
   connection check, which the provider refused as an unknown model. The saved model and the launcher are unchanged.
 
 ### Tiếng Việt
+
+**Đổi tên**
+- Ứng dụng giờ tên là **Agent Profiles** (trước là Claude Profiles), để tên không trùng với Claude và sau này thêm được
+  các agent khác. Profile, key và các lệnh `claude-<tên>` không đổi: dữ liệu vẫn ở `~/.claude-profiles`, key vẫn trong
+  Keychain, và các dòng PATH trong shell vẫn dùng được. Ứng dụng giờ là `Agent Profiles.app`: hãy xóa
+  `Claude Profiles.app` cũ sau khi chuyển sang. Bản 0.2.0 không tự cập nhật lên bản này được, vì gói tải về chứa một
+  ứng dụng tên khác: hãy tải bản này một lần bằng tay.
 
 **Mới**
 - **Template Claude subscription.** Thêm tài khoản Claude mà không cần địa chỉ hay key: Base URL, xác thực và

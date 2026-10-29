@@ -2,7 +2,7 @@
 # Pack an app into a compressed disk image with an Applications shortcut, so it
 # can be installed by dragging it.
 #
-#   scripts/make-dmg.sh "build/Claude Profiles.app" build/Claude-Profiles-0.1.0.dmg
+#   scripts/make-dmg.sh "build/Agent Profiles.app" build/Agent-Profiles-0.1.0.dmg
 #
 # It only uses hdiutil, which is part of macOS. The image is not signed or
 # notarized: the app inside carries the same ad-hoc signature as everywhere else.
