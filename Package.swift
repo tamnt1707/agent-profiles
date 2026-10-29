@@ -2,30 +2,37 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeProfiles",
+    name: "AgentProfiles",
     defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "ClaudeProfilesCore", targets: ["ClaudeProfilesCore"]),
-        .executable(name: "ClaudeProfiles", targets: ["ClaudeProfiles"]),
+        .library(name: "AgentProfilesCore", targets: ["AgentProfilesCore"]),
+        .executable(name: "AgentProfiles", targets: ["AgentProfiles"]),
+    ],
+    dependencies: [
+        // The terminal view of the embedded terminal. Pinned to one exact version.
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.99.1"),
     ],
     targets: [
         .target(
-            name: "ClaudeProfilesCore",
-            path: "Sources/ClaudeProfilesCore"
+            name: "AgentProfilesCore",
+            path: "Sources/AgentProfilesCore"
         ),
         .executableTarget(
-            name: "ClaudeProfiles",
-            dependencies: ["ClaudeProfilesCore"],
-            path: "Sources/ClaudeProfiles",
+            name: "AgentProfiles",
+            dependencies: [
+                "AgentProfilesCore",
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
+            ],
+            path: "Sources/AgentProfiles",
             resources: [
                 .process("Resources")
             ]
         ),
         .testTarget(
-            name: "ClaudeProfilesCoreTests",
-            dependencies: ["ClaudeProfilesCore"],
-            path: "Tests/ClaudeProfilesCoreTests",
+            name: "AgentProfilesCoreTests",
+            dependencies: ["AgentProfilesCore"],
+            path: "Tests/AgentProfilesCoreTests",
             resources: [
                 .copy("Fixtures")
             ]

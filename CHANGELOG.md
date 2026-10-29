@@ -4,6 +4,112 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.3.0] - 2026-10-29
+
+Two new provider templates, and the colors of the connection checks now show.
+
+### English
+
+**Renamed**
+- The app is now **Agent Profiles** (it was Claude Profiles), so the name does not collide with Claude and other
+  agents can be added later. Your profiles, keys and the `claude-<name>` commands are unchanged: the data stays in
+  `~/.claude-profiles`, the keys stay in the Keychain, and the PATH lines in your shell keep working. The app is now
+  `Agent Profiles.app`: remove the old `Claude Profiles.app` once you have moved over. A 0.2.0 app cannot update
+  itself to this one, because the archive holds a differently named app: download this version once by hand.
+
+**New**
+- **Claude subscription template.** Add a Claude account without an address or a key: the Base URL, the
+  authentication and *Test connection* are hidden, the profile gets its own config folder, and Claude Code asks you to
+  sign in the first time you open it. *Use another provider instead* brings the fields back. Such a profile is always
+  saved with an empty Base URL and no key.
+- **Xiaomi MiMo template.**
+- **Health dots in the menu bar.** Each profile in the menu bar launcher has the same dot as in the sidebar.
+- **Connection checks go through the CLI, and are remembered.** *Test connection*, *Check all connections* and the
+  dots now ask the CLI for one short answer (about 1,500 tokens) with the settings of the profile, instead of calling the
+  provider directly. That is the request your own command makes, so the model name is used as it is declared (with
+  `[1m]`), a Claude subscription can be tested (it says when the account is not signed in), and the answer is the one
+  you would get. The result of each profile is kept in `~/.claude-profiles/health-cache.json` (no key, no text of the
+  provider) until its settings change or you check it again, so the dots are there as soon as the app opens. When the
+  app starts it checks the profiles that have no result yet, once, without asking; turn that off in Settings. This
+  replaces the earlier rule that no request was ever sent without a click.
+- **Choose the CLI of a profile.** A new profile now has a *CLI* choice that lists the command line agents installed
+  on this Mac (found in the usual folders and through your login shell), with where each was found, or a warning and
+  *Check again* when it is missing. Only Claude Code is supported for now; other CLIs can be added later. The choice
+  is written to `profiles.json` only when it is not Claude Code, so existing files stay as they are.
+- **Terminal inside the app.** *Open in terminal* (and the menu bar) now runs the profile in a terminal inside the
+  window, with a *Settings | Terminal* switch at the top of each saved profile. Opening the Terminal tab runs the
+  profile by itself, in the same `claude-<name>` command that *Copy command* copies. Each profile keeps its own
+  session: look at another profile and come back, and the terminal is as you left it. The sidebar marks the profiles
+  that run, and quitting asks first when some still do. Each profile can have several tabs: *New session* opens
+  another one, *Restart session* starts the current one again and *Close session* closes it (each asks first when a
+  process still runs). Turn it off in Settings to use Terminal or iTerm2 as before.
+  The terminal is drawn by [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (MIT).
+- **Orchestration kit, per profile.** A new *Orchestration* section installs six subagents (scout, researcher, builder,
+  tester, reviewer, committer) and the instructions of the orchestrator into the config folder of the profile, with
+  *Install*, *Update* and *Remove*. Only that profile changes. The models follow the provider: Haiku and Sonnet for
+  Anthropic, the model of the session for a provider without separate models. A profile that shares `agents` or
+  `CLAUDE.md` with `~/.claude` through a link is never written through; *Give this profile its own copy* replaces the
+  link with a copy (after you confirm) so the kit can go in. `~/.claude` is not changed.
+- **Delete in the sidebar menu.** Right-click a profile and choose *Delete*: the same question as the button asks first.
+
+**Fixed**
+- Deleting a profile while Claude Code still runs in a terminal of that profile could leave its config folder behind,
+  because the folder was written to while it was emptied. The removal now repeats a few times.
+- The health dots in the sidebar stayed grey after a check until the next minute. They now change as soon as the answer
+  arrives.
+- The result line of *Test connection* showed in white instead of green, orange or red.
+- A model name that ends in `[1m]` (the mark of a 1M context in Claude Code) is no longer sent to the provider by the
+  connection check, which the provider refused as an unknown model. The saved model and the launcher are unchanged.
+
+### Tiếng Việt
+
+**Đổi tên**
+- Ứng dụng giờ tên là **Agent Profiles** (trước là Claude Profiles), để tên không trùng với Claude và sau này thêm được
+  các agent khác. Profile, key và các lệnh `claude-<tên>` không đổi: dữ liệu vẫn ở `~/.claude-profiles`, key vẫn trong
+  Keychain, và các dòng PATH trong shell vẫn dùng được. Ứng dụng giờ là `Agent Profiles.app`: hãy xóa
+  `Claude Profiles.app` cũ sau khi chuyển sang. Bản 0.2.0 không tự cập nhật lên bản này được, vì gói tải về chứa một
+  ứng dụng tên khác: hãy tải bản này một lần bằng tay.
+
+**Mới**
+- **Template Claude subscription.** Thêm tài khoản Claude mà không cần địa chỉ hay key: Base URL, xác thực và
+  *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
+  *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
+- **Template Xiaomi MiMo.**
+- **Kiểm tra kết nối đi qua CLI, và được ghi nhớ.** *Kiểm tra kết nối*, *Kiểm tra tất cả kết nối* và các chấm giờ nhờ
+  CLI trả lời một câu ngắn (khoảng 1.500 token) với cài đặt của profile, thay vì gọi thẳng nhà cung cấp. Đó là yêu cầu mà
+  lệnh của bạn gửi, nên tên model được dùng đúng như đã khai báo (kể cả `[1m]`), gói đăng ký Claude cũng kiểm tra được
+  (báo khi tài khoản chưa đăng nhập), và kết quả là kết quả bạn sẽ nhận. Kết quả của mỗi profile được giữ trong
+  `~/.claude-profiles/health-cache.json` (không có key, không có chữ của nhà cung cấp) cho đến khi cài đặt của nó thay
+  đổi hoặc bạn kiểm tra lại, nên các chấm có sẵn ngay khi mở ứng dụng. Khi mở, ứng dụng kiểm tra các profile chưa có kết
+  quả, một lần, không hỏi; tắt trong Cài đặt. Điều này thay cho quy tắc trước đây là không gửi yêu cầu nào nếu chưa bấm.
+- **Chọn CLI cho profile.** Profile mới có mục *CLI* liệt kê các agent dòng lệnh đã cài trên máy này (tìm trong các thư
+  mục thường dùng và qua login shell của bạn), kèm nơi tìm thấy, hoặc cảnh báo và nút *Kiểm tra lại* khi chưa cài. Hiện
+  chỉ hỗ trợ Claude Code; các CLI khác sẽ thêm sau. Lựa chọn chỉ được ghi vào `profiles.json` khi khác Claude Code, nên
+  các file cũ không đổi.
+- **Terminal ngay trong ứng dụng.** *Mở trong terminal* (và thanh menu) giờ chạy profile trong một terminal nằm trong
+  cửa sổ, với thanh chuyển *Cấu hình | Terminal* ở đầu mỗi profile đã lưu. Mở tab Terminal là profile tự chạy, bằng
+  đúng lệnh `claude-<tên>` mà *Sao chép lệnh* sao chép. Mỗi profile giữ phiên riêng: xem profile khác rồi quay lại,
+  terminal vẫn như lúc bạn rời đi. Cột bên đánh dấu các profile đang chạy, và thoát ứng dụng sẽ hỏi trước nếu còn
+  profile đang chạy. Mỗi profile có thể có nhiều tab: *Phiên mới* mở thêm một tab, *Khởi động lại phiên* chạy lại
+  tab đang xem và *Đóng phiên* đóng tab đó (đều hỏi trước nếu tiến trình còn chạy). Tắt trong Cài đặt để dùng Terminal hoặc iTerm2 như trước. Terminal được vẽ bằng
+  [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (MIT).
+- **Bộ Orchestration cho từng profile.** Mục *Orchestration* mới cài sáu subagent (scout, researcher, builder, tester,
+  reviewer, committer) và hướng dẫn cho orchestrator vào thư mục cấu hình của profile, với *Cài*, *Cập nhật* và *Gỡ*.
+  Chỉ profile đó thay đổi. Model theo nhà cung cấp: Haiku và Sonnet với Anthropic, model của phiên với nhà cung cấp không
+  có model riêng từng bậc. Profile dùng chung `agents` hoặc `CLAUDE.md` với `~/.claude` qua liên kết thì không bao giờ bị
+  ghi xuyên qua; *Tạo bản sao riêng cho profile này* thay liên kết bằng một bản sao (sau khi bạn xác nhận) để cài được
+  bộ kit. `~/.claude` không bị thay đổi.
+- **Chấm trạng thái trên thanh menu.** Mỗi profile trong trình khởi chạy trên thanh menu có chấm giống ở cột bên.
+- **Xóa trong menu của cột bên.** Nhấp chuột phải vào profile và chọn *Xóa*: hỏi xác nhận giống nút Xóa trong trình chỉnh sửa.
+
+**Đã sửa**
+- Xóa profile khi Claude Code vẫn đang chạy trong một terminal của profile đó có thể để sót thư mục cấu hình, vì thư mục
+  bị ghi thêm trong lúc đang dọn. Việc xóa giờ được lặp lại vài lần.
+- Chấm trạng thái ở cột bên vẫn xám sau khi kiểm tra cho đến phút kế tiếp. Giờ chấm đổi ngay khi có kết quả.
+- Dòng kết quả của *Kiểm tra kết nối* hiện màu trắng thay vì xanh, cam hoặc đỏ.
+- Tên model kết thúc bằng `[1m]` (dấu hiệu context 1M của Claude Code) không còn được gửi tới nhà cung cấp khi kiểm tra
+  kết nối, trước đây bị từ chối là model không tồn tại. Model đã lưu và lệnh khởi chạy không đổi.
+
 ## [0.2.0] - 2026-10-22
 
 Three new things to see and use: a health dot for every profile, a menu bar launcher and token usage

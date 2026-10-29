@@ -1,4 +1,4 @@
-# Building Claude Profiles / Tự build Claude Profiles
+# Building Agent Profiles / Tự build Agent Profiles
 
 ## English
 
@@ -19,8 +19,8 @@ swift test
 Releases are made with `scripts/release.sh`. See [RELEASE.md](../RELEASE.md) for the steps and for
 how the signing key is handled, and [CHANGELOG.md](../CHANGELOG.md) for the notes of each version.
 
-The code is split in two: `Sources/ClaudeProfilesCore` holds the logic and is covered by the
-tests, and `Sources/ClaudeProfiles` holds the SwiftUI interface.
+The code is split in two: `Sources/AgentProfilesCore` holds the logic and is covered by the
+tests, and `Sources/AgentProfiles` holds the SwiftUI interface.
 
 ## Tiếng Việt
 
@@ -41,5 +41,5 @@ swift test
 Bản phát hành được tạo bằng `scripts/release.sh`. Xem [RELEASE.md](../RELEASE.md) để biết các bước và
 cách giữ khóa ký, và [CHANGELOG.md](../CHANGELOG.md) để xem ghi chú của từng phiên bản.
 
-Mã nguồn chia làm hai: `Sources/ClaudeProfilesCore` chứa logic và được test phủ, còn
-`Sources/ClaudeProfiles` chứa giao diện SwiftUI.
+Mã nguồn chia làm hai: `Sources/AgentProfilesCore` chứa logic và được test phủ, còn
+`Sources/AgentProfiles` chứa giao diện SwiftUI.
