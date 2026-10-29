@@ -388,3 +388,25 @@
 "orch.result.removedBlockOnly" = "Instructions removed. The agents folder is shared with ~/.claude and was left alone.";
 "orch.error.notIsolated" = "This profile has no config folder of its own: turn on isolation and save first.";
 "orch.error.io" = "Could not change %@.";
+
+/* Terminal inside the app */
+"terminal.tab.settings" = "Settings";
+"terminal.tab.terminal" = "Terminal";
+"terminal.state.running" = "Running";
+"terminal.state.exited" = "Ended";
+"terminal.state.exitedCode" = "Ended (code %d)";
+"terminal.empty.title" = "Not running";
+"terminal.empty.message" = "Run this profile here. It keeps running while you look at another profile, and you can come back to it.";
+"terminal.run" = "Run";
+"terminal.stop" = "Stop";
+"terminal.restart" = "Run again";
+"terminal.close" = "Close";
+"terminal.folder" = "Folder: %@";
+"sidebar.terminal.running" = "Running in the terminal of the app";
+"status.embeddedRunning" = "%@ is running in the terminal of the app.";
+"status.embeddedAlreadyRunning" = "%@ already runs in another folder. Close or stop its terminal first.";
+"settings.embedded" = "Open profiles in the terminal inside the app";
+"settings.embedded.hint" = "A profile keeps running while you look at another one. Turn it off to use Terminal or iTerm2 below.";
+"quit.title" = "Quit while terminals are running?";
+"quit.message" = "%d terminals are still running. Quitting ends them.";
+"quit.confirm" = "Quit";

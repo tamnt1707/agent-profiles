@@ -24,6 +24,12 @@ Two new provider templates, and the colors of the connection checks now show.
   saved with an empty Base URL and no key.
 - **Xiaomi MiMo template.**
 - **Health dots in the menu bar.** Each profile in the menu bar launcher has the same dot as in the sidebar.
+- **Terminal inside the app.** *Open in terminal* (and the menu bar) now runs the profile in a terminal inside the
+  window, with a *Settings | Terminal* switch at the top of each saved profile. Opening the Terminal tab runs the
+  profile by itself, in the same `claude-<name>` command that *Copy command* copies. Each profile keeps its own
+  session: look at another profile and come back, and the terminal is as you left it. The sidebar marks the profiles
+  that run, and quitting asks first when some still do. Turn it off in Settings to use Terminal or iTerm2 as before.
+  The terminal is drawn by [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (MIT).
 - **Orchestration kit, per profile.** A new *Orchestration* section installs six subagents (scout, researcher, builder,
   tester, reviewer, committer) and the instructions of the orchestrator into the config folder of the profile, with
   *Install*, *Update* and *Remove*. Only that profile changes. The models follow the provider: Haiku and Sonnet for
@@ -55,6 +61,12 @@ Two new provider templates, and the colors of the connection checks now show.
   *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
   *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
 - **Template Xiaomi MiMo.**
+- **Terminal ngay trong ứng dụng.** *Mở trong terminal* (và thanh menu) giờ chạy profile trong một terminal nằm trong
+  cửa sổ, với thanh chuyển *Cấu hình | Terminal* ở đầu mỗi profile đã lưu. Mở tab Terminal là profile tự chạy, bằng
+  đúng lệnh `claude-<tên>` mà *Sao chép lệnh* sao chép. Mỗi profile giữ phiên riêng: xem profile khác rồi quay lại,
+  terminal vẫn như lúc bạn rời đi. Cột bên đánh dấu các profile đang chạy, và thoát ứng dụng sẽ hỏi trước nếu còn
+  profile đang chạy. Tắt trong Cài đặt để dùng Terminal hoặc iTerm2 như trước. Terminal được vẽ bằng
+  [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (MIT).
 - **Bộ Orchestration cho từng profile.** Mục *Orchestration* mới cài sáu subagent (scout, researcher, builder, tester,
   reviewer, committer) và hướng dẫn cho orchestrator vào thư mục cấu hình của profile, với *Cài*, *Cập nhật* và *Gỡ*.
   Chỉ profile đó thay đổi. Model theo nhà cung cấp: Haiku và Sonnet với Anthropic, model của phiên với nhà cung cấp không

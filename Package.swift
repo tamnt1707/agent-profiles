@@ -9,6 +9,10 @@ let package = Package(
         .library(name: "AgentProfilesCore", targets: ["AgentProfilesCore"]),
         .executable(name: "AgentProfiles", targets: ["AgentProfiles"]),
     ],
+    dependencies: [
+        // The terminal view of the embedded terminal. Pinned to one exact version.
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.99.1"),
+    ],
     targets: [
         .target(
             name: "AgentProfilesCore",
@@ -16,7 +20,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "AgentProfiles",
-            dependencies: ["AgentProfilesCore"],
+            dependencies: [
+                "AgentProfilesCore",
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
+            ],
             path: "Sources/AgentProfiles",
             resources: [
                 .process("Resources")

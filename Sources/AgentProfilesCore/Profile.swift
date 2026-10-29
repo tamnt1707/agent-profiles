@@ -207,6 +207,8 @@ public struct AppData: Codable, Equatable, Sendable {
     public var pathPromptDeclined: Bool
     /// Show the launcher in the menu bar. On by default; only written when off.
     public var showMenuBar: Bool
+    /// Open a profile in the terminal inside the app. On by default; only written when off.
+    public var embeddedTerminal: Bool
 
     public init(
         terminal: TerminalApp = .terminal,
@@ -216,7 +218,8 @@ public struct AppData: Codable, Equatable, Sendable {
         autoCheckUpdates: Bool = true,
         lastUpdateCheck: Date? = nil,
         pathPromptDeclined: Bool = false,
-        showMenuBar: Bool = true
+        showMenuBar: Bool = true,
+        embeddedTerminal: Bool = true
     ) {
         self.terminal = terminal
         self.profiles = profiles
@@ -226,6 +229,7 @@ public struct AppData: Codable, Equatable, Sendable {
         self.lastUpdateCheck = lastUpdateCheck
         self.pathPromptDeclined = pathPromptDeclined
         self.showMenuBar = showMenuBar
+        self.embeddedTerminal = embeddedTerminal
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -237,6 +241,7 @@ public struct AppData: Codable, Equatable, Sendable {
         case lastUpdateCheck = "last_update_check"
         case pathPromptDeclined = "path_prompt_declined"
         case showMenuBar = "show_menu_bar"
+        case embeddedTerminal = "embedded_terminal"
     }
 
     public init(from decoder: Decoder) throws {
@@ -259,6 +264,7 @@ public struct AppData: Codable, Equatable, Sendable {
         lastUpdateCheck = (try? c.decode(String.self, forKey: .lastUpdateCheck)).flatMap(Timestamp.date(from:))
         pathPromptDeclined = (try? c.decode(Bool.self, forKey: .pathPromptDeclined)) ?? false
         showMenuBar = MenuBarSetting.value(stored: try? c.decode(Bool.self, forKey: .showMenuBar))
+        embeddedTerminal = (try? c.decode(Bool.self, forKey: .embeddedTerminal)) ?? true
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
@@ -297,6 +303,9 @@ public struct AppData: Codable, Equatable, Sendable {
         }
         if !showMenuBar {
             try c.encode(false, forKey: .showMenuBar)
+        }
+        if !embeddedTerminal {
+            try c.encode(false, forKey: .embeddedTerminal)
         }
     }
 }

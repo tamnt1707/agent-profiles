@@ -76,6 +76,27 @@ final class AppModel {
     /// Set while the question about the copy is open.
     var isConfirmingUnshare: Bool = false
 
+    /// The terminals inside the app, one per profile.
+    let terminals = TerminalSessions()
+
+    /// What the detail pane shows for each profile.
+    enum DetailTab: Equatable {
+        case settings
+        case terminal
+    }
+
+    /// The tab of each profile. A profile that is not here shows its settings.
+    private(set) var detailTabs: [String: DetailTab] = [:]
+
+    func detailTab(for slug: String) -> DetailTab {
+        detailTabs[slug] ?? .settings
+    }
+
+    func setDetailTab(_ tab: DetailTab, for slug: String) {
+        guard detailTabs[slug] != tab else { return }
+        detailTabs[slug] = tab
+    }
+
     /// The updater of the app: it checks the releases and installs them.
     let updater: UpdateController
 
@@ -585,6 +606,14 @@ final class AppModel {
                 strings: loc.scriptStrings
             )
             draft.slug = result.slug
+            if let old = result.renamedFrom {
+                // The terminal and the tab of the profile follow its new name.
+                terminals.rename(from: old, to: result.slug)
+                if let tab = detailTabs[old] {
+                    detailTabs[old] = nil
+                    detailTabs[result.slug] = tab
+                }
+            }
 
             if let index = draftIndex {
                 data.profiles[index] = draft
@@ -848,6 +877,10 @@ final class AppModel {
 
     /// Opens the terminal for a plan and remembers the folder when it worked.
     private func launch(_ profile: Profile, _ plan: MenuLaunchPlan) {
+        if data.embeddedTerminal {
+            launchEmbedded(profile, plan)
+            return
+        }
         // A second click on the same item is ignored while the first one is
         // still on its way: one click opens one terminal.
         let key = plan.launchKey
@@ -886,6 +919,61 @@ final class AppModel {
                 report(error)
             }
         }
+    }
+
+    /// Runs the profile in the terminal inside the app and shows it.
+    ///
+    /// A profile that already runs is shown as it is: its terminal is never
+    /// started twice.
+    private func launchEmbedded(_ profile: Profile, _ plan: MenuLaunchPlan) {
+        menuBarError = nil
+        // One process for each profile: a folder asked for while it runs elsewhere
+        // is not opened, and the user is told why.
+        if terminals.book.state(for: profile.slug) == .running,
+           let folder = plan.folder, folder != terminals.folder(for: profile.slug) {
+            showTerminal(of: profile.slug)
+            status = Status(kind: .hint, text: loc.t("status.embeddedAlreadyRunning", profile.name))
+            return
+        }
+        do {
+            try terminals.start(profile, paths: store.paths, folder: plan.folder)
+            if let folder = plan.folder { remember(folder, for: plan.slug) }
+            showTerminal(of: profile.slug)
+            status = Status(kind: .success, text: loc.t("status.embeddedRunning", profile.name))
+        } catch {
+            menuBarError = (error as? ProfileError)?.localizedMessage(loc) ?? loc.t("error.generic")
+            report(error)
+        }
+    }
+
+    /// Shows the terminal tab of a profile, and the profile itself.
+    func showTerminal(of slug: String) {
+        setDetailTab(.terminal, for: slug)
+        if selectedSlug != slug { selectedSlug = slug }
+    }
+
+    /// Runs the profile when its terminal tab is shown and it has no terminal yet:
+    /// opening the tab is enough, there is no button to press.
+    func startTerminalIfNeeded(of slug: String) {
+        guard terminals.view(for: slug) == nil else { return }
+        restartTerminal(of: slug)
+    }
+
+    /// Runs a profile that has no process again, in the folder it had before.
+    func restartTerminal(of slug: String) {
+        guard let profile = data.profiles.first(where: { $0.slug == slug }) else { return }
+        launchEmbedded(profile, MenuLaunchPlan.profile(slug))
+    }
+
+    /// Stops the process of the terminal of a profile.
+    func stopTerminal(of slug: String) {
+        terminals.stop(slug)
+    }
+
+    /// Closes the terminal of a profile and goes back to its settings.
+    func closeTerminal(of slug: String) {
+        terminals.close(slug)
+        setDetailTab(.settings, for: slug)
     }
 
     /// Puts the folder of a launch that worked into the list of the profile.
@@ -1183,6 +1271,10 @@ final class AppModel {
         let wasLast = data.profiles.count == 1
         // The question is closed: a measurement of it must not come back.
         cancelDelete()
+
+        // The process of the profile ends before its folder goes away.
+        terminals.close(profile.slug)
+        detailTabs[profile.slug] = nil
 
         let removal: RemovalReport
         do {
@@ -1922,6 +2014,13 @@ final class AppModel {
     func setShowMenuBar(_ show: Bool) {
         guard SettingsChange.isDifferent(data.showMenuBar, show) else { return }
         data.showMenuBar = show
+        persistSettings()
+    }
+
+    /// Opens profiles in the terminal inside the app, or in Terminal or iTerm2.
+    func setEmbeddedTerminal(_ embedded: Bool) {
+        guard SettingsChange.isDifferent(data.embeddedTerminal, embedded) else { return }
+        data.embeddedTerminal = embedded
         persistSettings()
     }
 

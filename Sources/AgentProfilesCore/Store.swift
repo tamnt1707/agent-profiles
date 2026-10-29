@@ -688,6 +688,10 @@ enum JSONText {
         // The rule of the field is in one place: it is written only when the
         // menu bar is turned off.
         out += MenuBarSetting.json(data.showMenuBar)
+        // Written only when the terminal inside the app is turned off.
+        if !data.embeddedTerminal {
+            out += ",\n  \"embedded_terminal\": false"
+        }
         if let lastUpdateCheck = data.lastUpdateCheck {
             out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"
         }

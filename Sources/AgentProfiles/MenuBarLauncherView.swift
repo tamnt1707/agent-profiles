@@ -43,7 +43,7 @@ struct MenuBarLauncherView: View {
         case .profile(let profile):
             // One click: the profile is opened in its own working directory.
             Button {
-                model.openFromMenu(slug: profile.slug, folder: nil)
+                open(profile.slug, folder: nil)
             } label: {
                 HStack {
                     if let state = model.healthState(forSlug: profile.slug) {
@@ -64,7 +64,7 @@ struct MenuBarLauncherView: View {
                         Section(model.loc.t("menubar.recentFolders")) {
                             ForEach(profile.recentFolders, id: \.path) { folder in
                                 Button {
-                                    model.openFromMenu(slug: profile.slug, folder: folder.path)
+                                    open(profile.slug, folder: folder.path)
                                 } label: {
                                     Text(verbatim: folder.display)
                                 }
@@ -105,6 +105,15 @@ struct MenuBarLauncherView: View {
         return label
     }
 
+    /// Opens the profile. In the terminal of the app the window comes forward to show it.
+    private func open(_ slug: String, folder: String?) {
+        model.openFromMenu(slug: slug, folder: folder)
+        if model.data.embeddedTerminal {
+            NSApp.activate()
+            openWindow(id: Self.mainWindowID)
+        }
+    }
+
     /// Asks for a folder and opens the profile in it.
     private func chooseFolder(for slug: String) {
         let panel = NSOpenPanel()
@@ -122,6 +131,6 @@ struct MenuBarLauncherView: View {
             model.reportUnsafeFolder(url.path)
             return
         }
-        model.openFromMenu(slug: slug, folder: url.path)
+        open(slug, folder: url.path)
     }
 }

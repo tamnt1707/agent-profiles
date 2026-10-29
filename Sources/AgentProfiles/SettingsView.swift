@@ -40,11 +40,17 @@ struct SettingsView: View {
             }
 
             Section(model.loc.t("settings.terminal.section")) {
+                Toggle(model.loc.t("settings.embedded"), isOn: embeddedBinding)
+                Text(model.loc.t("settings.embedded.hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Picker(model.loc.t("settings.terminal"), selection: terminalBinding) {
                     Text(model.loc.t("settings.terminal.terminal")).tag(TerminalApp.terminal)
                     Text(model.loc.t("settings.terminal.iterm")).tag(TerminalApp.iTerm)
                 }
                 .pickerStyle(.radioGroup)
+                .disabled(model.data.embeddedTerminal)
             }
 
             Section(model.loc.t("menubar.section")) {
@@ -190,6 +196,10 @@ struct SettingsView: View {
 
     private var terminalBinding: Binding<TerminalApp> {
         Binding(get: { model.data.terminal }, set: { model.setTerminal($0) })
+    }
+
+    private var embeddedBinding: Binding<Bool> {
+        Binding(get: { model.data.embeddedTerminal }, set: { model.setEmbeddedTerminal($0) })
     }
 
     private var menuBarBinding: Binding<Bool> {

@@ -388,3 +388,25 @@
 "orch.result.removedBlockOnly" = "Đã gỡ hướng dẫn. Thư mục agents đang dùng chung với ~/.claude nên được giữ nguyên.";
 "orch.error.notIsolated" = "Profile này chưa có thư mục cấu hình riêng: hãy bật tách biệt rồi lưu trước.";
 "orch.error.io" = "Không thay đổi được %@.";
+
+/* Terminal inside the app */
+"terminal.tab.settings" = "Cấu hình";
+"terminal.tab.terminal" = "Terminal";
+"terminal.state.running" = "Đang chạy";
+"terminal.state.exited" = "Đã kết thúc";
+"terminal.state.exitedCode" = "Đã kết thúc (mã %d)";
+"terminal.empty.title" = "Chưa chạy";
+"terminal.empty.message" = "Chạy profile này ở đây. Nó vẫn chạy khi bạn xem profile khác, và bạn quay lại dùng tiếp được.";
+"terminal.run" = "Chạy";
+"terminal.stop" = "Dừng";
+"terminal.restart" = "Chạy lại";
+"terminal.close" = "Đóng";
+"terminal.folder" = "Thư mục: %@";
+"sidebar.terminal.running" = "Đang chạy trong terminal của ứng dụng";
+"status.embeddedRunning" = "%@ đang chạy trong terminal của ứng dụng.";
+"status.embeddedAlreadyRunning" = "%@ đang chạy ở thư mục khác. Hãy đóng hoặc dừng terminal của nó trước.";
+"settings.embedded" = "Mở profile trong terminal ngay trong ứng dụng";
+"settings.embedded.hint" = "Profile vẫn chạy khi bạn xem profile khác. Tắt để dùng Terminal hoặc iTerm2 bên dưới.";
+"quit.title" = "Thoát khi vẫn còn terminal đang chạy?";
+"quit.message" = "Còn %d terminal đang chạy. Thoát sẽ kết thúc chúng.";
+"quit.confirm" = "Thoát";

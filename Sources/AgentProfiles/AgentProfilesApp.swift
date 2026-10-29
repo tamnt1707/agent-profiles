@@ -1,9 +1,29 @@
 import SwiftUI
 import AgentProfilesCore
 
+/// Asks before the app quits while a profile still runs in its terminal.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set by the app once the model exists.
+    static var model: AppModel?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model = Self.model, model.terminals.runningCount > 0 else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = model.loc.t("quit.title")
+        alert.informativeText = model.loc.count("quit.message", model.terminals.runningCount)
+        alert.addButton(withTitle: model.loc.t("quit.confirm"))
+        alert.addButton(withTitle: model.loc.t("actions.cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        model.terminals.terminateAll()
+        return .terminateNow
+    }
+}
+
 @main
 @MainActor
 struct AgentProfilesApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: AppModel
 
     init() {
@@ -12,7 +32,9 @@ struct AgentProfilesApp: App {
         if CommandLine.arguments.contains("--self-test") {
             Self.runSelfTest()
         }
-        _model = State(initialValue: AppModel())
+        let model = AppModel()
+        AppDelegate.model = model
+        _model = State(initialValue: model)
     }
 
     private static func runSelfTest() -> Never {

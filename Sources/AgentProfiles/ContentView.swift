@@ -143,7 +143,7 @@ struct ContentView: View {
             // Pin the editor to the space the window gives it: a plain
             // ProfileEditorView made the split view taller than the window.
             GeometryReader { geo in
-                ProfileEditorView(model: model)
+                ProfileDetailView(model: model)
                     .frame(width: geo.size.width, height: geo.size.height)
             }
         } else {
@@ -215,6 +215,14 @@ private struct ProfileRow: View {
                 Text("claude-\(profile.slug)")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            // The process of the profile runs in the terminal of the app.
+            if model.terminals.book.state(for: profile.slug) == .running {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(nsColor: .systemGreen))
+                    .help(model.loc.t("sidebar.terminal.running"))
             }
         }
         .padding(.vertical, 2)
