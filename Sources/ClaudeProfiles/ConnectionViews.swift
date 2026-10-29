@@ -46,9 +46,15 @@ struct ProbeResultLine: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Label(loc.probeText(outcome), systemImage: outcome.severity.symbolName)
-                .foregroundStyle(outcome.severity.color)
-                .textSelection(.enabled)
+            // Image and text are colored one by one: a Label in a grouped Form
+            // takes the label color and ignores the one set on it.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: outcome.severity.symbolName)
+                    .foregroundColor(outcome.severity.color)
+                Text(loc.probeText(outcome))
+                    .foregroundColor(outcome.severity.color)
+                    .textSelection(.enabled)
+            }
             if let providerMessage {
                 Text(loc.t("probe.providerSaid", providerMessage))
                     .foregroundStyle(.secondary)

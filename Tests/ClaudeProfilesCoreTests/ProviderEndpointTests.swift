@@ -96,6 +96,8 @@ final class ProviderEndpointTests: XCTestCase {
         XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(opusModel: "o", sonnetModel: "s")), "s")
         XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(sonnetModel: "s", haikuModel: "h")), "h")
         XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: " main ", haikuModel: "h")), "main")
+        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: "MiniMax-M3.1-Flash[1m]")), "MiniMax-M3.1-Flash")
+        XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: "[1M]", haikuModel: "h")), "h")
         XCTAssertEqual(ProviderEndpoint.probeModel(for: Profile(model: "  ")), "claude-haiku-4-5")
     }
 }

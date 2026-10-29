@@ -307,8 +307,11 @@ public struct ProviderPreset: Identifiable, Equatable, Sendable {
     public let name: String
     public let baseURL: String
     public let auth: AuthKind
+    /// Whether the profile gets its own config folder, so its login is its own.
+    public let isolate: Bool
 
-    public init(id: String, name: String, baseURL: String, auth: AuthKind) {
+    public init(id: String, name: String, baseURL: String, auth: AuthKind, isolate: Bool = false) {
+        self.isolate = isolate
         self.id = id
         self.name = name
         self.baseURL = baseURL
@@ -317,12 +320,14 @@ public struct ProviderPreset: Identifiable, Equatable, Sendable {
 
     /// The same list as `PRESETS` in the Rust `src/main.rs`.
     public static let all: [ProviderPreset] = [
+        ProviderPreset(id: "claude", name: "Claude subscription", baseURL: "", auth: .none, isolate: true),
         ProviderPreset(id: "custom", name: "Custom", baseURL: "", auth: .bearer),
         ProviderPreset(id: "openrouter", name: "OpenRouter", baseURL: "https://openrouter.ai/api", auth: .bearer),
         ProviderPreset(id: "deepseek", name: "DeepSeek", baseURL: "https://api.deepseek.com/anthropic", auth: .bearer),
         ProviderPreset(id: "kimi", name: "Kimi (Moonshot)", baseURL: "https://api.moonshot.ai/anthropic", auth: .bearer),
         ProviderPreset(id: "glm", name: "GLM (Z.ai)", baseURL: "https://api.z.ai/api/anthropic", auth: .bearer),
         ProviderPreset(id: "minimax", name: "MiniMax", baseURL: "https://api.minimax.io/anthropic", auth: .bearer),
+        ProviderPreset(id: "mimo", name: "Xiaomi MiMo", baseURL: "https://api.xiaomimimo.com/anthropic", auth: .bearer),
         ProviderPreset(id: "local-proxy", name: "Local proxy (no key)", baseURL: "http://localhost:4000", auth: .none),
     ]
 

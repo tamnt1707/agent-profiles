@@ -72,68 +72,80 @@ struct ProfileEditorView: View {
 
             commandSection
 
-            VStack(alignment: .leading, spacing: 4) {
-                TextField(model.loc.t("editor.baseURL.label"), text: text(\.baseURL), prompt: Text(model.loc.t("editor.baseURL.hint")))
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            Picker(model.loc.t("editor.auth.label"), selection: authBinding()) {
-                ForEach(AuthKind.allCases, id: \.self) { kind in
-                    Text(authLabel(kind)).tag(kind)
-                }
-            }
-            .pickerStyle(.menu)
-
-            if model.draft?.auth != AuthKind.none {
+            if let draft = model.draft, ProviderEndpoint.usesCliLogin(draft) {
                 VStack(alignment: .leading, spacing: 4) {
-                    LabeledContent(model.loc.t("editor.apiKey.label")) {
-                    HStack(spacing: 8) {
-                        Group {
-                            if model.revealKey {
-                                TextField(model.loc.t("editor.apiKey.label"), text: $model.keyInput)
-                            } else {
-                                SecureField(model.loc.t("editor.apiKey.label"), text: $model.keyInput)
-                            }
-                        }
-                        .labelsHidden()
+                    Text(model.loc.t("editor.subscription.hint"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button(model.loc.t("editor.subscription.other")) {
+                        model.draft?.auth = .bearer
+                    }
+                    .buttonStyle(.link)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField(model.loc.t("editor.baseURL.label"), text: text(\.baseURL), prompt: Text(model.loc.t("editor.baseURL.hint")))
                         .textFieldStyle(.roundedBorder)
+                }
 
-                        Button {
-                            model.revealKey.toggle()
-                        } label: {
-                            Image(systemName: model.revealKey ? "eye.slash" : "eye")
+                Picker(model.loc.t("editor.auth.label"), selection: authBinding()) {
+                    ForEach(AuthKind.allCases, id: \.self) { kind in
+                        Text(authLabel(kind)).tag(kind)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if model.draft?.auth != AuthKind.none {
+                    VStack(alignment: .leading, spacing: 4) {
+                        LabeledContent(model.loc.t("editor.apiKey.label")) {
+                        HStack(spacing: 8) {
+                            Group {
+                                if model.revealKey {
+                                    TextField(model.loc.t("editor.apiKey.label"), text: $model.keyInput)
+                                } else {
+                                    SecureField(model.loc.t("editor.apiKey.label"), text: $model.keyInput)
+                                }
+                            }
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+
+                            Button {
+                                model.revealKey.toggle()
+                            } label: {
+                                Image(systemName: model.revealKey ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(model.loc.t(model.revealKey ? "editor.apiKey.hide" : "editor.apiKey.show"))
                         }
-                        .buttonStyle(.borderless)
-                        .help(model.loc.t(model.revealKey ? "editor.apiKey.hide" : "editor.apiKey.show"))
-                    }
-                    }
+                        }
 
-                    if model.hasStoredKey {
-                        Label(model.loc.t("editor.apiKey.stored"), systemImage: "lock.fill")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(model.loc.t("editor.apiKey.hint"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        if model.hasStoredKey {
+                            Label(model.loc.t("editor.apiKey.stored"), systemImage: "lock.fill")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(model.loc.t("editor.apiKey.hint"))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-            }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {
-                        model.testConnection()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {
+                            model.testConnection()
+                        }
+                        .disabled(model.isTestingConnection || model.isCheckingHealth)
+                        .help(model.loc.t("editor.test.help"))
+                        if model.isTestingConnection {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                     }
-                    .disabled(model.isTestingConnection || model.isCheckingHealth)
-                    .help(model.loc.t("editor.test.help"))
-                    if model.isTestingConnection {
-                        ProgressView()
-                            .controlSize(.small)
+                    if let report = model.connectionReport {
+                        ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
                     }
-                }
-                if let report = model.connectionReport {
-                    ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
                 }
             }
         }

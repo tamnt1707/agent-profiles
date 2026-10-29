@@ -35,6 +35,8 @@
 
 /* Trình soạn thảo */
 "editor.provider.section" = "Nhà cung cấp";
+"editor.subscription.hint" = "Đăng nhập bằng gói đăng ký Claude. Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở profile này; không cần địa chỉ hay key.";
+"editor.subscription.other" = "Dùng nhà cung cấp khác";
 "editor.preset.label" = "Mẫu nhà cung cấp";
 "editor.preset.choose" = "Chọn mẫu…";
 "editor.preset.hint" = "URL mẫu có thể thay đổi theo thời gian — kiểm tra lại trang docs của nhà cung cấp.";
@@ -238,6 +240,8 @@
 "menubar.panel.prompt" = "Mở";
 
 /* Mẫu nhà cung cấp */
+"preset.claude" = "Claude subscription";
+"preset.mimo" = "Xiaomi MiMo";
 "preset.custom" = "Tùy chỉnh";
 "preset.openrouter" = "OpenRouter";
 "preset.deepseek" = "DeepSeek";
@@ -289,6 +293,7 @@
 "probe.ok" = "Đã kết nối, %d ms";
 "probe.ok.model" = "Đã kết nối, %d ms (model %@)";
 "probe.providerSaid" = "Nhà cung cấp báo: %@";
+"probe.cliLogin" = "Không có địa chỉ và không có key: Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở profile này. Không có gì để kiểm tra ở đây. Chưa gửi gì cả.";
 "probe.missingKey" = "Chưa có API key: hãy nhập hoặc lưu key trước. Chưa gửi gì đi cả.";
 "probe.invalidURL" = "Base URL không phải là địa chỉ http hoặc https hợp lệ.";
 "probe.insecureURL" = "Đã từ chối: key sẽ được gửi qua http không mã hóa tới một máy chủ từ xa. Hãy dùng https, hoặc localhost. Chưa gửi gì đi cả.";

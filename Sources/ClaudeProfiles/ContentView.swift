@@ -193,10 +193,19 @@ private struct ProfileRow: View {
     let profile: Profile
 
     var body: some View {
+        // Read here, in the body of the row, so the row is drawn again when a
+        // test or the key changes. The closure of a TimelineView does not do that.
+        let lastTest = model.health.lastTest(for: profile)
+        let key = model.keyPresence.state(for: profile.slug)
         HStack(alignment: .center, spacing: 8) {
             // The minute tick only redraws the dot, so a test ages into "not tested" with no request.
-            TimelineView(.everyMinute) { context in
-                HealthDot(loc: model.loc, status: model.healthStatus(for: profile, now: context.date))
+            // The date of the tick is the start of the minute, before a test made in it:
+            // the age would be negative and the test would not be trusted, so the clock is read.
+            TimelineView(.everyMinute) { _ in
+                HealthDot(
+                    loc: model.loc,
+                    status: ProfileHealth.evaluate(profile: profile, key: key, lastTest: lastTest, now: Date())
+                )
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name.isEmpty ? profile.slug : profile.name)

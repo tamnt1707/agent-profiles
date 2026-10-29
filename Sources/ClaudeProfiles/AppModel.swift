@@ -450,6 +450,8 @@ final class AppModel {
         }
         draft!.baseURL = preset.baseURL
         draft!.auth = preset.auth
+        if preset.isolate { draft!.isolate = true }
+        if preset.auth == .none { keyInput = "" }
     }
 
     /// The name of the profile changed. In auto mode the command follows it.
@@ -548,6 +550,11 @@ final class AppModel {
         guard var draft else { return false }
         let previousProfile = currentProfile
         // The key the user typed, before the field is cleared by the save.
+        // A Claude subscription profile has no address and no key: Claude Code signs in by itself.
+        if ProviderEndpoint.usesCliLogin(draft) {
+            draft.baseURL = ""
+            keyInput = ""
+        }
         let typedKey = keyInput
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         command.name = draft.name

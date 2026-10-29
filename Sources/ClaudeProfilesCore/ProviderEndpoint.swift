@@ -14,6 +14,13 @@ public enum ProviderEndpoint {
     /// The hosts that may receive the key over plain http.
     public static let localHosts: Set<String> = ["localhost", "127.0.0.1", "::1"]
 
+    /// `true` when the profile has no address and needs no key: Claude Code
+    /// signs in by itself, so there is nothing to test from here.
+    public static func usesCliLogin(_ profile: Profile) -> Bool {
+        profile.auth == .none
+            && profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// The address of `path` below the Base URL, e.g. `v1/messages`.
     ///
     /// An empty Base URL means the Anthropic API. A Base URL that already ends
@@ -74,9 +81,18 @@ public enum ProviderEndpoint {
 
     /// The model of the test request: the main model, then the haiku, sonnet
     /// and opus mappings, then `claude-haiku-4-5`.
+    ///
+    /// A `[1m]` suffix is not part of the name: Claude Code reads it as "1M
+    /// context" and removes it before it calls the provider, so the test does too.
     public static func probeModel(for profile: Profile) -> String {
         [profile.model, profile.haikuModel, profile.sonnetModel, profile.opusModel]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { stripContextSuffix($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
             .first { !$0.isEmpty } ?? fallbackProbeModel
+    }
+
+    /// The name without a trailing `[1m]` (any case).
+    static func stripContextSuffix(_ name: String) -> String {
+        guard name.lowercased().hasSuffix("[1m]") else { return name }
+        return String(name.dropLast(4)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

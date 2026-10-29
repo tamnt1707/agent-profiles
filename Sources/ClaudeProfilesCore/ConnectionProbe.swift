@@ -43,6 +43,8 @@ public enum ProbeOutcome: Equatable, Sendable {
     case insecureURL
     /// The auth kind needs a key and none is typed or stored. Nothing was sent.
     case missingKey
+    /// The profile has no address and no key: Claude Code signs in by itself. Nothing was sent.
+    case cliLogin
     /// The provider redirected to another origin. The redirect was refused.
     case crossHostRedirect
     /// The provider has no model list (or it is not a list).
@@ -51,7 +53,7 @@ public enum ProbeOutcome: Equatable, Sendable {
     public var severity: ProbeSeverity {
         switch self {
         case .ok: return .success
-        case .rateLimited, .unsupported: return .warning
+        case .rateLimited, .unsupported, .cliLogin: return .warning
         default: return .error
         }
     }
@@ -72,6 +74,7 @@ public enum ProbeOutcome: Equatable, Sendable {
         case .invalidURL: return "probe.invalidURL"
         case .insecureURL: return "probe.insecureURL"
         case .missingKey: return "probe.missingKey"
+        case .cliLogin: return "probe.cliLogin"
         case .crossHostRedirect: return "probe.crossHostRedirect"
         case .unsupported: return "probe.unsupported"
         }
@@ -142,6 +145,9 @@ public struct ConnectionProbe: Sendable {
     /// - Throws: `CancellationError` when the task is cancelled.
     public func testConnection(profile: Profile, key: String) async throws -> ProbeReport {
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ProviderEndpoint.usesCliLogin(profile) {
+            return ProbeReport(outcome: .cliLogin)
+        }
         guard let url = ProviderEndpoint.url(baseURL: profile.baseURL, path: "v1/messages") else {
             return ProbeReport(outcome: .invalidURL)
         }
@@ -184,6 +190,9 @@ public struct ConnectionProbe: Sendable {
     /// - Throws: `CancellationError` when the task is cancelled.
     public func fetchModels(profile: Profile, key: String) async throws -> ModelListReport {
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ProviderEndpoint.usesCliLogin(profile) {
+            return ModelListReport(outcome: .cliLogin)
+        }
         guard let primary = ProviderEndpoint.url(baseURL: profile.baseURL, path: "v1/models") else {
             return ModelListReport(outcome: .invalidURL)
         }

@@ -208,6 +208,14 @@ final class ConnectionProbeTests: XCTestCase {
         }
     }
 
+    func testClaudeLoginProfileSendsNothing() async throws {
+        answerMessages(.json("{}"))
+        let report = try await test(profile(baseURL: "  ", auth: .none), key: "")
+        XCTAssertEqual(report.outcome, .cliLogin)
+        XCTAssertEqual(report.outcome.severity, .warning)
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+    }
+
     func testNoneAuthDoesNotNeedAKey() async throws {
         StubURLProtocol.answer(.json("{}"), for: "http://localhost:4000/v1/messages")
         let report = try await test(profile(baseURL: "http://localhost:4000", auth: .none), key: "")
