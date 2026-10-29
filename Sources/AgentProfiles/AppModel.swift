@@ -186,9 +186,11 @@ final class AppModel {
 
     /// The last test of each profile, kept for this session only.
     private(set) var health = HealthBook() {
-        // The last tests are kept on disk, so they survive a restart.
+        // The last tests are kept on disk, so they survive a restart. The file is
+        // written only when a result changes, and never before the results of the
+        // last run were read back: an empty book must not replace them.
         didSet {
-            guard health != oldValue else { return }
+            guard didRestoreHealth, health.storedTests != oldValue.storedTests else { return }
             healthCache.save(health.storedTests)
         }
     }
@@ -325,8 +327,8 @@ final class AppModel {
         health.profilesLoaded(data.profiles)
         // The tests of the last run come back, once, for the profiles they still describe.
         if !didRestoreHealth {
-            didRestoreHealth = true
             health.restore(healthCache.load(), profiles: data.profiles)
+            didRestoreHealth = true
         }
         // The profiles are read again: the name of the command is looked at
         // again, because another profile may own it now.

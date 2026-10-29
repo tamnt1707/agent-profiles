@@ -125,4 +125,24 @@ final class HealthCacheTests: XCTestCase {
         try "not json".write(to: paths.root.appendingPathComponent(HealthCacheStore.fileName), atomically: true, encoding: .utf8)
         XCTAssertEqual(HealthCacheStore(paths: paths).load(), [:])
     }
+
+    // MARK: - The app
+
+    /// The cache file must not be written before the results of the last run
+    /// were read back: loading the profiles changes the book, and an empty book
+    /// written then would erase every kept result.
+    func testTheAppDoesNotWriteTheCacheBeforeItIsRead() {
+        let model = PackageLayout.text(of: PackageLayout.url("Sources/AgentProfiles/AppModel.swift"))
+        XCTAssertTrue(
+            model.contains("guard didRestoreHealth, health.storedTests != oldValue.storedTests else { return }"),
+            "the health cache is written before it was restored"
+        )
+        let restore = model.range(of: "health.restore(healthCache.load()")
+        let flag = model.range(of: "didRestoreHealth = true")
+        XCTAssertNotNil(restore)
+        XCTAssertNotNil(flag)
+        if let restore, let flag {
+            XCTAssertLessThan(restore.lowerBound, flag.lowerBound, "the flag is raised before the restore")
+        }
+    }
 }
