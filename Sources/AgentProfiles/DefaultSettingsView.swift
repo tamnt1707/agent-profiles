@@ -19,6 +19,7 @@ struct DefaultSettingsView: View {
                         .font(.system(.body, design: .monospaced))
                         .textSelection(.enabled)
                 }
+                AccountView(model: model, profile: .defaultClaude)
                 HStack(spacing: 12) {
                     Button(model.loc.t("actions.reveal")) { model.revealFolder(for: .defaultClaude) }
                     Button(model.loc.t("default.test")) { model.checkDefaultConnection() }

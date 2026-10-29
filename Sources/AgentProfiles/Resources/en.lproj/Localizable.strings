@@ -472,3 +472,10 @@
 "heartbeat.last.ok" = "Last ping: %@, answered";
 "heartbeat.last.failed" = "Last ping: %@, failed (code %@)";
 "heartbeat.last.none" = "No ping has run yet.";
+
+/* Account */
+"account.label" = "Account";
+"account.refresh" = "Refresh";
+"account.unavailable" = "Could not read the account";
+"account.notSignedIn" = "Not signed in. Open this profile in the terminal and sign in.";
+"account.signedIn" = "Signed in";

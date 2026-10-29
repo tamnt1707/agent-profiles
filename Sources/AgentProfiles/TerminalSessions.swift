@@ -70,7 +70,7 @@ final class TerminalSessions {
     func open(_ profile: Profile, paths: Paths, folder: String?) throws -> Int {
         let command = try EmbeddedTerminalSpec.shellCommand(for: profile, paths: paths, workdirOverride: folder)
         let tab = book.open(profile.slug)
-        run(id: tab.id, run: tab.run, command: command, folder: folder, home: paths.home.path)
+        run(id: tab.id, run: tab.run, command: command, folder: folder, start: Self.startFolder(paths))
         return tab.id
     }
 
@@ -81,10 +81,17 @@ final class TerminalSessions {
         let command = try EmbeddedTerminalSpec.shellCommand(for: profile, paths: paths, workdirOverride: folder)
         runs[id]?.view.terminate()
         guard let number = book.restart(id) else { return }
-        run(id: id, run: number, command: command, folder: folder, home: paths.home.path)
+        run(id: id, run: number, command: command, folder: folder, start: Self.startFolder(paths))
     }
 
-    private func run(id: Int, run number: Int, command: String, folder: String?, home: String) {
+    /// The folder a shell starts in: an empty folder of the app, never the home
+    /// folder. The folder of the profile is entered by the command itself.
+    private static func startFolder(_ paths: Paths) -> String {
+        try? FileManager.default.createDirectory(at: paths.workspaceDir, withIntermediateDirectories: true)
+        return paths.workspaceDir.path
+    }
+
+    private func run(id: Int, run number: Int, command: String, folder: String?, start: String) {
         let delegate = Delegate { [weak self] code in
             self?.book.exited(id, run: number, code: code)
         }
@@ -97,9 +104,10 @@ final class TerminalSessions {
             args: EmbeddedTerminalSpec.arguments(command: command),
             environment: Self.environment(),
             execName: nil,
-            // Like a new window of Terminal: the folder of the user, not `/`.
+            // Not the home folder: Claude Code would read Photos, Music and the
+            // volumes from there, and macOS would ask this app for those rights.
             // A folder of the profile is entered by the command itself.
-            currentDirectory: home
+            currentDirectory: start
         )
     }
 

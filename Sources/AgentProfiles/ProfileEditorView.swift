@@ -93,6 +93,10 @@ struct ProfileEditorView: View {
                         model.draft?.auth = .bearer
                     }
                     .buttonStyle(.link)
+                    // The account is read from the saved profile's own config folder.
+                    if let saved = model.currentProfile, ProviderEndpoint.usesCliLogin(saved) {
+                        AccountView(model: model, profile: saved)
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
@@ -409,7 +413,8 @@ struct ProfileEditorView: View {
             }
 
             // The test runs the CLI with the model above, so it sits below it.
-            if let draft = model.draft, !ProviderEndpoint.usesCliLogin(draft) {
+            // A Claude subscription profile has it too: the CLI says when the account is not signed in.
+            if model.draft != nil {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {

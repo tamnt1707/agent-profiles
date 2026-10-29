@@ -4,6 +4,41 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.5.0] - 2026-10-29
+
+See which account a profile is signed in with.
+
+### English
+
+**New**
+- **Account.** The Settings tab of *Default* and of a Claude subscription profile shows the account it is signed in
+  with (email, plan and organization), or says that it is not signed in. It is read with `claude auth status`, which
+  reads the local sign-in and costs no tokens. The refresh button asks again.
+
+**Fixed**
+- macOS asked **Agent Profiles** for access to Photos, Music and volumes. The terminal inside the app started Claude
+  Code in your home folder, where it read those folders on the app's behalf. A terminal now starts in an empty
+  folder of the app (`~/.claude-profiles/workspace`) and enters the working directory of the profile when it has one,
+  and the heartbeat runs in its own folder. Use the working directory of a profile, or a folder from the menu bar, to
+  work on a project.
+- *Test connection* was missing on a Claude subscription profile. It is there again, below the model fields, and
+  tells you when the account is not signed in.
+
+### Tiếng Việt
+
+**Mới**
+- **Tài khoản.** Tab Cài đặt của *Mặc định* và của profile Claude subscription hiện tài khoản đang đăng nhập (email,
+  gói và tổ chức), hoặc báo là chưa đăng nhập. Thông tin đọc bằng `claude auth status`, chỉ đọc đăng nhập ở máy nên
+  không tốn token. Nút làm mới sẽ hỏi lại.
+
+**Đã sửa**
+- macOS hỏi quyền truy cập Ảnh, Music và ổ đĩa cho **Agent Profiles**. Terminal trong app khởi chạy Claude Code ở thư
+  mục home của bạn, nơi nó đọc các thư mục đó thay cho app. Giờ terminal bắt đầu trong một thư mục rỗng của app
+  (`~/.claude-profiles/workspace`) rồi vào thư mục làm việc của profile nếu có, và heartbeat chạy trong thư mục riêng
+  của nó. Muốn làm việc trên dự án, hãy đặt thư mục làm việc cho profile hoặc chọn thư mục từ menu bar.
+- Nút *Kiểm tra kết nối* bị mất ở profile Claude subscription. Giờ nó có lại, nằm dưới các ô model, và báo khi tài
+  khoản chưa đăng nhập.
+
 ## [0.4.1] - 2026-10-29
 
 A fix for the connection check of the **Default** Claude Code.

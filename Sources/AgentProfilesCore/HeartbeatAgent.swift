@@ -117,7 +117,8 @@ public struct HeartbeatAgent {
                 // A key that no longer works must not keep the run waiting.
                 "CLAUDE_CODE_MAX_RETRIES": "0",
             ],
-            "WorkingDirectory": paths.home.path,
+            // Not the home folder: the CLI could read Photos or Music from there and macOS would ask.
+            "WorkingDirectory": resultURL(for: profile.slug).deletingLastPathComponent().path,
             "ProcessType": "Background",
         ]
         return try PropertyListSerialization.data(fromPropertyList: dictionary, format: .xml, options: 0)

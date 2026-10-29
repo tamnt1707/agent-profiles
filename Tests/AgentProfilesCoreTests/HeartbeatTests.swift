@@ -357,4 +357,18 @@ final class HeartbeatTests: XCTestCase {
         try a.apply(profile(heartbeat: Heartbeat(enabled: true, times: [time("05:00")])))
         XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
     }
+
+    func testTheAgentDoesNotRunInTheHomeFolder() throws {
+        let beat = Heartbeat(enabled: true, times: [time("05:00")])
+        let data = try agent(LaunchctlStub()).plist(for: profile(heartbeat: beat))
+        let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let directory = try XCTUnwrap(plist["WorkingDirectory"] as? String)
+        XCTAssertNotEqual(directory, home.path)
+        XCTAssertEqual(directory, paths.root.appendingPathComponent("heartbeat").path)
+    }
+
+    func testTheTerminalWorkspaceIsAnEmptyFolderOfTheApp() {
+        XCTAssertEqual(paths.workspaceDir, paths.root.appendingPathComponent("workspace", isDirectory: true))
+        XCTAssertNotEqual(paths.workspaceDir, paths.home)
+    }
 }
