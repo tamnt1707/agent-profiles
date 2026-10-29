@@ -16,8 +16,12 @@ Two new provider templates, and the colors of the connection checks now show.
   sign in the first time you open it. *Use another provider instead* brings the fields back. Such a profile is always
   saved with an empty Base URL and no key.
 - **Xiaomi MiMo template.**
+- **Health dots in the menu bar.** Each profile in the menu bar launcher has the same dot as in the sidebar.
+- **Delete in the sidebar menu.** Right-click a profile and choose *Delete*: the same question as the button asks first.
 
 **Fixed**
+- Deleting a profile while Claude Code still runs in a terminal of that profile could leave its config folder behind,
+  because the folder was written to while it was emptied. The removal now repeats a few times.
 - The health dots in the sidebar stayed grey after a check until the next minute. They now change as soon as the answer
   arrives.
 - The result line of *Test connection* showed in white instead of green, orange or red.
@@ -31,8 +35,12 @@ Two new provider templates, and the colors of the connection checks now show.
   *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
   *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
 - **Template Xiaomi MiMo.**
+- **Chấm trạng thái trên thanh menu.** Mỗi profile trong trình khởi chạy trên thanh menu có chấm giống ở cột bên.
+- **Xóa trong menu của cột bên.** Nhấp chuột phải vào profile và chọn *Xóa*: hỏi xác nhận giống nút Xóa trong trình chỉnh sửa.
 
 **Đã sửa**
+- Xóa profile khi Claude Code vẫn đang chạy trong một terminal của profile đó có thể để sót thư mục cấu hình, vì thư mục
+  bị ghi thêm trong lúc đang dọn. Việc xóa giờ được lặp lại vài lần.
 - Chấm trạng thái ở cột bên vẫn xám sau khi kiểm tra cho đến phút kế tiếp. Giờ chấm đổi ngay khi có kết quả.
 - Dòng kết quả của *Kiểm tra kết nối* hiện màu trắng thay vì xanh, cam hoặc đỏ.
 - Tên model kết thúc bằng `[1m]` (dấu hiệu context 1M của Claude Code) không còn được gửi tới nhà cung cấp khi kiểm tra

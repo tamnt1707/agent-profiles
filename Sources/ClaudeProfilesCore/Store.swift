@@ -590,6 +590,9 @@ public struct Store {
         return home
     }
 
+    /// How many times the config folder of a profile is emptied before the leftover is reported.
+    static let removeAttempts = 4
+
     /// Removes everything that belongs to a profile: the Keychain entry, the
     /// launcher and the whole config folder with its sessions and history.
     ///
@@ -632,10 +635,24 @@ public struct Store {
         case .missing:
             report.removedHome = true
         default:
-            do {
-                try SafeFileSystem.remove(at: home)
+            // A Claude Code that still runs in a terminal of this profile may
+            // write a file while the folder is being emptied, and the last
+            // `rmdir` then fails. The walk is repeated a few times: the second
+            // one finds only what was written in between.
+            var lastError: Error?
+            for attempt in 0..<Store.removeAttempts {
+                do {
+                    try SafeFileSystem.remove(at: home)
+                    lastError = nil
+                    break
+                } catch {
+                    lastError = error
+                    if attempt + 1 < Store.removeAttempts { usleep(150_000) }
+                }
+            }
+            if lastError == nil {
                 report.removedHome = true
-            } catch {
+            } else {
                 report.failures.append(.home(home.path))
             }
         }

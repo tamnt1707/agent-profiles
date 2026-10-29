@@ -45,7 +45,12 @@ struct MenuBarLauncherView: View {
             Button {
                 model.openFromMenu(slug: profile.slug, folder: nil)
             } label: {
-                profileLabel(profile)
+                HStack {
+                    if let state = model.healthState(forSlug: profile.slug) {
+                        Image(nsImage: HealthDotImage.image(for: state))
+                    }
+                    profileLabel(profile)
+                }
             }
             .disabled(!profile.isEnabled)
 
@@ -69,6 +74,9 @@ struct MenuBarLauncherView: View {
                             chooseFolder(for: profile.slug)
                         }
                     } label: {
+                        if let state = model.healthState(forSlug: profile.slug) {
+                            Image(nsImage: HealthDotImage.image(for: state))
+                        }
                         Text(profile.name)
                     }
                     .disabled(!profile.isEnabled)

@@ -70,6 +70,8 @@ struct ContentView: View {
                         // The menu acts on the row that was clicked, not on the edited profile.
                         Button(model.loc.t("actions.copyCommand")) { model.copyCommand(for: profile) }
                         Button(model.loc.t("actions.reveal")) { model.revealFolder(for: profile) }
+                        Divider()
+                        Button(model.loc.t("actions.delete"), role: .destructive) { model.requestDelete(of: profile) }
                     }
             }
         }

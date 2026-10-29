@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ClaudeProfilesCore
 
@@ -55,6 +56,20 @@ extension HealthState {
         case .attention: return Color(nsColor: .systemOrange)
         case .problem: return Color(nsColor: .systemRed)
         }
+    }
+}
+
+/// The dot of a state as an image for a menu. A menu draws a symbol in one
+/// color (a template), so the color is baked into the image.
+enum HealthDotImage {
+    @MainActor
+    static func image(for state: HealthState) -> NSImage {
+        let configuration = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor(state.color)]))
+        let symbol = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration) ?? NSImage()
+        symbol.isTemplate = false
+        return symbol
     }
 }
 

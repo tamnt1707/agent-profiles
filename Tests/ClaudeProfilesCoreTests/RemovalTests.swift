@@ -74,6 +74,30 @@ final class RemovalTests: XCTestCase {
         XCTAssertFalse(manager().fileExists(atPath: paths.home(for: profile.slug).path))
     }
 
+    /// A Claude Code that still runs for the profile writes into the folder while
+    /// it is emptied: the removal is repeated until the folder is gone.
+    func testRemoveCatchesFilesWrittenWhileTheFolderIsEmptied() throws {
+        let profile = Profile.sample()
+        try materialize(profile)
+        let home = paths.home(for: profile.slug)
+
+        let writer = Thread {
+            let end = Date().addingTimeInterval(0.25)
+            var n = 0
+            while Date() < end {
+                try? Data("late".utf8).write(to: home.appendingPathComponent("late-\(n).json"))
+                n += 1
+                usleep(2_000)
+            }
+        }
+        writer.start()
+        let report = try store.remove(profile)
+
+        XCTAssertTrue(report.removedHome)
+        XCTAssertEqual(report.failures, [])
+        XCTAssertFalse(manager().fileExists(atPath: home.path))
+    }
+
     /// The folder of a profile goes away even when it is not isolated.
     func testRemoveDeletesTheHomeOfAProfileWithoutIsolation() throws {
         var profile = Profile.sample()

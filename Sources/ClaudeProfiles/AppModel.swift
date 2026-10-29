@@ -1316,6 +1316,26 @@ final class AppModel {
         )
     }
 
+    /// The state of the dot of a saved profile, for the menu bar.
+    func healthState(forSlug slug: String) -> HealthState? {
+        guard let profile = data.profiles.first(where: { $0.slug == slug }) else { return nil }
+        return healthStatus(for: profile, now: Date()).state
+    }
+
+    /// "Delete" in the menu of a row of the sidebar: the profile of the row is
+    /// shown, then the same question as the button of the editor is asked.
+    func requestDelete(of profile: Profile) {
+        if currentProfile?.slug != profile.slug {
+            // Unsaved changes of another profile are answered first, as for any switch.
+            guard !hasUnsavedChanges else {
+                sidebarSelectionChanged(to: profile.slug)
+                return
+            }
+            select(profile)
+        }
+        requestDelete()
+    }
+
     /// `true` when "Check all connections" can start. The same rule for the
     /// button of the sidebar and for the item of the Profile menu.
     var canCheckAllConnections: Bool {
