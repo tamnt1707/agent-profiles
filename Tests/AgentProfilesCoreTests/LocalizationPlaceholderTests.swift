@@ -28,6 +28,7 @@ final class LocalizationPlaceholderTests: XCTestCase {
         "orch.status.partial": [.integer, .integer],
         "terminal.state.exitedCode": [.integer],
         "quit.message": [.integer],
+        "terminal.session.label": [.integer],
         "error.envMissingEquals": [.integer, .object],
         "error.invalidEnvName": [.integer, .object],
         "error.update.httpError": [.integer]

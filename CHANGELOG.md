@@ -32,7 +32,9 @@ Two new provider templates, and the colors of the connection checks now show.
   window, with a *Settings | Terminal* switch at the top of each saved profile. Opening the Terminal tab runs the
   profile by itself, in the same `claude-<name>` command that *Copy command* copies. Each profile keeps its own
   session: look at another profile and come back, and the terminal is as you left it. The sidebar marks the profiles
-  that run, and quitting asks first when some still do. Turn it off in Settings to use Terminal or iTerm2 as before.
+  that run, and quitting asks first when some still do. Each profile can have several tabs: *New session* opens
+  another one, *Restart session* starts the current one again and *Close session* closes it (each asks first when a
+  process still runs). Turn it off in Settings to use Terminal or iTerm2 as before.
   The terminal is drawn by [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (MIT).
 - **Orchestration kit, per profile.** A new *Orchestration* section installs six subagents (scout, researcher, builder,
   tester, reviewer, committer) and the instructions of the orchestrator into the config folder of the profile, with
@@ -73,7 +75,8 @@ Two new provider templates, and the colors of the connection checks now show.
   cửa sổ, với thanh chuyển *Cấu hình | Terminal* ở đầu mỗi profile đã lưu. Mở tab Terminal là profile tự chạy, bằng
   đúng lệnh `claude-<tên>` mà *Sao chép lệnh* sao chép. Mỗi profile giữ phiên riêng: xem profile khác rồi quay lại,
   terminal vẫn như lúc bạn rời đi. Cột bên đánh dấu các profile đang chạy, và thoát ứng dụng sẽ hỏi trước nếu còn
-  profile đang chạy. Tắt trong Cài đặt để dùng Terminal hoặc iTerm2 như trước. Terminal được vẽ bằng
+  profile đang chạy. Mỗi profile có thể có nhiều tab: *Phiên mới* mở thêm một tab, *Khởi động lại phiên* chạy lại
+  tab đang xem và *Đóng phiên* đóng tab đó (đều hỏi trước nếu tiến trình còn chạy). Tắt trong Cài đặt để dùng Terminal hoặc iTerm2 như trước. Terminal được vẽ bằng
   [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (MIT).
 - **Bộ Orchestration cho từng profile.** Mục *Orchestration* mới cài sáu subagent (scout, researcher, builder, tester,
   reviewer, committer) và hướng dẫn cho orchestrator vào thư mục cấu hình của profile, với *Cài*, *Cập nhật* và *Gỡ*.

@@ -4,39 +4,35 @@ import Observation
 import SwiftTerm
 import AgentProfilesCore
 
-/// The embedded terminals of the app: one per profile.
+/// The embedded terminals of the app: any number of tabs for each profile.
 ///
-/// A session owns its terminal view for as long as it lives, so the window can
-/// show another profile and come back: the view is put in the window again with
+/// A tab owns its terminal view for as long as it lives, so the window can show
+/// another profile and come back: the view is put in the window again with
 /// everything it printed and its process still running.
 @MainActor
 @Observable
 final class TerminalSessions {
-    /// What each profile's terminal is doing. Read by the sidebar and the detail pane.
+    /// What each tab is doing. Read by the sidebar and the detail pane.
     private(set) var book = TerminalSessionBook()
 
-    /// One live terminal: the view, the process in it and what it was started with.
+    /// One live terminal: the view, the process in it and the folder it was started in.
     private final class Run {
         let view: LocalProcessTerminalView
         let delegate: Delegate
-        let number: Int
         let folder: String?
 
-        init(view: LocalProcessTerminalView, delegate: Delegate, number: Int, folder: String?) {
+        init(view: LocalProcessTerminalView, delegate: Delegate, folder: String?) {
             self.view = view
             self.delegate = delegate
-            self.number = number
             self.folder = folder
         }
     }
 
     /// Tells the sessions that the process of a run ended.
     private final class Delegate: NSObject, LocalProcessTerminalViewDelegate {
-        let slug: String
         let onExit: @MainActor (Int32?) -> Void
 
-        init(slug: String, onExit: @escaping @MainActor (Int32?) -> Void) {
-            self.slug = slug
+        init(onExit: @escaping @MainActor (Int32?) -> Void) {
             self.onExit = onExit
         }
 
@@ -51,39 +47,51 @@ final class TerminalSessions {
         }
     }
 
-    @ObservationIgnored private var runs: [String: Run] = [:]
+    /// The live terminal of each tab, by the identity of the tab.
+    @ObservationIgnored private var runs: [Int: Run] = [:]
 
-    /// The terminal view of a profile, `nil` when it has no session.
-    func view(for slug: String) -> LocalProcessTerminalView? {
-        runs[slug]?.view
+    /// The terminal view of a tab, `nil` when it does not exist.
+    func view(for id: Int) -> LocalProcessTerminalView? {
+        runs[id]?.view
     }
 
-    /// The folder the session of a profile was started in, `nil` for its own folder.
-    func folder(for slug: String) -> String? {
-        runs[slug]?.folder
+    /// The folder a tab was started in, `nil` for the folder of its profile.
+    func folder(for id: Int) -> String? {
+        runs[id]?.folder
     }
 
-    /// How many processes run.
-    var runningCount: Int { book.runningSlugs.count }
+    /// How many processes run, in all profiles.
+    var runningCount: Int { book.runningCount }
 
-    /// Starts the profile in a terminal of its own. A session that already runs is kept.
+    /// Opens a new tab for the profile and starts it. Returns the identity of the tab.
     ///
     /// - Throws: `ProfileError.unsafeFolderToOpen` when a path is not safe.
-    func start(_ profile: Profile, paths: Paths, folder: String?) throws {
-        let slug = profile.slug
-        if book.state(for: slug) == .running { return }
+    @discardableResult
+    func open(_ profile: Profile, paths: Paths, folder: String?) throws -> Int {
         let command = try EmbeddedTerminalSpec.shellCommand(for: profile, paths: paths, workdirOverride: folder)
+        let tab = book.open(profile.slug)
+        run(id: tab.id, run: tab.run, command: command, folder: folder, home: paths.home.path)
+        return tab.id
+    }
 
-        // The old, ended run is replaced by a new view: its text is gone with it.
-        runs[slug]?.view.terminate()
-        let number = book.started(slug)
-        let delegate = Delegate(slug: slug) { [weak self] code in
-            self?.ended(slug: slug, number: number, code: code)
+    /// Starts a tab again: its process ends if it runs, and a new one starts in
+    /// a new, empty terminal, in the folder the tab had.
+    func restart(_ id: Int, profile: Profile, paths: Paths) throws {
+        let folder = runs[id]?.folder
+        let command = try EmbeddedTerminalSpec.shellCommand(for: profile, paths: paths, workdirOverride: folder)
+        runs[id]?.view.terminate()
+        guard let number = book.restart(id) else { return }
+        run(id: id, run: number, command: command, folder: folder, home: paths.home.path)
+    }
+
+    private func run(id: Int, run number: Int, command: String, folder: String?, home: String) {
+        let delegate = Delegate { [weak self] code in
+            self?.book.exited(id, run: number, code: code)
         }
         let view = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
         view.processDelegate = delegate
         view.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
-        runs[slug] = Run(view: view, delegate: delegate, number: number, folder: folder)
+        runs[id] = Run(view: view, delegate: delegate, folder: folder)
         view.startProcess(
             executable: EmbeddedTerminalSpec.shell,
             args: EmbeddedTerminalSpec.arguments(command: command),
@@ -91,36 +99,27 @@ final class TerminalSessions {
             execName: nil,
             // Like a new window of Terminal: the folder of the user, not `/`.
             // A folder of the profile is entered by the command itself.
-            currentDirectory: paths.home.path
+            currentDirectory: home
         )
     }
 
-    private func ended(slug: String, number: Int, code: Int32?) {
-        book.exited(slug, run: number, code: code)
+    /// Ends the process of a tab and closes it.
+    func close(_ id: Int) {
+        runs[id]?.view.terminate()
+        runs[id] = nil
+        book.close(id)
     }
 
-    /// Stops the process of a profile. The text stays, so the end can be read.
-    func stop(_ slug: String) {
-        guard book.state(for: slug) == .running else { return }
-        runs[slug]?.view.terminate()
+    /// Ends every process of a profile and closes its tabs.
+    func closeAll(_ slug: String) {
+        for id in book.closeAll(slug) {
+            runs[id]?.view.terminate()
+            runs[id] = nil
+        }
     }
 
-    /// Stops the process and forgets the terminal of a profile.
-    func close(_ slug: String) {
-        runs[slug]?.view.terminate()
-        runs[slug] = nil
-        book.closed(slug)
-    }
-
-    /// The profile has a new slug: its terminal follows it.
+    /// The profile has a new slug: its tabs follow it.
     func rename(from old: String, to new: String) {
-        guard old != new, let run = runs[old] else { return }
-        let renamed = Run(view: run.view, delegate: Delegate(slug: new) { [weak self] code in
-            self?.ended(slug: new, number: run.number, code: code)
-        }, number: run.number, folder: run.folder)
-        renamed.view.processDelegate = renamed.delegate
-        runs[new] = renamed
-        runs[old] = nil
         book.renamed(from: old, to: new)
     }
 

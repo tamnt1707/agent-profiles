@@ -107,6 +107,9 @@ final class AppModel {
     /// The tab of each profile. A profile that is not here shows its settings.
     private(set) var detailTabs: [String: DetailTab] = [:]
 
+    /// The terminal tab that is shown for each profile.
+    private(set) var selectedSessions: [String: Int] = [:]
+
     func detailTab(for slug: String) -> DetailTab {
         detailTabs[slug] ?? .settings
     }
@@ -633,6 +636,10 @@ final class AppModel {
                     detailTabs[old] = nil
                     detailTabs[result.slug] = tab
                 }
+                if let tab = selectedSessions[old] {
+                    selectedSessions[old] = nil
+                    selectedSessions[result.slug] = tab
+                }
             }
 
             if let index = draftIndex {
@@ -943,22 +950,25 @@ final class AppModel {
 
     /// Runs the profile in the terminal inside the app and shows it.
     ///
-    /// A profile that already runs is shown as it is: its terminal is never
-    /// started twice.
+    /// Without a folder the profile is shown as it is, and a first tab is
+    /// opened when it has none. With a folder (from the menu bar) the tab that
+    /// already runs there is shown, or a new tab is opened in that folder.
     private func launchEmbedded(_ profile: Profile, _ plan: MenuLaunchPlan) {
         menuBarError = nil
-        // One process for each profile: a folder asked for while it runs elsewhere
-        // is not opened, and the user is told why.
-        if terminals.book.state(for: profile.slug) == .running,
-           let folder = plan.folder, folder != terminals.folder(for: profile.slug) {
-            showTerminal(of: profile.slug)
-            status = Status(kind: .hint, text: loc.t("status.embeddedAlreadyRunning", profile.name))
-            return
-        }
+        let slug = profile.slug
+        let tabs = terminals.book.sessions(for: slug)
         do {
-            try terminals.start(profile, paths: store.paths, folder: plan.folder)
-            if let folder = plan.folder { remember(folder, for: plan.slug) }
-            showTerminal(of: profile.slug)
+            if let folder = plan.folder {
+                if let same = tabs.first(where: { $0.state == .running && terminals.folder(for: $0.id) == folder }) {
+                    selectedSessions[slug] = same.id
+                } else {
+                    selectedSessions[slug] = try terminals.open(profile, paths: store.paths, folder: folder)
+                    remember(folder, for: slug)
+                }
+            } else if tabs.isEmpty {
+                selectedSessions[slug] = try terminals.open(profile, paths: store.paths, folder: nil)
+            }
+            showTerminal(of: slug)
             status = Status(kind: .success, text: loc.t("status.embeddedRunning", profile.name))
         } catch {
             menuBarError = (error as? ProfileError)?.localizedMessage(loc) ?? loc.t("error.generic")
@@ -972,28 +982,98 @@ final class AppModel {
         if selectedSlug != slug { selectedSlug = slug }
     }
 
-    /// Runs the profile when its terminal tab is shown and it has no terminal yet:
-    /// opening the tab is enough, there is no button to press.
+    // MARK: - Terminal tabs
+
+    /// The tab of a profile that is shown: the one that was chosen, or the first.
+    func activeSession(of slug: String) -> TerminalSession? {
+        let tabs = terminals.book.sessions(for: slug)
+        if let id = selectedSessions[slug], let tab = tabs.first(where: { $0.id == id }) { return tab }
+        return tabs.first
+    }
+
+    func selectSession(_ id: Int, of slug: String) {
+        guard selectedSessions[slug] != id else { return }
+        selectedSessions[slug] = id
+    }
+
+    /// Opens the first tab when the terminal tab of a profile is shown and it
+    /// has none: opening the tab is enough, there is no button to press.
     func startTerminalIfNeeded(of slug: String) {
-        guard terminals.view(for: slug) == nil else { return }
-        restartTerminal(of: slug)
+        guard terminals.book.sessions(for: slug).isEmpty else { return }
+        newSession(of: slug)
     }
 
-    /// Runs a profile that has no process again, in the folder it had before.
-    func restartTerminal(of slug: String) {
+    /// Opens a new tab for the profile, in the folder of the profile.
+    func newSession(of slug: String) {
         guard let profile = data.profiles.first(where: { $0.slug == slug }) else { return }
-        launchEmbedded(profile, MenuLaunchPlan.profile(slug))
+        do {
+            selectedSessions[slug] = try terminals.open(profile, paths: store.paths, folder: nil)
+            status = Status(kind: .success, text: loc.t("status.embeddedRunning", profile.name))
+        } catch {
+            report(error)
+        }
     }
 
-    /// Stops the process of the terminal of a profile.
-    func stopTerminal(of slug: String) {
-        terminals.stop(slug)
+    /// What a question about a running tab is for.
+    enum TerminalAction: Equatable {
+        case restart(Int)
+        case close(Int)
     }
 
-    /// Closes the terminal of a profile and goes back to its settings.
-    func closeTerminal(of slug: String) {
-        terminals.close(slug)
-        setDetailTab(.settings, for: slug)
+    /// The action that waits for the answer of the question about a running process.
+    var pendingTerminalAction: TerminalAction?
+    var isConfirmingTerminalAction: Bool = false
+
+    /// Starts a tab again. A process that runs is ended, so the question comes first.
+    func requestRestart(_ id: Int) {
+        ask(.restart(id), running: terminals.book.session(id)?.state == .running)
+    }
+
+    /// Closes a tab. A process that runs is ended, so the question comes first.
+    func requestClose(_ id: Int) {
+        ask(.close(id), running: terminals.book.session(id)?.state == .running)
+    }
+
+    private func ask(_ action: TerminalAction, running: Bool) {
+        if running {
+            pendingTerminalAction = action
+            isConfirmingTerminalAction = true
+        } else {
+            perform(action)
+        }
+    }
+
+    func confirmTerminalAction() {
+        isConfirmingTerminalAction = false
+        guard let action = pendingTerminalAction else { return }
+        pendingTerminalAction = nil
+        perform(action)
+    }
+
+    func cancelTerminalAction() {
+        isConfirmingTerminalAction = false
+        pendingTerminalAction = nil
+    }
+
+    private func perform(_ action: TerminalAction) {
+        switch action {
+        case .restart(let id):
+            guard let slug = terminals.book.slug(of: id),
+                  let profile = data.profiles.first(where: { $0.slug == slug }) else { return }
+            do {
+                try terminals.restart(id, profile: profile, paths: store.paths)
+            } catch {
+                report(error)
+            }
+        case .close(let id):
+            guard let slug = terminals.book.slug(of: id) else { return }
+            terminals.close(id)
+            if selectedSessions[slug] == id { selectedSessions[slug] = nil }
+            // The last tab is closed: back to the settings of the profile.
+            if terminals.book.sessions(for: slug).isEmpty {
+                setDetailTab(.settings, for: slug)
+            }
+        }
     }
 
     /// Puts the folder of a launch that worked into the list of the profile.
@@ -1293,8 +1373,9 @@ final class AppModel {
         cancelDelete()
 
         // The process of the profile ends before its folder goes away.
-        terminals.close(profile.slug)
+        terminals.closeAll(profile.slug)
         detailTabs[profile.slug] = nil
+        selectedSessions[profile.slug] = nil
 
         let removal: RemovalReport
         do {

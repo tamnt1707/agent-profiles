@@ -398,13 +398,9 @@
 "terminal.empty.title" = "Not running";
 "terminal.empty.message" = "Run this profile here. It keeps running while you look at another profile, and you can come back to it.";
 "terminal.run" = "Run";
-"terminal.stop" = "Stop";
-"terminal.restart" = "Run again";
-"terminal.close" = "Close";
 "terminal.folder" = "Folder: %@";
 "sidebar.terminal.running" = "Running in the terminal of the app";
 "status.embeddedRunning" = "%@ is running in the terminal of the app.";
-"status.embeddedAlreadyRunning" = "%@ already runs in another folder. Close or stop its terminal first.";
 "settings.embedded" = "Open profiles in the terminal inside the app";
 "settings.embedded.hint" = "A profile keeps running while you look at another one. Turn it off to use Terminal or iTerm2 below.";
 "quit.title" = "Quit while terminals are running?";
@@ -418,3 +414,12 @@
 "editor.agent.checking" = "Looking for the CLI on this Mac…";
 "editor.agent.missing" = "%@ was not found on this Mac. Install it, then check again.";
 "editor.agent.recheck" = "Check again";
+
+/* Terminal tabs */
+"terminal.restart" = "Restart session";
+"terminal.new" = "New session";
+"terminal.closeSession" = "Close session";
+"terminal.session.label" = "Session %d";
+"terminal.confirm.restart.title" = "Restart this running session?";
+"terminal.confirm.close.title" = "Close this running session?";
+"terminal.confirm.message" = "The process in this session is still running. It will end.";

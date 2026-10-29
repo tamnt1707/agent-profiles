@@ -220,7 +220,7 @@ private struct ProfileRow: View {
             }
             Spacer(minLength: 4)
             // The process of the profile runs in the terminal of the app.
-            if model.terminals.book.state(for: profile.slug) == .running {
+            if model.terminals.book.runningCount(for: profile.slug) > 0 {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: .systemGreen))

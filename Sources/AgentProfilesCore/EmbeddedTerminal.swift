@@ -43,58 +43,116 @@ public enum TerminalSessionState: Equatable, Sendable {
     case exited(code: Int32?)
 }
 
-/// The embedded terminals of the app, one per profile, by slug.
+/// One tab of the terminal of a profile.
+public struct TerminalSession: Equatable, Sendable, Identifiable {
+    /// The identity of the tab. Never used again, not even after the tab is closed.
+    public let id: Int
+    /// The number shown in the title of the tab: 1, 2, 3… for each profile.
+    public let number: Int
+    public var state: TerminalSessionState
+    /// The number of the process that runs in the tab. It changes when the tab is restarted.
+    fileprivate(set) var run: Int
+}
+
+/// The embedded terminals of the app: any number of tabs for each profile.
 ///
-/// A session that is started again gets a new run number. The end of an older
-/// run, which can arrive late, is then ignored: it must not mark the new run
-/// as ended.
+/// A tab that is restarted gets a new run number. The end of an older run,
+/// which can arrive late, is then ignored: it must not mark the new run as ended.
 public struct TerminalSessionBook: Equatable, Sendable {
-    private var states: [String: TerminalSessionState] = [:]
-    private var runs: [String: Int] = [:]
+    private var byProfile: [String: [TerminalSession]] = [:]
+    private var nextNumber: [String: Int] = [:]
+    private var lastID = 0
     private var lastRun = 0
 
     public init() {}
 
-    /// The state of the terminal of a profile, `nil` when it has none.
-    public func state(for slug: String) -> TerminalSessionState? {
-        states[slug]
+    /// The tabs of a profile, in the order they were opened.
+    public func sessions(for slug: String) -> [TerminalSession] {
+        byProfile[slug] ?? []
     }
 
-    /// The slugs that have a running process, sorted.
-    public var runningSlugs: [String] {
-        states.filter { $0.value == .running }.map(\.key).sorted()
+    /// One tab, `nil` when it does not exist.
+    public func session(_ id: Int) -> TerminalSession? {
+        byProfile.values.lazy.flatMap { $0 }.first { $0.id == id }
     }
 
-    /// A process was started for the profile. Returns the number of this run.
+    /// The profile a tab belongs to.
+    public func slug(of id: Int) -> String? {
+        byProfile.first { $0.value.contains { $0.id == id } }?.key
+    }
+
+    /// How many processes run, in all profiles.
+    public var runningCount: Int {
+        byProfile.values.reduce(0) { $0 + $1.filter { $0.state == .running }.count }
+    }
+
+    /// How many processes run in a profile.
+    public func runningCount(for slug: String) -> Int {
+        sessions(for: slug).filter { $0.state == .running }.count
+    }
+
+    /// A tab is opened for the profile, with a process that starts now.
+    /// Returns its identity and the number of the run.
     @discardableResult
-    public mutating func started(_ slug: String) -> Int {
+    public mutating func open(_ slug: String) -> (id: Int, run: Int) {
+        lastID += 1
         lastRun += 1
-        runs[slug] = lastRun
-        states[slug] = .running
+        let number = (nextNumber[slug] ?? 0) + 1
+        nextNumber[slug] = number
+        byProfile[slug, default: []].append(
+            TerminalSession(id: lastID, number: number, state: .running, run: lastRun)
+        )
+        return (lastID, lastRun)
+    }
+
+    /// A new process starts in an existing tab. Returns the new run number, `nil` when there is no such tab.
+    @discardableResult
+    public mutating func restart(_ id: Int) -> Int? {
+        guard let slug = slug(of: id), let index = byProfile[slug]?.firstIndex(where: { $0.id == id }) else {
+            return nil
+        }
+        lastRun += 1
+        byProfile[slug]?[index].run = lastRun
+        byProfile[slug]?[index].state = .running
         return lastRun
     }
 
     /// The process of the run ended. Returns `false` and changes nothing when
-    /// the run is not the current one of the profile.
+    /// the run is not the current one of the tab.
     @discardableResult
-    public mutating func exited(_ slug: String, run: Int, code: Int32?) -> Bool {
-        guard runs[slug] == run, states[slug] == .running else { return false }
-        states[slug] = .exited(code: code)
+    public mutating func exited(_ id: Int, run: Int, code: Int32?) -> Bool {
+        guard let slug = slug(of: id), let index = byProfile[slug]?.firstIndex(where: { $0.id == id }),
+              byProfile[slug]?[index].run == run, byProfile[slug]?[index].state == .running
+        else { return false }
+        byProfile[slug]?[index].state = .exited(code: code)
         return true
     }
 
-    /// The terminal of the profile is gone.
-    public mutating func closed(_ slug: String) {
-        states[slug] = nil
-        runs[slug] = nil
+    /// The tab is closed.
+    public mutating func close(_ id: Int) {
+        guard let slug = slug(of: id) else { return }
+        byProfile[slug]?.removeAll { $0.id == id }
+        if byProfile[slug]?.isEmpty == true {
+            byProfile[slug] = nil
+            nextNumber[slug] = nil
+        }
     }
 
-    /// The profile has a new slug: its terminal goes with it.
+    /// Every tab of the profile is closed. Returns their identities.
+    @discardableResult
+    public mutating func closeAll(_ slug: String) -> [Int] {
+        let ids = sessions(for: slug).map(\.id)
+        byProfile[slug] = nil
+        nextNumber[slug] = nil
+        return ids
+    }
+
+    /// The profile has a new slug: its tabs go with it.
     public mutating func renamed(from old: String, to new: String) {
-        guard old != new, let state = states[old] else { return }
-        states[new] = state
-        runs[new] = runs[old]
-        states[old] = nil
-        runs[old] = nil
+        guard old != new, let sessions = byProfile[old] else { return }
+        byProfile[new] = sessions
+        nextNumber[new] = nextNumber[old]
+        byProfile[old] = nil
+        nextNumber[old] = nil
     }
 }

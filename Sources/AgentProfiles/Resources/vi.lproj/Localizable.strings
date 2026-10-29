@@ -398,13 +398,9 @@
 "terminal.empty.title" = "Chưa chạy";
 "terminal.empty.message" = "Chạy profile này ở đây. Nó vẫn chạy khi bạn xem profile khác, và bạn quay lại dùng tiếp được.";
 "terminal.run" = "Chạy";
-"terminal.stop" = "Dừng";
-"terminal.restart" = "Chạy lại";
-"terminal.close" = "Đóng";
 "terminal.folder" = "Thư mục: %@";
 "sidebar.terminal.running" = "Đang chạy trong terminal của ứng dụng";
 "status.embeddedRunning" = "%@ đang chạy trong terminal của ứng dụng.";
-"status.embeddedAlreadyRunning" = "%@ đang chạy ở thư mục khác. Hãy đóng hoặc dừng terminal của nó trước.";
 "settings.embedded" = "Mở profile trong terminal ngay trong ứng dụng";
 "settings.embedded.hint" = "Profile vẫn chạy khi bạn xem profile khác. Tắt để dùng Terminal hoặc iTerm2 bên dưới.";
 "quit.title" = "Thoát khi vẫn còn terminal đang chạy?";
@@ -418,3 +414,12 @@
 "editor.agent.checking" = "Đang tìm CLI trên máy này…";
 "editor.agent.missing" = "Không tìm thấy %@ trên máy này. Hãy cài đặt rồi kiểm tra lại.";
 "editor.agent.recheck" = "Kiểm tra lại";
+
+/* Terminal tabs */
+"terminal.restart" = "Khởi động lại phiên";
+"terminal.new" = "Phiên mới";
+"terminal.closeSession" = "Đóng phiên";
+"terminal.session.label" = "Phiên %d";
+"terminal.confirm.restart.title" = "Khởi động lại phiên đang chạy này?";
+"terminal.confirm.close.title" = "Đóng phiên đang chạy này?";
+"terminal.confirm.message" = "Tiến trình trong phiên này vẫn đang chạy. Nó sẽ bị kết thúc.";
