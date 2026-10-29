@@ -855,6 +855,10 @@ final class AppModel {
         menuBarError = nil
         let terminal = data.terminal
         let paths = store.paths
+        // The command is the one that "Copy command" copies, when it runs from
+        // any terminal; without the PATH setup the full path of the launcher is typed.
+        refreshPathStatus()
+        let shortName = isCommandOnPath
         // The terminal is started off the main thread, so the window keeps responding.
         Task {
             defer { launchGuard.end(key) }
@@ -865,7 +869,8 @@ final class AppModel {
                             profile: profile,
                             terminal: terminal,
                             paths: paths,
-                            workdirOverride: plan.folder
+                            workdirOverride: plan.folder,
+                            useShortName: shortName
                         )
                     },
                     remember: { folder in
@@ -1092,14 +1097,20 @@ final class AppModel {
         copyToPasteboard(slug: profile.slug)
     }
 
+    /// `true` when the short command of a profile runs in a new terminal:
+    /// the PATH setup is done (by the app or by hand). Read after `refreshPathStatus()`.
+    private var isCommandOnPath: Bool {
+        loginShellStatus == .configured || loginShellStatus == .manual
+            || loginShellStatus == .partlyConfigured
+    }
+
     private func copyToPasteboard(slug: String) {
         let text = store.paths.command(for: slug)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         refreshPathStatus()
         // Without the PATH setup the short name would not run: say so.
-        let onPath = loginShellStatus == .configured || loginShellStatus == .manual
-            || loginShellStatus == .partlyConfigured
+        let onPath = isCommandOnPath
         status = Status(kind: onPath ? .success : .hint,
                         text: loc.t(onPath ? "status.copied" : "status.copiedNoPath", text))
     }

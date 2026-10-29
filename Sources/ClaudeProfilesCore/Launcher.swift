@@ -10,6 +10,11 @@ public enum Launcher {
     /// `workdirOverride` replaces the working directory of the profile for one
     /// launch (the folder chosen from the menu bar). An empty override means no `cd`.
     ///
+    /// With `useShortName` the command is the name the user types
+    /// (`claude-<slug>`, the one that "Copy command" copies) and not the full
+    /// path of the script. That works only when `bin/` is on the PATH of the
+    /// shell that receives the command.
+    ///
     /// - Throws: `ProfileError.unsafeFolderToOpen` when the folder, the script
     ///   or the home folder of the profile holds a control character. The
     ///   command is typed into a live shell, which acts on such a character
@@ -18,7 +23,8 @@ public enum Launcher {
     public static func command(
         for profile: Profile,
         paths: Paths,
-        workdirOverride: String? = nil
+        workdirOverride: String? = nil,
+        useShortName: Bool = false
     ) throws -> String {
         var command = ""
         let directory = workdirOverride
@@ -40,7 +46,10 @@ public enum Launcher {
         guard FolderPathSafety.isSafe(paths.home.path) else {
             throw ProfileError.unsafeFolderToOpen(paths.home.path)
         }
-        command += ShellQuote.quote(script)
+        // The slug is a safe path component: the short name needs no quoting.
+        command += useShortName && Slug.isSafe(profile.slug)
+            ? paths.command(for: profile.slug)
+            : ShellQuote.quote(script)
         return command
     }
 
@@ -119,9 +128,12 @@ public enum Launcher {
         terminal: TerminalApp,
         paths: Paths,
         workdirOverride: String? = nil,
+        useShortName: Bool = false,
         runner: ProcessRunner = SystemProcessRunner()
     ) throws -> Int32 {
-        let shellCommand = try command(for: profile, paths: paths, workdirOverride: workdirOverride)
+        let shellCommand = try command(
+            for: profile, paths: paths, workdirOverride: workdirOverride, useShortName: useShortName
+        )
         let script = appleScript(command: shellCommand, terminal: terminal)
         let result: ProcessResult
         do {
@@ -149,10 +161,14 @@ public enum Launcher {
         terminal: TerminalApp,
         paths: Paths,
         workdirOverride: String? = nil,
+        useShortName: Bool = false,
         runner: ProcessRunner = SystemProcessRunner()
     ) async throws -> Int32 {
         try await Task.detached(priority: .userInitiated) {
-            try launch(profile: profile, terminal: terminal, paths: paths, workdirOverride: workdirOverride, runner: runner)
+            try launch(
+                profile: profile, terminal: terminal, paths: paths,
+                workdirOverride: workdirOverride, useShortName: useShortName, runner: runner
+            )
         }.value
     }
 }

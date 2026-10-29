@@ -15,6 +15,24 @@ final class LauncherTests: XCTestCase {
         paths = nil
     }
 
+    func testShortNameTypesTheCommandOfCopyCommand() throws {
+        var profile = Profile.sample(slug: "mini")
+        profile.workdir = "/work/app"
+        XCTAssertEqual(
+            try Launcher.command(for: profile, paths: paths, useShortName: true),
+            "cd '/work/app' && claude-mini"
+        )
+        XCTAssertEqual(
+            try Launcher.command(for: profile, paths: paths, workdirOverride: "/other", useShortName: true),
+            "cd '/other' && claude-mini"
+        )
+        // Without the flag the full path of the launcher is typed, as before.
+        XCTAssertEqual(
+            try Launcher.command(for: profile, paths: paths),
+            "cd '/work/app' && '\(paths.script(for: "mini").path)'"
+        )
+    }
+
     func testCommandWithoutWorkdir() throws {
         let command = try Launcher.command(for: Profile.sample(), paths: paths)
         XCTAssertEqual(command, "'\(paths.script(for: "test").path)'")
