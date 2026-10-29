@@ -64,6 +64,8 @@ public struct Profile: Codable, Equatable, Sendable {
     public var priceInputPerMillion: Double?
     /// Estimated cost: USD per million output tokens. `nil` when not set.
     public var priceOutputPerMillion: Double?
+    /// The command line agent this profile runs. Written only when it is not Claude Code.
+    public var agent: AgentKind
 
     public init(
         name: String = "",
@@ -80,7 +82,8 @@ public struct Profile: Codable, Equatable, Sendable {
         shareFromDefault: Bool = false,
         recentDirs: [String] = [],
         priceInputPerMillion: Double? = nil,
-        priceOutputPerMillion: Double? = nil
+        priceOutputPerMillion: Double? = nil,
+        agent: AgentKind = .default
     ) {
         self.name = name
         self.slug = slug
@@ -97,6 +100,7 @@ public struct Profile: Codable, Equatable, Sendable {
         self.recentDirs = recentDirs
         self.priceInputPerMillion = priceInputPerMillion
         self.priceOutputPerMillion = priceOutputPerMillion
+        self.agent = agent
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -115,6 +119,7 @@ public struct Profile: Codable, Equatable, Sendable {
         case recentDirs = "recent_dirs"
         case priceInputPerMillion = "price_input_per_million"
         case priceOutputPerMillion = "price_output_per_million"
+        case agent
     }
 
     public init(from decoder: Decoder) throws {
@@ -151,6 +156,8 @@ public struct Profile: Codable, Equatable, Sendable {
         // profiles unreadable: the next save writes the file without it.
         priceInputPerMillion = Self.lenientPrice(c, forKey: .priceInputPerMillion)
         priceOutputPerMillion = Self.lenientPrice(c, forKey: .priceOutputPerMillion)
+        // A file written before agents existed has no key: the profile runs Claude Code.
+        agent = (try? c.decode(AgentKind.self, forKey: .agent)) ?? .default
     }
 
     /// The price of the file, or `nil` when it is not there or is broken.
@@ -188,6 +195,10 @@ public struct Profile: Codable, Equatable, Sendable {
         // written exactly as the older app wrote it.
         try c.encodeIfPresent(priceInputPerMillion, forKey: .priceInputPerMillion)
         try c.encodeIfPresent(priceOutputPerMillion, forKey: .priceOutputPerMillion)
+        // Written only when it is not the default, so a file stays as the older app wrote it.
+        if agent != .default {
+            try c.encode(agent, forKey: .agent)
+        }
     }
 }
 

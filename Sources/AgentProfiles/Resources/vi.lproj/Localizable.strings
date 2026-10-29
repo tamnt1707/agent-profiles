@@ -410,3 +410,11 @@
 "quit.title" = "Thoát khi vẫn còn terminal đang chạy?";
 "quit.message" = "Còn %d terminal đang chạy. Thoát sẽ kết thúc chúng.";
 "quit.confirm" = "Thoát";
+
+/* Agent (CLI) of a profile */
+"editor.agent.label" = "CLI";
+"agent.claude" = "Claude Code";
+"editor.agent.installed" = "Đã cài tại %@";
+"editor.agent.checking" = "Đang tìm CLI trên máy này…";
+"editor.agent.missing" = "Không tìm thấy %@ trên máy này. Hãy cài đặt rồi kiểm tra lại.";
+"editor.agent.recheck" = "Kiểm tra lại";

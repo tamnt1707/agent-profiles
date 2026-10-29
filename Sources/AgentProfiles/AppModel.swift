@@ -76,6 +76,25 @@ final class AppModel {
     /// Set while the question about the copy is open.
     var isConfirmingUnshare: Bool = false
 
+    /// Which command line agents are installed on this Mac. Read when the app
+    /// starts and when a profile is created, never while drawing.
+    private(set) var agentInstalls: [AgentKind: AgentInstall] = [:]
+    /// `true` while the agents are being looked for.
+    private(set) var isDetectingAgents = false
+
+    /// Looks for the agents, off the main thread: the login shell may be slow.
+    func refreshAgents() {
+        guard !isDetectingAgents else { return }
+        isDetectingAgents = true
+        Task.detached(priority: .userInitiated) {
+            let found = AgentDetector.detectAll()
+            await MainActor.run {
+                self.agentInstalls = found
+                self.isDetectingAgents = false
+            }
+        }
+    }
+
     /// The terminals inside the app, one per profile.
     let terminals = TerminalSessions()
 
@@ -463,6 +482,7 @@ final class AppModel {
 
     /// Starts a new, empty profile.
     func newProfile() {
+        refreshAgents()
         cancelConnectionChecks()
         draft = DraftChanges.blankProfile
         draftIndex = nil

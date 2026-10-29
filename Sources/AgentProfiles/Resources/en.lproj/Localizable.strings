@@ -410,3 +410,11 @@
 "quit.title" = "Quit while terminals are running?";
 "quit.message" = "%d terminals are still running. Quitting ends them.";
 "quit.confirm" = "Quit";
+
+/* Agent (CLI) of a profile */
+"editor.agent.label" = "CLI";
+"agent.claude" = "Claude Code";
+"editor.agent.installed" = "Found at %@";
+"editor.agent.checking" = "Looking for the CLI on this Mac…";
+"editor.agent.missing" = "%@ was not found on this Mac. Install it, then check again.";
+"editor.agent.recheck" = "Check again";

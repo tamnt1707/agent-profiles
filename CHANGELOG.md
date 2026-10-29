@@ -24,6 +24,10 @@ Two new provider templates, and the colors of the connection checks now show.
   saved with an empty Base URL and no key.
 - **Xiaomi MiMo template.**
 - **Health dots in the menu bar.** Each profile in the menu bar launcher has the same dot as in the sidebar.
+- **Choose the CLI of a profile.** A new profile now has a *CLI* choice that lists the command line agents installed
+  on this Mac (found in the usual folders and through your login shell), with where each was found, or a warning and
+  *Check again* when it is missing. Only Claude Code is supported for now; other CLIs can be added later. The choice
+  is written to `profiles.json` only when it is not Claude Code, so existing files stay as they are.
 - **Terminal inside the app.** *Open in terminal* (and the menu bar) now runs the profile in a terminal inside the
   window, with a *Settings | Terminal* switch at the top of each saved profile. Opening the Terminal tab runs the
   profile by itself, in the same `claude-<name>` command that *Copy command* copies. Each profile keeps its own
@@ -61,6 +65,10 @@ Two new provider templates, and the colors of the connection checks now show.
   *Kiểm tra kết nối* được ẩn, profile có thư mục cấu hình riêng, và Claude Code sẽ yêu cầu đăng nhập ở lần đầu mở.
   *Dùng nhà cung cấp khác* đưa các ô trở lại. Profile kiểu này luôn được lưu với Base URL trống và không có key.
 - **Template Xiaomi MiMo.**
+- **Chọn CLI cho profile.** Profile mới có mục *CLI* liệt kê các agent dòng lệnh đã cài trên máy này (tìm trong các thư
+  mục thường dùng và qua login shell của bạn), kèm nơi tìm thấy, hoặc cảnh báo và nút *Kiểm tra lại* khi chưa cài. Hiện
+  chỉ hỗ trợ Claude Code; các CLI khác sẽ thêm sau. Lựa chọn chỉ được ghi vào `profiles.json` khi khác Claude Code, nên
+  các file cũ không đổi.
 - **Terminal ngay trong ứng dụng.** *Mở trong terminal* (và thanh menu) giờ chạy profile trong một terminal nằm trong
   cửa sổ, với thanh chuyển *Cấu hình | Terminal* ở đầu mỗi profile đã lưu. Mở tab Terminal là profile tự chạy, bằng
   đúng lệnh `claude-<tên>` mà *Sao chép lệnh* sao chép. Mỗi profile giữ phiên riêng: xem profile khác rồi quay lại,

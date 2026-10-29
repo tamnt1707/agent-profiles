@@ -48,6 +48,8 @@ struct ProfileEditorView: View {
 
     private var providerSection: some View {
         Section(model.loc.t("editor.provider.section")) {
+            agentRow
+
             if model.draftIndex == nil {
                 VStack(alignment: .leading, spacing: 4) {
                     Picker(model.loc.t("editor.preset.label"), selection: $presetID) {
@@ -150,6 +152,70 @@ struct ProfileEditorView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Agent
+
+    /// The command line agent of the profile: chosen among the installed ones
+    /// while the profile is new, shown as it is afterwards.
+    @ViewBuilder
+    private var agentRow: some View {
+        if let draft = model.draft {
+            let installed = AgentKind.allCases.filter { model.agentInstalls[$0]?.isInstalled == true }
+            VStack(alignment: .leading, spacing: 4) {
+                if model.draftIndex == nil {
+                    // Only the agents that are on this Mac can be chosen. The
+                    // chosen one is listed even when it is not found, so the picker never shows nothing.
+                    let choices = installed.contains(draft.agent) ? installed : installed + [draft.agent]
+                    Picker(model.loc.t("editor.agent.label"), selection: agentBinding()) {
+                        ForEach(choices, id: \.self) { agent in
+                            Text(model.loc.t("agent.\(agent.rawValue)")).tag(agent)
+                        }
+                    }
+                } else {
+                    LabeledContent(model.loc.t("editor.agent.label")) {
+                        Text(model.loc.t("agent.\(draft.agent.rawValue)"))
+                    }
+                }
+                agentNote(for: draft.agent)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func agentNote(for agent: AgentKind) -> some View {
+        let name = model.loc.t("agent.\(agent.rawValue)")
+        if let path = model.agentInstalls[agent]?.path {
+            Text(model.loc.t("editor.agent.installed", path))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        } else if model.isDetectingAgents || model.agentInstalls.isEmpty {
+            Text(model.loc.t("editor.agent.checking"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            HStack(spacing: 8) {
+                Label(model.loc.t("editor.agent.missing", name), systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(Color(nsColor: .systemOrange))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(model.loc.t("editor.agent.recheck")) { model.refreshAgents() }
+                    .buttonStyle(.link)
+                    .font(.callout)
+            }
+        }
+    }
+
+    private func agentBinding() -> Binding<AgentKind> {
+        Binding(
+            get: { model.draft?.agent ?? .default },
+            set: { value in
+                guard SettingsChange.isDifferent(model.draft?.agent, value) else { return }
+                model.draft?.agent = value
+            }
+        )
     }
 
     // MARK: - Orchestration kit

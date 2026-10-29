@@ -730,6 +730,10 @@ enum JSONText {
         if let price = profile.priceOutputPerMillion {
             fields.append("\"price_output_per_million\": \(price)")
         }
+        // Written only when it is not the default agent, like the keys above.
+        if profile.agent != .default {
+            fields.append("\"agent\": \(escape(profile.agent.rawValue))")
+        }
         var out = pad + "{\n"
         out += fields.map { inner + $0 }.joined(separator: ",\n") + "\n"
         out += "\(pad)}"
