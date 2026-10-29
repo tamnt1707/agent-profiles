@@ -68,18 +68,33 @@ struct ContentView: View {
 
     // MARK: - Sidebar
 
+    private func row(_ profile: Profile) -> some View {
+        ProfileRow(model: model, profile: profile)
+            .tag(profile.slug)
+            .contextMenu {
+                // The menu acts on the row that was clicked, not on the edited profile.
+                Button(model.loc.t("actions.copyCommand")) { model.copyCommand(for: profile) }
+                Button(model.loc.t("actions.reveal")) { model.revealFolder(for: profile) }
+                // The default setup is the user's own ~/.claude: it has no Delete.
+                if !profile.isDefaultClaude {
+                    Divider()
+                    Button(model.loc.t("actions.delete"), role: .destructive) { model.requestDelete(of: profile) }
+                }
+            }
+    }
+
     private var sidebar: some View {
         List(selection: $model.selectedSlug) {
-            ForEach(model.data.profiles, id: \.slug) { profile in
-                ProfileRow(model: model, profile: profile)
-                    .tag(profile.slug)
-                    .contextMenu {
-                        // The menu acts on the row that was clicked, not on the edited profile.
-                        Button(model.loc.t("actions.copyCommand")) { model.copyCommand(for: profile) }
-                        Button(model.loc.t("actions.reveal")) { model.revealFolder(for: profile) }
-                        Divider()
-                        Button(model.loc.t("actions.delete"), role: .destructive) { model.requestDelete(of: profile) }
+            // The agents the app created come first, the default one below.
+            if !model.userProfiles.isEmpty {
+                Section(model.loc.t("sidebar.section.app")) {
+                    ForEach(model.userProfiles, id: \.slug) { profile in
+                        row(profile)
                     }
+                }
+            }
+            Section(model.loc.t("sidebar.section.default")) {
+                row(.defaultClaude)
             }
         }
         .listStyle(.sidebar)
@@ -117,7 +132,7 @@ struct ContentView: View {
             }
         }
         .overlay {
-            if model.data.profiles.isEmpty {
+            if model.userProfiles.isEmpty {
                 // A compact empty state: the sidebar is narrow, so the
                 // title and the text use smaller styles than the default.
                 VStack(spacing: 8) {
@@ -217,9 +232,9 @@ private struct ProfileRow: View {
                 )
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(profile.name.isEmpty ? profile.slug : profile.name)
+                Text(profile.isDefaultClaude ? model.loc.t("sidebar.default.name") : (profile.name.isEmpty ? profile.slug : profile.name))
                     .font(.body)
-                Text("claude-\(profile.slug)")
+                Text(model.store.paths.command(for: profile.slug))
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
             }

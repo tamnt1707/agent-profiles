@@ -125,7 +125,13 @@ final class HeartbeatTests: XCTestCase {
         let data = try agent(LaunchctlStub()).plist(for: profile(heartbeat: beat))
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
         XCTAssertEqual(plist["Label"] as? String, "com.agentprofiles.heartbeat.work")
-        XCTAssertEqual(plist["ProgramArguments"] as? [String], [paths.script(for: "work").path, "-p", "ping"])
+        XCTAssertEqual(
+            plist["ProgramArguments"] as? [String],
+            ["/bin/sh", "-c", HeartbeatAgent.runner, "heartbeat", paths.script(for: "work").path, "-p", "ping"]
+        )
+        let env = try XCTUnwrap(plist["EnvironmentVariables"] as? [String: String])
+        XCTAssertEqual(env["HEARTBEAT_RESULT"], agent(LaunchctlStub()).resultURL(for: "work").path)
+        XCTAssertNil(plist["StandardOutPath"], "nothing is appended to a log")
         XCTAssertEqual((plist["EnvironmentVariables"] as? [String: String])?["PATH"], "/opt/bin:/usr/bin")
         let entries = try XCTUnwrap(plist["StartCalendarInterval"] as? [[String: Int]])
         XCTAssertEqual(entries, [["Hour": 5, "Minute": 0, "Weekday": 2]])
@@ -208,5 +214,147 @@ final class HeartbeatTests: XCTestCase {
         let stub = LaunchctlStub()
         try agent(stub).runNow(slug: "work")
         XCTAssertEqual(stub.calls.last, ["kickstart", "gui/501/com.agentprofiles.heartbeat.work"])
+    }
+
+    // MARK: - Complete removal
+
+    func testRemovingTheAgentDeletesItsLogAndTheEmptyFolder() throws {
+        let stub = LaunchctlStub()
+        let beat = Heartbeat(enabled: true, times: [time("05:00")])
+        let a = agent(stub)
+        try a.apply(profile(heartbeat: beat))
+        try Data("pong".utf8).write(to: a.resultURL(for: "work"))
+        XCTAssertTrue(a.hasTraces(slug: "work"))
+        XCTAssertTrue(a.remove(slug: "work"))
+        XCTAssertFalse(a.hasTraces(slug: "work"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.resultURL(for: "work").deletingLastPathComponent().path))
+    }
+
+    func testSyncDeletesTheLogOfAProfileThatIsGone() throws {
+        let stub = LaunchctlStub()
+        let a = agent(stub)
+        try FileManager.default.createDirectory(at: a.resultURL(for: "gone").deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: a.resultURL(for: "gone"))
+        a.sync([])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.resultURL(for: "gone").path))
+    }
+
+    func testStoreRemoveTakesTheHeartbeatWithIt() throws {
+        let stub = LaunchctlStub()
+        let store = Store(paths: paths, keys: InMemoryKeyStore(), heartbeatRunner: stub)
+        let p = profile(heartbeat: Heartbeat(enabled: true, times: [time("05:00")]))
+        try store.materialize(p)
+        let a = HeartbeatAgent(paths: paths, runner: stub, userID: 501, searchPath: { "/usr/bin" })
+        try a.apply(p)
+        let report = try store.remove(p)
+        XCTAssertTrue(report.removedHeartbeat)
+        XCTAssertTrue(report.failures.isEmpty)
+        XCTAssertFalse(a.hasTraces(slug: "work"))
+    }
+
+    func testTheDeleteDialogListsTheScheduleOnlyWhenThereIsOne() {
+        var data = AppData()
+        data.profiles = [profile("a", heartbeat: .off), profile("b", heartbeat: Heartbeat(enabled: true, times: [time("05:00")]))]
+        XCTAssertFalse(DeleteTarget(index: 0, in: data, paths: paths, measure: { _ in nil })!.items.contains(.schedule))
+        XCTAssertTrue(DeleteTarget(index: 1, in: data, paths: paths, measure: { _ in nil })!.items.contains(.schedule))
+    }
+
+    // MARK: - The default setup
+
+    func testTheDefaultSetupRunsTheCLIItself() throws {
+        let a = HeartbeatAgent(paths: paths, runner: LaunchctlStub(), userID: 501, searchPath: { "/usr/bin" }, cliPath: { "/opt/bin/claude" })
+        var p = Profile.defaultClaude
+        p.heartbeat = Heartbeat(enabled: true, times: [time("05:00")])
+        let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: a.plist(for: p), format: nil) as? [String: Any])
+        XCTAssertEqual(Array((plist["ProgramArguments"] as? [String] ?? []).suffix(3)), ["/opt/bin/claude", "-p", "ping"])
+    }
+
+    func testTheDefaultSetupWithoutACLIFails() {
+        let a = HeartbeatAgent(paths: paths, runner: LaunchctlStub(), userID: 501, searchPath: { "" }, cliPath: { nil })
+        var p = Profile.defaultClaude
+        p.heartbeat = Heartbeat(enabled: true, times: [time("05:00")])
+        XCTAssertThrowsError(try a.plist(for: p))
+    }
+
+    func testTheDefaultHeartbeatIsKeptInTheDataFile() throws {
+        var data = AppData()
+        data.defaultHeartbeat = Heartbeat(enabled: true, times: [time("05:00")], days: [1])
+        let text = JSONText.encode(data)
+        XCTAssertTrue(text.contains("\"default_heartbeat\""))
+        XCTAssertEqual(try JSONDecoder().decode(AppData.self, from: Data(text.utf8)).defaultHeartbeat, data.defaultHeartbeat)
+        XCTAssertFalse(JSONText.encode(AppData()).contains("default_heartbeat"))
+    }
+
+    // MARK: - The result of the last run
+
+    func testTheResultFileIsParsed() throws {
+        let result = try XCTUnwrap(HeartbeatResult(parsing: "1790000000\n0\npong\n"))
+        XCTAssertEqual(result.date, Date(timeIntervalSince1970: 1_790_000_000))
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(result.output, "pong")
+        let failed = try XCTUnwrap(HeartbeatResult(parsing: "1790000000\n1\nAPI Error: 401"))
+        XCTAssertFalse(failed.isSuccess)
+        XCTAssertEqual(failed.output, "API Error: 401")
+        XCTAssertEqual(HeartbeatResult(parsing: "1790000000\n0")?.output, "")
+    }
+
+    func testABrokenResultFileIsNotAResult() {
+        XCTAssertNil(HeartbeatResult(parsing: ""))
+        XCTAssertNil(HeartbeatResult(parsing: "soon\n0\nx"))
+        XCTAssertNil(HeartbeatResult(parsing: "1790000000\nzero\nx"))
+        XCTAssertNil(HeartbeatResult(parsing: "0\n0\nx"))
+    }
+
+    func testLastResultReadsTheFileOfTheSlug() throws {
+        let a = agent(LaunchctlStub())
+        XCTAssertNil(a.lastResult(slug: "work"))
+        try FileManager.default.createDirectory(at: a.resultURL(for: "work").deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("1790000000\n0\npong".utf8).write(to: a.resultURL(for: "work"))
+        XCTAssertEqual(a.lastResult(slug: "work")?.output, "pong")
+    }
+
+    /// The shell of the agent really runs, writes one file and overwrites it on the next run.
+    func testTheRunnerWritesOneFileThatIsReplacedEachRun() throws {
+        let result = home.appendingPathComponent("last").path
+        func run(_ program: String, _ arguments: [String]) throws -> Int32 {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", HeartbeatAgent.runner, "heartbeat", program] + arguments
+            process.environment = ["HEARTBEAT_RESULT": result, "PATH": "/usr/bin:/bin"]
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus
+        }
+        XCTAssertEqual(try run("/bin/echo", ["-p", "pong"]), 0)
+        XCTAssertEqual(HeartbeatResult(parsing: try String(contentsOfFile: result, encoding: .utf8))?.output, "-p pong")
+
+        XCTAssertEqual(try run("/usr/bin/false", []), 1)
+        let second = try XCTUnwrap(HeartbeatResult(parsing: try String(contentsOfFile: result, encoding: .utf8)))
+        XCTAssertEqual(second.exitCode, 1)
+        XCTAssertFalse(second.output.contains("pong"), "only the last run is kept")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: result + ".tmp"))
+    }
+
+    func testTheOutputIsCutSoTheFileStaysSmall() throws {
+        let result = home.appendingPathComponent("big").path
+        let long = String(repeating: "a", count: 10_000)
+        let run = Process()
+        run.executableURL = URL(fileURLWithPath: "/bin/sh")
+        run.arguments = ["-c", HeartbeatAgent.runner, "heartbeat", "/usr/bin/printf", long]
+        run.environment = ["HEARTBEAT_RESULT": result, "PATH": "/usr/bin:/bin"]
+        try run.run()
+        run.waitUntilExit()
+        let size = (try FileManager.default.attributesOfItem(atPath: result)[.size] as? Int) ?? 0
+        XCTAssertLessThan(size, 2100)
+    }
+
+    func testApplyDeletesTheOldAppendedLog() throws {
+        let a = agent(LaunchctlStub())
+        let folder = a.resultURL(for: "work").deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let old = folder.appendingPathComponent("work.log")
+        try Data("pong\npong\n".utf8).write(to: old)
+        try a.apply(profile(heartbeat: Heartbeat(enabled: true, times: [time("05:00")])))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
     }
 }

@@ -21,6 +21,8 @@ public enum RemovalFailure: Equatable, Sendable {
     case script(String)
     /// The config folder (the path).
     case home(String)
+    /// The schedule of the heartbeat: its agent or its log (the path).
+    case heartbeat(String)
     /// The entry in `profiles.json`.
     case dataFile
 }
@@ -33,6 +35,8 @@ public struct RemovalReport: Equatable, Sendable {
     public var removedScript: Bool
     /// The config folder is gone.
     public var removedHome: Bool
+    /// The agent of the heartbeat and its log are gone (`false` when it had none).
+    public var removedHeartbeat: Bool
     /// What is still on the disk.
     public var failures: [RemovalFailure]
 
@@ -40,11 +44,13 @@ public struct RemovalReport: Equatable, Sendable {
         removedKey: Bool = false,
         removedScript: Bool = false,
         removedHome: Bool = false,
+        removedHeartbeat: Bool = false,
         failures: [RemovalFailure] = []
     ) {
         self.removedKey = removedKey
         self.removedScript = removedScript
         self.removedHome = removedHome
+        self.removedHeartbeat = removedHeartbeat
         self.failures = failures
     }
 }
@@ -117,16 +123,29 @@ public struct Store {
     /// Writes the copy of an unreadable file. Injected by tests to make the copy fail.
     private let writeBackup: (Data, URL) throws -> Void
 
-    public init(paths: Paths = Paths(), keys: KeyStore = KeychainStore()) {
-        self.init(paths: paths, keys: keys, writeBackup: { bytes, target in
+    /// Runs `launchctl` for the heartbeat agents. Injected by tests.
+    private let heartbeatRunner: ProcessRunner
+
+    public init(
+        paths: Paths = Paths(),
+        keys: KeyStore = KeychainStore(),
+        heartbeatRunner: ProcessRunner = SystemProcessRunner()
+    ) {
+        self.init(paths: paths, keys: keys, heartbeatRunner: heartbeatRunner, writeBackup: { bytes, target in
             try bytes.write(to: target, options: .withoutOverwriting)
         })
     }
 
-    init(paths: Paths, keys: KeyStore, writeBackup: @escaping (Data, URL) throws -> Void) {
+    init(
+        paths: Paths,
+        keys: KeyStore,
+        heartbeatRunner: ProcessRunner = SystemProcessRunner(),
+        writeBackup: @escaping (Data, URL) throws -> Void
+    ) {
         self.paths = paths
         self.keys = keys
         self.writeBackup = writeBackup
+        self.heartbeatRunner = heartbeatRunner
     }
 
     /// `true` when the last `load()` could not read `profiles.json`. Automatic
@@ -339,6 +358,8 @@ public struct Store {
 
     /// Writes the launcher, creates the isolated config folder and the shared links.
     public func materialize(_ profile: Profile, strings: ScriptStrings = .english) throws {
+        // The default setup has no launcher and no folder of ours.
+        guard !profile.isDefaultClaude else { return }
         let manager = FileManager.default
         try manager.createDirectory(at: paths.binDir, withIntermediateDirectories: true)
         let scriptURL = paths.script(for: profile.slug)
@@ -601,6 +622,8 @@ public struct Store {
     /// failed, and the leftovers are reported so the user can remove them by
     /// hand.
     public func remove(_ profile: Profile) throws -> RemovalReport {
+        // The default setup is the user's own `~/.claude`: never removed.
+        guard !profile.isDefaultClaude else { throw ProfileError.unsafeDeletePath(paths.defaultClaudeDir.path) }
         let home = try validatedHomePath(for: profile.slug)
         var report = RemovalReport()
 
@@ -628,6 +651,19 @@ public struct Store {
             } else {
                 report.failures.append(.script(script.path))
             }
+        }
+
+        // 2b. The agent of the heartbeat and its log, if the profile had any.
+        let heartbeat = HeartbeatAgent(paths: paths, runner: heartbeatRunner)
+        if heartbeat.hasTraces(slug: profile.slug) {
+            if heartbeat.remove(slug: profile.slug) {
+                report.removedHeartbeat = true
+            } else {
+                report.failures.append(.heartbeat(heartbeat.plistURL(for: profile.slug).path))
+            }
+        } else {
+            // Not loaded from a file either: make sure launchd forgets it.
+            heartbeat.remove(slug: profile.slug)
         }
 
         // 3. The config folder, even when the profile is not isolated.
@@ -669,13 +705,15 @@ enum JSONText {
         var out = "{\n"
         out += "  \"terminal\": \(escape(data.terminal.rawValue)),\n"
         out += "  \"profiles\": "
-        if data.profiles.isEmpty {
+        // The default setup lives in memory only.
+        let profiles = data.profiles.filter { !$0.isDefaultClaude }
+        if profiles.isEmpty {
             out += "[],\n"
         } else {
             out += "[\n"
-            for (index, profile) in data.profiles.enumerated() {
+            for (index, profile) in profiles.enumerated() {
                 out += encode(profile, indent: 4)
-                out += index == data.profiles.count - 1 ? "\n" : ",\n"
+                out += index == profiles.count - 1 ? "\n" : ",\n"
             }
             out += "  ],\n"
         }
@@ -694,6 +732,9 @@ enum JSONText {
         }
         if !data.autoCheckConnections {
             out += ",\n  \"auto_check_connections\": false"
+        }
+        if data.defaultHeartbeat != .off {
+            out += ",\n  \"default_heartbeat\": " + data.defaultHeartbeat.jsonText(indent: 2, escape: escape)
         }
         if let lastUpdateCheck = data.lastUpdateCheck {
             out += ",\n  \"last_update_check\": \(escape(Timestamp.string(from: lastUpdateCheck)))"

@@ -453,6 +453,22 @@
 "heartbeat.day.5" = "Fri";
 "heartbeat.day.6" = "Sat";
 "heartbeat.day.7" = "Sun";
-"heartbeat.ran" = "The ping was sent. The answer is in ~/.claude-profiles/heartbeat/.";
+"heartbeat.ran" = "Asked to run. The result shows under Heartbeat in a few seconds.";
 "heartbeat.failed" = "The schedule could not be set up for: %@";
 "error.heartbeat" = "The heartbeat could not be set up: %@";
+
+/* Default setup */
+"sidebar.section.app" = "Created by the app";
+"sidebar.section.default" = "Default";
+"sidebar.default.name" = "Default (Claude Code)";
+"default.section" = "Default Claude Code";
+"default.hint" = "Your own Claude Code setup in ~/.claude, the one plain `claude` uses. The app does not edit or delete it. You can open a terminal in it, see its usage and test the connection.";
+"default.folder" = "Config folder";
+"default.test" = "Test connection";
+"orch.default.warning" = "This is your own ~/.claude. Installing writes the agents and a block in CLAUDE.md there, and profiles that share these from ~/.claude get them too. You can remove the kit again from here.";
+"delete.item.schedule" = "the heartbeat schedule and its log";
+"delete.failure.schedule" = "the heartbeat schedule left at %@";
+"status.defaultSaved" = "Saved. Claude Code keeps its own settings in ~/.claude.";
+"heartbeat.last.ok" = "Last ping: %@, answered";
+"heartbeat.last.failed" = "Last ping: %@, failed (code %@)";
+"heartbeat.last.none" = "No ping has run yet.";

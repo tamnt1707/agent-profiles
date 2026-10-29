@@ -11,6 +11,22 @@ public struct HeartbeatAgent {
     /// from all others and nothing else in `LaunchAgents` is ever touched.
     public static let labelPrefix = "com.agentprofiles.heartbeat."
 
+    static let resultExtension = "last"
+
+    /// The shell that runs the CLI and writes the result file. Its arguments:
+    /// the CLI, then `-p ping`. The environment holds `HEARTBEAT_RESULT`.
+    ///
+    /// The file is: the time the run ended (seconds since 1970), the exit code,
+    /// then the output of the CLI cut to 2000 bytes. It is written to a
+    /// temporary file and moved over the old one, so a reader never sees half
+    /// of it and nothing older than the last run is kept.
+    static let runner = """
+    out="$("$@" 2>&1)"; code=$?
+    { printf '%s\\n%s\\n' "$(date +%s)" "$code"; printf '%s' "$out" | head -c 2000; } > "$HEARTBEAT_RESULT.tmp" \\
+      && mv "$HEARTBEAT_RESULT.tmp" "$HEARTBEAT_RESULT"
+    exit "$code"
+    """
+
     /// The words the CLI is sent.
     static let prompt = "ping"
 
@@ -18,6 +34,7 @@ public struct HeartbeatAgent {
     private let runner: ProcessRunner
     private let userID: UInt32
     private let searchPath: () -> String
+    private let cliPath: () -> String?
 
     /// - Parameters:
     ///   - runner: runs `launchctl`; the tests replace it with a stub.
@@ -26,8 +43,10 @@ public struct HeartbeatAgent {
         paths: Paths = Paths(),
         runner: ProcessRunner = SystemProcessRunner(),
         userID: UInt32 = getuid(),
-        searchPath: @escaping () -> String = HeartbeatAgent.defaultSearchPath
+        searchPath: @escaping () -> String = HeartbeatAgent.defaultSearchPath,
+        cliPath: @escaping () -> String? = { AgentDetector.detect(.claude).path }
     ) {
+        self.cliPath = cliPath
         self.paths = paths
         self.runner = runner
         self.userID = userID
@@ -51,10 +70,11 @@ public struct HeartbeatAgent {
         launchAgentsDir.appendingPathComponent(label(for: slug) + ".plist")
     }
 
-    /// `~/.claude-profiles/heartbeat/<slug>.log`: what the agent printed.
-    public func logURL(for slug: String) -> URL {
+    /// `~/.claude-profiles/heartbeat/<slug>.last`: the result of the last run,
+    /// and only of the last one. Each run writes the file again.
+    public func resultURL(for slug: String) -> URL {
         paths.root.appendingPathComponent("heartbeat", isDirectory: true)
-            .appendingPathComponent(slug + ".log")
+            .appendingPathComponent(slug + "." + Self.resultExtension)
     }
 
     private var launchAgentsDir: URL {
@@ -79,14 +99,25 @@ public struct HeartbeatAgent {
 
     /// The property list of the agent of `profile`.
     func plist(for profile: Profile) throws -> Data {
+        // The default setup has no launcher: the CLI itself is run.
+        let program: String
+        if profile.isDefaultClaude {
+            guard let cli = cliPath() else { throw ProfileError.heartbeatFailed("claude not found") }
+            program = cli
+        } else {
+            program = paths.script(for: profile.slug).path
+        }
         let dictionary: [String: Any] = [
             "Label": label(for: profile.slug),
-            "ProgramArguments": [paths.script(for: profile.slug).path, "-p", Self.prompt],
+            "ProgramArguments": ["/bin/sh", "-c", Self.runner, "heartbeat", program, "-p", Self.prompt],
             "StartCalendarInterval": Self.calendarEntries(for: profile.heartbeat),
-            "EnvironmentVariables": ["PATH": searchPath()],
+            "EnvironmentVariables": [
+                "PATH": searchPath(),
+                "HEARTBEAT_RESULT": resultURL(for: profile.slug).path,
+                // A key that no longer works must not keep the run waiting.
+                "CLAUDE_CODE_MAX_RETRIES": "0",
+            ],
             "WorkingDirectory": paths.home.path,
-            "StandardOutPath": logURL(for: profile.slug).path,
-            "StandardErrorPath": logURL(for: profile.slug).path,
             "ProcessType": "Background",
         ]
         return try PropertyListSerialization.data(fromPropertyList: dictionary, format: .xml, options: 0)
@@ -105,7 +136,10 @@ public struct HeartbeatAgent {
         let target = plistURL(for: profile.slug)
         let data = try plist(for: profile)
         try manager.createDirectory(at: launchAgentsDir, withIntermediateDirectories: true)
-        try manager.createDirectory(at: logURL(for: profile.slug).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try manager.createDirectory(at: resultURL(for: profile.slug).deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        // The log of an earlier version grew with every run: it is not used any more.
+        removeLegacyLog(slug: profile.slug)
 
         // Unchanged and loaded: nothing to do.
         if (try? Data(contentsOf: target)) == data, isLoaded(slug: profile.slug) { return }
@@ -116,11 +150,51 @@ public struct HeartbeatAgent {
         guard result.isSuccess else { throw ProfileError.heartbeatFailed("launchctl: " + result.output) }
     }
 
-    /// Unloads the agent of `slug` and deletes its file. Absent is fine.
-    public func remove(slug: String) {
-        guard Slug.isSafe(slug) else { return }
+    /// Unloads the agent of `slug` and deletes everything it left: its file and
+    /// its log. Absent is fine. Returns `true` when nothing of it is left.
+    @discardableResult
+    public func remove(slug: String) -> Bool {
+        guard Slug.isSafe(slug) else { return false }
         _ = try? runner.run(Self.launchctl, ["bootout", domain(for: slug)])
-        try? FileManager.default.removeItem(at: plistURL(for: slug))
+        let manager = FileManager.default
+        try? manager.removeItem(at: plistURL(for: slug))
+        try? manager.removeItem(at: resultURL(for: slug))
+        removeLegacyLog(slug: slug)
+        removeLogFolderIfEmpty()
+        return !manager.fileExists(atPath: plistURL(for: slug).path)
+            && !manager.fileExists(atPath: resultURL(for: slug).path)
+    }
+
+    /// Deletes `<slug>.log`, the appended log that an earlier version wrote.
+    private func removeLegacyLog(slug: String) {
+        try? FileManager.default.removeItem(
+            at: resultURL(for: slug).deletingPathExtension().appendingPathExtension("log")
+        )
+    }
+
+    /// `true` when the agent of `slug` or its log is on the disk.
+    public func hasTraces(slug: String) -> Bool {
+        let manager = FileManager.default
+        return manager.fileExists(atPath: plistURL(for: slug).path)
+            || manager.fileExists(atPath: resultURL(for: slug).path)
+    }
+
+    private func removeLogFolderIfEmpty() {
+        let folder = resultURL(for: "x").deletingLastPathComponent()
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        if names.isEmpty { try? FileManager.default.removeItem(at: folder) }
+    }
+
+    /// The slugs that have a log on the disk.
+    func resultSlugs() -> [String] {
+        let folder = resultURL(for: "x").deletingLastPathComponent()
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.compactMap { name in
+            guard let dot = name.lastIndex(of: "."),
+                  ["last", "log"].contains(String(name[name.index(after: dot)...])) else { return nil }
+            let slug = String(name[..<dot])
+            return Slug.isSafe(slug) ? slug : nil
+        }
     }
 
     /// Brings the agents in line with `profiles`: each active schedule has its
@@ -133,10 +207,17 @@ public struct HeartbeatAgent {
         for profile in profiles {
             do { try apply(profile) } catch { failed.append(profile.slug) }
         }
-        for slug in installedSlugs() where !wanted.contains(slug) {
+        for slug in Set(installedSlugs() + resultSlugs()) where !wanted.contains(slug) {
             remove(slug: slug)
         }
         return failed
+    }
+
+    /// The result of the last run of `slug`, `nil` when it never ran.
+    public func lastResult(slug: String) -> HeartbeatResult? {
+        guard Slug.isSafe(slug),
+              let text = try? String(contentsOf: resultURL(for: slug), encoding: .utf8) else { return nil }
+        return HeartbeatResult(parsing: text)
     }
 
     /// Runs the agent of `slug` once, now. It is how a schedule is tried.

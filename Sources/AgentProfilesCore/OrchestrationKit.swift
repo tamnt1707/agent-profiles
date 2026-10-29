@@ -215,7 +215,7 @@ extension Store {
             agentsPresent: 0, agentsCurrent: 0, hasBlock: false, blockCurrent: false,
             agentsRefusal: nil, claudeMdRefusal: nil, mode: mode, reason: reason
         )
-        guard let home = try? validatedHomePath(for: profile.slug),
+        guard let home = try? kitFolder(for: profile),
               SafeFileSystem.kind(of: home) == .directory else { return status }
 
         let agentsDir = home.appendingPathComponent("agents")
@@ -376,9 +376,15 @@ extension Store {
         }
     }
 
+    /// Where the kit of a profile goes: its own folder, or `~/.claude` for the
+    /// default setup. Only the kit is written there, never a delete.
+    func kitFolder(for profile: Profile) throws -> URL {
+        profile.isDefaultClaude ? paths.defaultClaudeDir : try validatedHomePath(for: profile.slug)
+    }
+
     /// The config folder of an isolated profile, created when asked.
     private func orchestrationHome(for profile: Profile, create: Bool) throws -> URL {
-        let home = try validatedHomePath(for: profile.slug)
+        let home = try kitFolder(for: profile)
         guard profile.isolate else { throw OrchestrationError.notIsolated }
         switch SafeFileSystem.kind(of: home) {
         case .directory: return home

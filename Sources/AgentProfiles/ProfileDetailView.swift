@@ -17,6 +17,8 @@ struct ProfileDetailView: View {
                 switch model.detailTab(for: slug) {
                 case .terminal:
                     TerminalPane(model: model, slug: slug)
+                case .settings where model.currentProfile?.isDefaultClaude == true:
+                    DefaultSettingsView(model: model)
                 case let page:
                     ProfileEditorView(model: model, page: page)
                 }

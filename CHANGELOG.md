@@ -6,9 +6,11 @@ version as the notes of the GitHub release.
 
 ## [Unreleased]
 
-- **Heartbeat**: a schedule per profile that sends one `ping` through its CLI at times of day you choose (clock of the Mac, optional weekdays), so the 5 hour usage window starts when you want it to. It is a LaunchAgent, so it runs with the app closed.
+- **Heartbeat**: a schedule per profile that sends one `ping` through its CLI at times of day you choose (clock of the Mac, optional weekdays), so the 5 hour usage window starts when you want it to. It is a LaunchAgent, so it runs with the app closed. Each run overwrites one result file (time, exit code, start of the answer) and the Heartbeat section shows the last ping, so there is no growing log.
 - Usage and Orchestration are tabs of their own next to Settings and Terminal.
 - The Test connection button sits below the model fields.
+- The sidebar has two areas: the agents the app created on top, and **Default** (your own `~/.claude`) below. Default has a terminal, usage, a connection check with the green/red dot and the Orchestration kit. It cannot be deleted, and only its heartbeat schedule is saved in `profiles.json`. Default can have a heartbeat too.
+- Deleting a profile removes everything the app added for it: key, launcher, config folder (with the Orchestration kit), the heartbeat LaunchAgent and its log, and its entries in the usage cache. The delete dialog lists the heartbeat when there is one.
 
 ## [0.3.0] - 2026-10-29
 

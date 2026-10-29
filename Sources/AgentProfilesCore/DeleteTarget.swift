@@ -11,6 +11,8 @@ public struct DeleteTarget: Equatable, Sendable {
         case command(name: String)
         /// The config folder with its size in bytes, when that is cheap to compute.
         case folder(path: String, bytes: Int?)
+        /// The heartbeat: its LaunchAgent and its log.
+        case schedule
     }
 
     /// The name of the saved profile.
@@ -30,10 +32,14 @@ public struct DeleteTarget: Equatable, Sendable {
         let saved = data.profiles[index]
         let home = paths.home(for: saved.slug)
         name = saved.name
-        items = [
+        var list: [Item] = [
             .key(account: saved.slug),
             .command(name: paths.command(for: saved.slug)),
             .folder(path: home.path, bytes: measure(home)),
         ]
+        if saved.heartbeat != .off || HeartbeatAgent(paths: paths).hasTraces(slug: saved.slug) {
+            list.append(.schedule)
+        }
+        items = list
     }
 }

@@ -36,6 +36,10 @@ public enum Launcher {
             }
             command += "cd \(ShellQuote.quote(expanded)) && "
         }
+        // The default setup has no launcher: it is plain `claude`.
+        if profile.isDefaultClaude {
+            return command + paths.command(for: profile.slug)
+        }
         // The script of the profile and the home folder of the profile go into
         // the command as well: a path with a control character in it is
         // refused there too.

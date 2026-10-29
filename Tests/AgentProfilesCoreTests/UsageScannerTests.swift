@@ -494,6 +494,17 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertFalse(cacheText.contains("gone.jsonl"))
     }
 
+    func testForgetTakesAProfileOutOfTheCache() async throws {
+        try session([reply(id: "a", request: "r1", input: 5)], name: "mine.jsonl")
+        let scanner = makeScanner()
+        _ = try await scanner.usage(for: profile(), now: noon, calendar: utc())
+        let cacheURL = paths.root.appendingPathComponent(UsageScanner.cacheFileName)
+        XCTAssertTrue(try String(contentsOf: cacheURL, encoding: .utf8).contains("mine.jsonl"))
+
+        await scanner.forget(slug: profile().slug)
+        XCTAssertFalse(try String(contentsOf: cacheURL, encoding: .utf8).contains("mine.jsonl"))
+    }
+
     func testTheCalendarChangeRebuildsTheDays() async throws {
         // 21 Oct 18:30 UTC is 22 Oct in Ho Chi Minh, so the day key differs between the two calendars.
         try session([reply(id: "a", request: "r1", at: "2026-10-21T18:30:00Z", input: 3)])

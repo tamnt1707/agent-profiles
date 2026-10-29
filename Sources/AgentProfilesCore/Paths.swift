@@ -39,9 +39,13 @@ public struct Paths: Sendable {
 
     /// The isolated `CLAUDE_CONFIG_DIR` of a profile.
     public func home(for slug: String) -> URL {
-        homesDir.appendingPathComponent(slug, isDirectory: true)
+        // The default setup keeps its files where Claude Code puts them.
+        if slug == Profile.defaultSlug { return defaultClaudeDir }
+        return homesDir.appendingPathComponent(slug, isDirectory: true)
     }
 
     /// The command users type in a terminal.
-    public func command(for slug: String) -> String { "claude-\(slug)" }
+    public func command(for slug: String) -> String {
+        slug == Profile.defaultSlug ? "claude" : "claude-\(slug)"
+    }
 }
