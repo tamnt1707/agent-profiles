@@ -216,8 +216,23 @@ public struct HeadlessProbe: Sendable {
         key: String,
         paths: Paths,
         executable: String,
-        environment base: [String: String]
+        environment base: [String: String],
+        inherited: [String: String] = ProcessInfo.processInfo.environment
     ) throws -> HeadlessRequest {
+        // The default setup is tested the way the user runs it: plain `claude`
+        // in their own login shell, with the environment they have and nothing
+        // set on top of it. What the user's shell holds (the sign-in, the PATH)
+        // is then what the test uses.
+        if profile.isDefaultClaude {
+            let command = (["claude"] + arguments.map(ShellQuote.quote)).joined(separator: " ")
+            return HeadlessRequest(
+                executable: "/bin/zsh",
+                arguments: ["-l", "-i", "-c", command],
+                environment: inherited,
+                currentDirectory: NSTemporaryDirectory(),
+                timeout: timeout
+            )
+        }
         var env = base
         func set(_ name: String, _ value: String) {
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -313,7 +328,10 @@ public struct HeadlessProbe: Sendable {
         case let code?: return .unexpectedStatus(code)
         case nil: break
         }
-        if lowered.contains("not logged in") || lowered.contains("/login") { return .notLoggedIn }
+        if lowered.contains("not logged in") || lowered.contains("/login")
+            || lowered.contains("oauth session expired") || lowered.contains("failed to authenticate") {
+            return .notLoggedIn
+        }
         if ConnectionProbe.mentionsUnknownModel(lowered) { return .modelNotFound }
         if lowered.contains("enotfound") || lowered.contains("getaddrinfo") { return .network(.dns) }
         if lowered.contains("timed out") || lowered.contains("etimedout") || lowered.contains("timeout") {

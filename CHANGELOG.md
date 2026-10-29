@@ -4,6 +4,28 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.4.1] - 2026-10-29
+
+A fix for the connection check of the **Default** Claude Code.
+
+### English
+
+**Fixed**
+- *Default* always said "The account is not signed in" although you are signed in. The check now runs plain `claude`
+  in your own login shell, with the environment you have and nothing set on top of it, the way you run it in a
+  terminal. (The app used to name `~/.claude` in `CLAUDE_CONFIG_DIR`, which makes Claude Code look for the sign-in
+  in another place.) Other profiles are checked as before.
+- An expired sign-in ("OAuth session expired") is now reported as "not signed in" instead of a generic CLI error.
+
+### Tiếng Việt
+
+**Đã sửa**
+- *Mặc định* luôn báo "Tài khoản chưa đăng nhập" dù bạn đã đăng nhập. Giờ phép kiểm tra chạy đúng lệnh `claude` trong
+  shell đăng nhập của bạn, với môi trường bạn có và không đặt thêm gì, giống cách bạn chạy trong terminal. (Trước đây
+  app ghi `~/.claude` vào `CLAUDE_CONFIG_DIR`, khiến Claude Code tìm đăng nhập ở chỗ khác.) Các profile khác kiểm tra
+  như cũ.
+- Đăng nhập hết hạn ("OAuth session expired") giờ được báo là "chưa đăng nhập" thay vì lỗi CLI chung chung.
+
 ## [0.4.0] - 2026-10-29
 
 A **Heartbeat** that starts your 5 hour usage window at a time you choose, your own **Default** Claude Code in the
