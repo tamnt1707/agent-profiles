@@ -699,6 +699,17 @@ public actor UsageScanner {
 
     // MARK: - Cache
 
+    /// Takes every entry of `slug` out of the cache and writes the cache again.
+    /// Called when a profile is deleted: the entries hold the names of the
+    /// project folders of the user, and nothing of the profile stays behind.
+    public func forget(slug: String) {
+        loadCacheOnce()
+        let keys = cache.keys.filter { Self.slug(ofKey: $0) == slug }
+        guard !keys.isEmpty else { return }
+        for key in keys { cache[key] = nil }
+        saveCache()
+    }
+
     private var cacheURL: URL { paths.root.appendingPathComponent(Self.cacheFileName) }
 
     /// Reads the cache once. A missing, damaged or other-version file gives an empty cache.

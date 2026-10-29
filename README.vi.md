@@ -40,6 +40,11 @@ Agent Profiles.
 - **Bộ Orchestration.** Một nút thêm một bộ subagent (scout, researcher, builder, tester, reviewer, committer) và
   hướng dẫn cho phiên chính vào một profile, để model mạnh lo lập kế hoạch còn các model rẻ hơn lo đọc và gõ. Không có
   gì ngoài profile đó bị đụng tới.
+- **Heartbeat cho cửa sổ 5 giờ.** Chọn giờ (và ngày) để app gửi một `ping` rất nhỏ qua CLI của profile, để cửa sổ
+  dùng của gói subscription bắt đầu đúng lúc bạn muốn. Chạy cả khi app đã đóng, và cho bạn thấy ping gần nhất đã đi
+  lúc nào và kết thúc ra sao.
+- **Claude Code của chính bạn cũng nằm trong danh sách.** *Mặc định* (`~/.claude`) nằm dưới các profile do app tạo,
+  có terminal, mức dùng và cùng chấm trạng thái. Không bao giờ xóa được từ app.
 - **Trình khởi chạy trên thanh menu.** Mở bất kỳ profile nào chỉ bằng một cú nhấp, trong thư mục riêng của nó hoặc
   một trong năm thư mục bạn dùng gần nhất.
 - **Thống kê token theo profile.** Xem hôm nay, 7 ngày gần nhất và tất cả, đếm ngay trên máy bạn từ lịch sử riêng của

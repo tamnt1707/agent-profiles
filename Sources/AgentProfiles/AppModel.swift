@@ -102,6 +102,8 @@ final class AppModel {
     enum DetailTab: Equatable {
         case settings
         case terminal
+        case usage
+        case orchestration
     }
 
     /// The tab of each profile. A profile that is not here shows its settings.
@@ -301,7 +303,7 @@ final class AppModel {
     /// Reads `profiles.json` and shows the first profile.
     func load() {
         applyLoaded(store.load())
-        if let first = data.profiles.first {
+        if let first = userProfiles.first ?? data.profiles.first {
             select(first)
         } else {
             draft = nil
@@ -314,6 +316,11 @@ final class AppModel {
     /// the status. The profiles and the editor are not touched here.
     private func applyLoaded(_ loaded: LoadedData) {
         data = loaded.data
+        // The default setup is always there, first in the list, and never saved.
+        data.profiles.removeAll { $0.isDefaultClaude }
+        var standard = Profile.defaultClaude
+        standard.heartbeat = data.defaultHeartbeat
+        data.profiles.insert(standard, at: 0)
         loc.language = loaded.data.language
         applyAppearance()
         loadWarning = loaded.warning
@@ -581,6 +588,11 @@ final class AppModel {
         return data.profiles[index]
     }
 
+    /// The profiles the app created, without the default setup.
+    var userProfiles: [Profile] {
+        data.profiles.filter { !$0.isDefaultClaude }
+    }
+
     /// The other profiles, the ones the edited one is compared with.
     var otherProfiles: [Profile] {
         data.profiles.enumerated()
@@ -626,6 +638,7 @@ final class AppModel {
     @discardableResult
     func save() -> Bool {
         guard var draft else { return false }
+        if draft.isDefaultClaude { return saveDefault(draft) }
         let previousProfile = currentProfile
         // The key the user typed, before the field is cleared by the save.
         // A Claude subscription profile has no address and no key: Claude Code signs in by itself.
@@ -640,6 +653,9 @@ final class AppModel {
             command.input = Slug.slugify(draft.name)
         }
         draft.slug = command.slug
+        // Sorted and without duplicates, whatever order the rows were edited in.
+        let schedule = draft.heartbeat
+        draft.heartbeat = Heartbeat(enabled: schedule.enabled, times: schedule.times, days: schedule.days)
 
         do {
             let result = try store.saveProfile(
@@ -687,6 +703,8 @@ final class AppModel {
             refreshMenuBarFolders()
             // The counted tokens of the old settings are gone with them.
             forgetUsage(before: previousProfile, after: draft)
+            // The schedule of the profile, and the agent of a name it left.
+            syncHeartbeats()
             // A profile that was renamed leaves nothing behind in the menu.
             if let previousProfile, previousProfile.slug != draft.slug {
                 forgetMenuBarState(for: previousProfile.slug)
@@ -707,6 +725,73 @@ final class AppModel {
             report(error)
             return false
         }
+    }
+
+    // MARK: - Heartbeat
+
+    /// Brings the LaunchAgents in line with the schedules of the profiles. The
+    /// work (`launchctl`) is done off the main thread; a failure is shown once
+    /// it is known.
+    func syncHeartbeats() {
+        guard !dataFailed else { return }
+        let profiles = data.profiles
+        let paths = store.paths
+        Task.detached(priority: .utility) { [model = self] in
+            let failed = HeartbeatAgent(paths: paths).sync(profiles)
+            guard !failed.isEmpty else { return }
+            await MainActor.run {
+                model.status = Status(kind: .failure, text: model.loc.t("heartbeat.failed", failed.joined(separator: ", ")))
+            }
+        }
+    }
+
+    /// The result of the last run of the heartbeat of `slug`.
+    func heartbeatResult(of slug: String) -> HeartbeatResult? {
+        HeartbeatAgent(paths: store.paths).lastResult(slug: slug)
+    }
+
+    /// Runs the agent of the saved profile once, to try the schedule.
+    func runHeartbeatNow() {
+        guard let profile = currentProfile, profile.heartbeat.isActive else { return }
+        let slug = profile.slug
+        let paths = store.paths
+        Task.detached(priority: .utility) { [model = self] in
+            let failure: Error?
+            do {
+                try HeartbeatAgent(paths: paths).runNow(slug: slug)
+                failure = nil
+            } catch {
+                failure = error
+            }
+            await MainActor.run {
+                if let failure {
+                    model.report(failure)
+                } else {
+                    model.status = Status(kind: .success, text: model.loc.t("heartbeat.ran"))
+                }
+            }
+        }
+    }
+
+    /// Saves the one thing of the default setup the app keeps: its heartbeat.
+    /// Claude Code keeps everything else in `~/.claude` itself.
+    private func saveDefault(_ edited: Profile) -> Bool {
+        guard let index = draftIndex, data.profiles.indices.contains(index) else { return false }
+        var profile = data.profiles[index]
+        let schedule = edited.heartbeat
+        profile.heartbeat = Heartbeat(enabled: schedule.enabled, times: schedule.times, days: schedule.days)
+        data.profiles[index] = profile
+        data.defaultHeartbeat = profile.heartbeat
+        draft = profile
+        do {
+            try store.save(data)
+        } catch {
+            report(error)
+            return false
+        }
+        syncHeartbeats()
+        status = Status(kind: .success, text: loc.t("status.defaultSaved"))
+        return true
     }
 
     // MARK: - Token usage
@@ -1332,7 +1417,7 @@ final class AppModel {
     /// asked for here: it is measured away from the main thread, so the
     /// window is never blocked by a folder with many files in it.
     func requestDelete() {
-        guard let slug = currentProfile?.slug else { return }
+        guard let slug = currentProfile?.slug, currentProfile?.isDefaultClaude != true else { return }
         guard let target = DeleteTarget(index: draftIndex, in: data, paths: store.paths, measure: { _ in nil }) else { return }
         let token = deleteDialog.begin(slug: slug, items: target.items)
         deleteDialogText = DeleteDialogText.message(
@@ -1389,7 +1474,9 @@ final class AppModel {
     func deleteCurrent() {
         guard let index = draftIndex, data.profiles.indices.contains(index) else { return }
         let profile = data.profiles[index]
-        let wasLast = data.profiles.count == 1
+        // The default setup is the user's own ~/.claude: it is never deleted.
+        guard !profile.isDefaultClaude else { return }
+        let wasLast = userProfiles.count == 1
         // The question is closed: a measurement of it must not come back.
         cancelDelete()
 
@@ -1415,9 +1502,13 @@ final class AppModel {
         // The profile is gone: an answer of a running check must not come back
         // for it, not even when a profile with the same name is added again.
         health.profileDeleted(slug: profile.slug)
+        // The cache of the token counts keeps nothing of the profile either.
+        let scanner = usageScanner
+        Task.detached(priority: .utility) { await scanner.forget(slug: profile.slug) }
         // The numbers of a profile that is gone are gone with it: a profile
         // that is added again with the same name starts at zero.
         cancelUsage(for: profile.slug)
+        syncHeartbeats()
         do {
             try store.save(data)
         } catch {
@@ -1450,7 +1541,7 @@ final class AppModel {
         // were looked at again above, with the one read of the Keychain.
         forgetMenuBarState(for: profile.slug)
         refreshMenuBarFolders()
-        if let first = data.profiles.first {
+        if let first = userProfiles.first ?? data.profiles.first {
             select(first)
         } else {
             selectedSlug = nil
@@ -1470,6 +1561,9 @@ final class AppModel {
         if report.removedHome {
             removed.append(loc.t("delete.item.folder", store.paths.home(for: profile.slug).path))
         }
+        if report.removedHeartbeat {
+            removed.append(loc.t("delete.item.schedule"))
+        }
 
         var text = loc.t("status.deleted", profile.name)
         if !removed.isEmpty {
@@ -1488,6 +1582,7 @@ final class AppModel {
         case .key(let account): return loc.t("delete.failure.key", account)
         case .script(let path): return loc.t("delete.failure.command", path)
         case .home(let path): return loc.t("delete.failure.folder", path)
+        case .heartbeat(let path): return loc.t("delete.failure.schedule", path)
         case .dataFile: return loc.t("delete.failure.dataFile")
         }
     }
@@ -1678,6 +1773,11 @@ final class AppModel {
     /// results in place of the old ones. Only runs after the user confirmed.
     func startHealthCheck() {
         startHealthCheck(of: data.profiles)
+    }
+
+    /// Tests the default setup (`~/.claude`) with the CLI, like any other profile.
+    func checkDefaultConnection() {
+        startHealthCheck(of: [.defaultClaude])
     }
 
     /// Tests the profiles of the list that have no result yet, when the app
@@ -2208,7 +2308,7 @@ final class AppModel {
     /// Rewrites every launcher script so the text inside matches the language.
     private func regenerateScripts() {
         var failures: [String] = []
-        for profile in data.profiles {
+        for profile in userProfiles {
             do {
                 try store.materialize(profile, strings: loc.scriptStrings)
             } catch {
@@ -2280,6 +2380,8 @@ extension ProfileError {
             return loc.t("error.unsafeFolder.save", FolderPathSafety.visible(path))
         case .invalidPrice:
             return loc.t("error.invalidPrice")
+        case .heartbeatFailed(let message):
+            return loc.t("error.heartbeat", message)
         }
     }
 }

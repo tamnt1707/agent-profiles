@@ -390,6 +390,8 @@
 
 /* Terminal inside the app */
 "terminal.tab.settings" = "Cấu hình";
+"terminal.tab.usage" = "Mức dùng";
+"terminal.tab.orchestration" = "Điều phối";
 "terminal.tab.terminal" = "Terminal";
 "terminal.state.running" = "Đang chạy";
 "terminal.state.exited" = "Đã kết thúc";
@@ -430,3 +432,43 @@
 "settings.autoCheck.section" = "Kiểm tra kết nối";
 "settings.autoCheck" = "Kiểm tra các profile chưa có kết quả khi mở ứng dụng";
 "settings.autoCheck.hint" = "Mỗi lần kiểm tra chạy CLI một lần cho một profile, khoảng 1.500 token. Kết quả được giữ cho đến khi profile thay đổi hoặc bạn kiểm tra lại.";
+
+/* Heartbeat */
+"heartbeat.section" = "Heartbeat";
+"heartbeat.enabled" = "Gửi ping theo lịch";
+"heartbeat.hint" = "Gửi một yêu cầu ngắn qua CLI của profile này vào các giờ bên dưới (theo giờ của máy), để cửa sổ dùng 5 giờ bắt đầu đúng lúc đó. Muốn cửa sổ reset lúc 10:00 thì cho nó bắt đầu lúc 05:00. Chạy cả khi app đã đóng; máy đang ngủ thì chạy khi thức dậy.";
+"heartbeat.time" = "Giờ";
+"heartbeat.window" = "cửa sổ %@ → %@";
+"heartbeat.add" = "Thêm giờ";
+"heartbeat.remove" = "Xoá giờ này";
+"heartbeat.runNow" = "Chạy ngay";
+"heartbeat.runNow.help" = "Gửi ping ngay để thử lịch. Hãy lưu profile trước.";
+"heartbeat.days" = "Ngày";
+"heartbeat.days.all" = "Không chọn ngày nào: chạy mỗi ngày.";
+"heartbeat.days.some" = "Chỉ chạy vào các ngày đã chọn.";
+"heartbeat.day.1" = "T2";
+"heartbeat.day.2" = "T3";
+"heartbeat.day.3" = "T4";
+"heartbeat.day.4" = "T5";
+"heartbeat.day.5" = "T6";
+"heartbeat.day.6" = "T7";
+"heartbeat.day.7" = "CN";
+"heartbeat.ran" = "Đã yêu cầu chạy. Kết quả hiện ở mục Heartbeat sau vài giây.";
+"heartbeat.failed" = "Không thiết lập được lịch cho: %@";
+"error.heartbeat" = "Không thiết lập được heartbeat: %@";
+
+/* Default setup */
+"sidebar.section.app" = "Do app tạo";
+"sidebar.section.default" = "Mặc định";
+"sidebar.default.name" = "Mặc định (Claude Code)";
+"default.section" = "Claude Code mặc định";
+"default.hint" = "Cấu hình Claude Code của chính bạn trong ~/.claude, cái mà lệnh `claude` thường dùng. App không sửa hay xoá nó. Bạn có thể mở terminal, xem mức dùng và kiểm tra kết nối.";
+"default.folder" = "Thư mục cấu hình";
+"default.test" = "Kiểm tra kết nối";
+"orch.default.warning" = "Đây là ~/.claude của chính bạn. Cài sẽ ghi các agent và một khối trong CLAUDE.md vào đó, và các profile đang share từ ~/.claude cũng nhận theo. Bạn có thể gỡ bộ này ngay tại đây.";
+"delete.item.schedule" = "lịch heartbeat và log của nó";
+"delete.failure.schedule" = "lịch heartbeat còn sót tại %@";
+"status.defaultSaved" = "Đã lưu. Claude Code tự giữ cấu hình của nó trong ~/.claude.";
+"heartbeat.last.ok" = "Ping gần nhất: %@, đã có phản hồi";
+"heartbeat.last.failed" = "Ping gần nhất: %@, thất bại (mã %@)";
+"heartbeat.last.none" = "Chưa có lần ping nào chạy.";

@@ -111,7 +111,24 @@ public enum AgentDetector {
     /// The PATH of the login shell, the one a terminal window has. Asked once,
     /// then kept: the shell may take a while. `nil` when the shell does not answer.
     public static func loginShellPath() -> String? {
-        pathCache.value { shellOutput("printf '%s' \"$PATH\"") }
+        pathCache.value {
+            shellOutput("printf '\(pathMarker)%s' \"$PATH\"").flatMap(pathValue(in:))
+        }
+    }
+
+    /// Put in front of the PATH that the shell prints, so what the startup
+    /// files of the shell print before it (a "Restored session" line, a
+    /// greeting) is not taken for a part of the PATH.
+    static let pathMarker = "@@AGENT-PROFILES-PATH@@"
+
+    /// The PATH after the last marker, up to the end of the line. `nil` when the
+    /// marker is missing or nothing follows it.
+    static func pathValue(in output: String) -> String? {
+        guard let range = output.range(of: pathMarker, options: .backwards) else { return nil }
+        let rest = output[range.upperBound...]
+        let line = rest.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        let value = line.trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? nil : value
     }
 
     private final class PathCache: @unchecked Sendable {

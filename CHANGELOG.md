@@ -4,6 +4,59 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.4.0] - 2026-10-29
+
+A **Heartbeat** that starts your 5 hour usage window at a time you choose, your own **Default** Claude Code in the
+sidebar, and Usage and Orchestration as tabs of their own.
+
+### English
+
+**New**
+- **Heartbeat.** A schedule per profile that sends one `ping` through its CLI at times of day you choose (clock of
+  the Mac, optional weekdays), so the 5 hour usage window of a subscription starts when you want it to: to have the
+  window reset at 10:00, start it at 05:00. It is a LaunchAgent, so it runs with the app closed (a Mac that sleeps runs
+  it when it wakes up). Each run overwrites one result file (time, exit code, start of the answer) and the Heartbeat
+  section shows the last ping, so there is no growing log. *Run now* tries the schedule.
+- **Default Claude Code in the sidebar.** The sidebar has two areas: the agents the app created on top, and
+  **Default** (your own `~/.claude`) below. Default has a terminal, usage, a connection check with the green/red dot,
+  a heartbeat and the Orchestration kit (installing it writes to `~/.claude`, and the tab says so). It cannot be
+  deleted, and only its heartbeat schedule is saved in `profiles.json`.
+- **Usage and Orchestration are tabs of their own** next to Settings and Terminal, which leaves room for managing
+  skills and agents later.
+
+**Changed**
+- The *Test connection* button sits below the model fields, because the test needs the model name.
+- Deleting a profile removes everything the app added for it: key, launcher, config folder (with the Orchestration
+  kit), the heartbeat LaunchAgent and its result, and its entries in the usage cache. The delete dialog lists the
+  heartbeat when there is one.
+
+**Fixed**
+- The PATH that the app reads from your login shell could contain what your shell prints at start (such as
+  "Restored session"). Only the PATH is taken now.
+
+### Tiếng Việt
+
+**Mới**
+- **Heartbeat.** Lịch theo từng profile, gửi một `ping` qua CLI của nó vào các giờ bạn chọn (theo giờ của máy, có thể
+  chọn ngày trong tuần), để cửa sổ dùng 5 giờ của gói subscription bắt đầu đúng lúc bạn muốn: muốn cửa sổ reset lúc
+  10:00 thì cho nó bắt đầu lúc 05:00. Đây là một LaunchAgent nên chạy cả khi app đã đóng (máy đang ngủ thì chạy khi
+  thức dậy). Mỗi lần chạy ghi đè một file kết quả (giờ, mã thoát, phần đầu câu trả lời) và mục Heartbeat hiện ping gần
+  nhất, nên không có log phình to. *Chạy ngay* để thử lịch.
+- **Claude Code mặc định trên sidebar.** Sidebar chia hai vùng: agent do app tạo ở trên, **Mặc định** (`~/.claude` của
+  chính bạn) ở dưới. Mặc định có terminal, mức dùng, kiểm tra kết nối với chấm xanh/đỏ, heartbeat và bộ Orchestration
+  (cài sẽ ghi vào `~/.claude`, tab có nói rõ). Không xóa được, và chỉ lịch heartbeat của nó được lưu trong
+  `profiles.json`.
+- **Mức dùng và Orchestration là tab riêng** cạnh Cài đặt và Terminal, để sau này có chỗ quản lý skill và agent.
+
+**Thay đổi**
+- Nút *Kiểm tra kết nối* nằm dưới các ô model, vì phép thử cần tên model.
+- Xóa một profile gỡ mọi thứ app đã thêm cho nó: key, launcher, thư mục cấu hình (cùng bộ Orchestration), LaunchAgent
+  heartbeat và kết quả của nó, và các mục của nó trong cache mức dùng. Hộp thoại xóa liệt kê heartbeat khi có.
+
+**Đã sửa**
+- PATH mà app đọc từ shell đăng nhập có thể dính những gì shell in ra lúc khởi động (như "Restored session"). Giờ chỉ
+  lấy phần PATH.
+
 ## [0.3.0] - 2026-10-29
 
 The app is now **Agent Profiles**, with a terminal inside the window, a choice of CLI, connection checks that go

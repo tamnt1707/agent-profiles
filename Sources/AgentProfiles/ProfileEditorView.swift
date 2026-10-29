@@ -6,18 +6,24 @@ import AgentProfilesCore
 struct ProfileEditorView: View {
     @Bindable var model: AppModel
     @State private var presetID = ""
-    /// The usage section is collapsed until the user opens it.
-    @State private var isUsageExpanded = false
+    /// Which page of the profile the form shows: its settings, its usage or its orchestration.
+    var page: AppModel.DetailTab = .settings
 
     var body: some View {
         Form {
-            providerSection
-            modelsSection
-            usageSection
-            orchestrationSection
-            environmentSection
-            workspaceSection
-            isolationSection
+            switch page {
+            case .usage:
+                usageSection
+            case .orchestration:
+                orchestrationSection
+            default:
+                providerSection
+                modelsSection
+                HeartbeatSection(model: model)
+                environmentSection
+                workspaceSection
+                isolationSection
+            }
         }
         .formStyle(.grouped)
         // Without an explicit minimum the grouped form asks for the height of
@@ -28,7 +34,10 @@ struct ProfileEditorView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 Divider()
-                actionBar
+                // The default setup is not edited or saved, so it has no save bar.
+                if model.currentProfile?.isDefaultClaude != true {
+                    actionBar
+                }
                 StatusBar(model: model)
             }
             .background(.bar)
@@ -133,23 +142,6 @@ struct ProfileEditorView: View {
                         }
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {
-                            model.testConnection()
-                        }
-                        .disabled(model.isTestingConnection || model.isCheckingHealth)
-                        .help(model.loc.t("editor.test.help"))
-                        if model.isTestingConnection {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
-                    if let report = model.connectionReport {
-                        ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
-                    }
-                }
             }
         }
     }
@@ -228,6 +220,12 @@ struct ProfileEditorView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if model.currentProfile?.isDefaultClaude == true {
+                    Label(model.loc.t("orch.default.warning"), systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundColor(Color(nsColor: .systemOrange))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 orchestrationContent
             }
         }
@@ -287,9 +285,12 @@ struct ProfileEditorView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(model.loc.t("orch.shared.own")) { model.requestUnshare(item) }
-                .buttonStyle(.link)
-                .font(.callout)
+            // A link in ~/.claude is the user's own: only a copy of the app is replaced.
+            if model.currentProfile?.isDefaultClaude != true {
+                Button(model.loc.t("orch.shared.own")) { model.requestUnshare(item) }
+                    .buttonStyle(.link)
+                    .font(.callout)
+            }
         }
     }
 
@@ -406,25 +407,39 @@ struct ProfileEditorView: View {
                 }
                 .padding(.vertical, 4)
             }
+
+            // The test runs the CLI with the model above, so it sits below it.
+            if let draft = model.draft, !ProviderEndpoint.usesCliLogin(draft) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Button(model.isTestingConnection ? model.loc.t("editor.test.running") : model.loc.t("editor.test.button")) {
+                            model.testConnection()
+                        }
+                        .disabled(model.isTestingConnection || model.isCheckingHealth)
+                        .help(model.loc.t("editor.test.help"))
+                        if model.isTestingConnection {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    if let report = model.connectionReport {
+                        ProbeResultLine(loc: model.loc, outcome: report.outcome, providerMessage: report.providerMessage)
+                    }
+                }
+            }
         }
     }
 
     // MARK: - Usage
 
-    /// The tokens this profile used, read from its session files. The section starts
-    /// collapsed, so nothing is read at launch: the first expand counts, Refresh counts again.
+    /// The tokens this profile used, read from its session files. Nothing is read
+    /// at launch: the first time the tab opens it counts, Refresh counts again.
     private var usageSection: some View {
         Section(model.loc.t("editor.usage.section")) {
-            DisclosureGroup(model.loc.t("editor.usage.disclosure"), isExpanded: $isUsageExpanded) {
-                usageContent
-            }
+            usageContent
         }
-        .task(id: model.selectedSlug) {
-            if isUsageExpanded { model.loadUsageIfNeeded() }
-        }
-        .onChange(of: isUsageExpanded) { _, expanded in
-            if expanded { model.loadUsageIfNeeded() }
-        }
+        // Nothing is read until this tab is opened.
+        .task(id: model.selectedSlug) { model.loadUsageIfNeeded() }
     }
 
     @ViewBuilder

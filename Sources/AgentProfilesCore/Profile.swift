@@ -66,6 +66,8 @@ public struct Profile: Codable, Equatable, Sendable {
     public var priceOutputPerMillion: Double?
     /// The command line agent this profile runs. Written only when it is not Claude Code.
     public var agent: AgentKind
+    /// The schedule that starts the usage window. Written only when it is not off.
+    public var heartbeat: Heartbeat
 
     public init(
         name: String = "",
@@ -83,7 +85,8 @@ public struct Profile: Codable, Equatable, Sendable {
         recentDirs: [String] = [],
         priceInputPerMillion: Double? = nil,
         priceOutputPerMillion: Double? = nil,
-        agent: AgentKind = .default
+        agent: AgentKind = .default,
+        heartbeat: Heartbeat = .off
     ) {
         self.name = name
         self.slug = slug
@@ -101,6 +104,7 @@ public struct Profile: Codable, Equatable, Sendable {
         self.priceInputPerMillion = priceInputPerMillion
         self.priceOutputPerMillion = priceOutputPerMillion
         self.agent = agent
+        self.heartbeat = heartbeat
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -120,6 +124,7 @@ public struct Profile: Codable, Equatable, Sendable {
         case priceInputPerMillion = "price_input_per_million"
         case priceOutputPerMillion = "price_output_per_million"
         case agent
+        case heartbeat
     }
 
     public init(from decoder: Decoder) throws {
@@ -158,6 +163,8 @@ public struct Profile: Codable, Equatable, Sendable {
         priceOutputPerMillion = Self.lenientPrice(c, forKey: .priceOutputPerMillion)
         // A file written before agents existed has no key: the profile runs Claude Code.
         agent = (try? c.decode(AgentKind.self, forKey: .agent)) ?? .default
+        // Lenient too: a broken schedule is dropped, the profile still loads.
+        heartbeat = (try? c.decode(Heartbeat.self, forKey: .heartbeat)) ?? .off
     }
 
     /// The price of the file, or `nil` when it is not there or is broken.
@@ -199,7 +206,24 @@ public struct Profile: Codable, Equatable, Sendable {
         if agent != .default {
             try c.encode(agent, forKey: .agent)
         }
+        if heartbeat != .off {
+            try c.encode(heartbeat, forKey: .heartbeat)
+        }
     }
+}
+
+extension Profile {
+    /// The slug of the default Claude Code setup (`~/.claude`). Contains an
+    /// underscore, which no slug made from a name can have, so a profile of the
+    /// user can never take it.
+    public static let defaultSlug = "_default"
+
+    /// The default Claude Code setup as a profile: no address, no key, and its
+    /// config folder is `~/.claude`. It lives only in memory and is never written
+    /// to `profiles.json`.
+    public static let defaultClaude = Profile(name: "Default", slug: defaultSlug, auth: .none, isolate: true)
+
+    public var isDefaultClaude: Bool { slug == Self.defaultSlug }
 }
 
 /// The whole `profiles.json` file: the profile list plus the app settings.
@@ -222,6 +246,9 @@ public struct AppData: Codable, Equatable, Sendable {
     public var embeddedTerminal: Bool
     /// Test the profiles that have no result when the app starts. On by default; only written when off.
     public var autoCheckConnections: Bool
+    /// The heartbeat of the default setup, which is not in the profile list.
+    /// Only written when it is not off.
+    public var defaultHeartbeat: Heartbeat
 
     public init(
         terminal: TerminalApp = .terminal,
@@ -233,7 +260,8 @@ public struct AppData: Codable, Equatable, Sendable {
         pathPromptDeclined: Bool = false,
         showMenuBar: Bool = true,
         embeddedTerminal: Bool = true,
-        autoCheckConnections: Bool = true
+        autoCheckConnections: Bool = true,
+        defaultHeartbeat: Heartbeat = .off
     ) {
         self.terminal = terminal
         self.profiles = profiles
@@ -245,6 +273,7 @@ public struct AppData: Codable, Equatable, Sendable {
         self.showMenuBar = showMenuBar
         self.embeddedTerminal = embeddedTerminal
         self.autoCheckConnections = autoCheckConnections
+        self.defaultHeartbeat = defaultHeartbeat
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -258,6 +287,7 @@ public struct AppData: Codable, Equatable, Sendable {
         case showMenuBar = "show_menu_bar"
         case embeddedTerminal = "embedded_terminal"
         case autoCheckConnections = "auto_check_connections"
+        case defaultHeartbeat = "default_heartbeat"
     }
 
     public init(from decoder: Decoder) throws {
@@ -282,6 +312,7 @@ public struct AppData: Codable, Equatable, Sendable {
         showMenuBar = MenuBarSetting.value(stored: try? c.decode(Bool.self, forKey: .showMenuBar))
         embeddedTerminal = (try? c.decode(Bool.self, forKey: .embeddedTerminal)) ?? true
         autoCheckConnections = (try? c.decode(Bool.self, forKey: .autoCheckConnections)) ?? true
+        defaultHeartbeat = (try? c.decode(Heartbeat.self, forKey: .defaultHeartbeat)) ?? .off
     }
 
     /// The settings of a file whose profile list cannot be read. The profile
@@ -326,6 +357,9 @@ public struct AppData: Codable, Equatable, Sendable {
         }
         if !autoCheckConnections {
             try c.encode(false, forKey: .autoCheckConnections)
+        }
+        if defaultHeartbeat != .off {
+            try c.encode(defaultHeartbeat, forKey: .defaultHeartbeat)
         }
     }
 }
