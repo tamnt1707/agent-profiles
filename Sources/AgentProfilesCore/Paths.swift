@@ -29,6 +29,10 @@ public struct Paths: Sendable {
     public var binDir: URL { root.appendingPathComponent("bin", isDirectory: true) }
     /// `~/.claude-profiles/homes`
     public var homesDir: URL { root.appendingPathComponent("homes", isDirectory: true) }
+    /// `~/.claude-profiles/workspace`: an empty folder where a terminal of the app
+    /// starts. A terminal that starts in the home folder lets Claude Code read
+    /// Photos, Music and the volumes, and macOS asks the app for those rights.
+    public var workspaceDir: URL { root.appendingPathComponent("workspace", isDirectory: true) }
     /// The user's real Claude configuration, never modified by us.
     public var defaultClaudeDir: URL { home.appendingPathComponent(".claude", isDirectory: true) }
 
