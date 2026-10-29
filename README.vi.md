@@ -5,7 +5,7 @@
 [English](README.md) · Tiếng Việt
 
 <p align="center">
-  <img src="docs/images/main-vi.png" alt="Agent Profiles: danh sách profile bên trái và cài đặt của profile đang chọn bên phải" width="760">
+  <img src="docs/images/main-vi.png" alt="Agent Profiles: danh sách profile bên trái, mỗi profile có một chấm trạng thái, và cài đặt của profile đang chọn bên phải" width="760">
 </p>
 
 Claude Code dùng được với nhiều nhà cung cấp AI chứ không chỉ một. Vướng ở chỗ mỗi nhà cung cấp
@@ -17,32 +17,48 @@ profile có một lệnh riêng. Gõ `claude-work-glm` ở terminal nào cũng l
 nhà cung cấp đó. Gõ `claude-side-deepseek` là bạn làm việc với nhà khác. Key của bạn được giữ an
 toàn, và Claude Code thông thường của bạn không bị đụng tới.
 
+Hiện nay CLI mà app chạy là Claude Code. Các agent khác có thể được thêm sau, vì vậy app có tên
+Agent Profiles.
+
 ## Bạn nhận được gì
 
 - **Một profile cho mỗi nhà cung cấp.** Đặt tên, nhập địa chỉ, key và model. Xong.
+- **Terminal ngay trong ứng dụng.** Mở một profile là terminal của nó nằm ngay trong cửa sổ, có tab
+  (*Phiên mới*, *Khởi động lại phiên*, *Đóng phiên*). Profile vẫn chạy khi bạn xem profile khác, và cột bên
+  đánh dấu những profile đang chạy. Thích Terminal hoặc iTerm2 hơn? Đổi trong cài đặt.
 - **Một lệnh cho mỗi profile.** Lệnh đặt theo tên profile (bạn đổi tên được) và chạy được ở
   terminal nào, thư mục nào.
-- **Mẫu có sẵn** cho OpenRouter, DeepSeek, Kimi, GLM, MiniMax và proxy nội bộ. Chọn một mẫu là
-  địa chỉ tự điền.
+- **Mẫu có sẵn** cho gói đăng ký Claude của bạn (không cần địa chỉ và key, chỉ cần đăng nhập), OpenRouter,
+  DeepSeek, Kimi, GLM, MiniMax, Xiaomi MiMo và proxy nội bộ. Chọn một mẫu là địa chỉ tự điền.
+- **Có chấm cho biết kết nối có chạy không.** App nhờ CLI trả lời một câu ngắn, giống cách lệnh của bạn làm, và
+  nói chỗ nào sai: key, địa chỉ, tên model, đăng nhập hay mạng. Kết quả được giữ giữa các lần mở, nên bạn thấy ngay
+  trạng thái của mọi profile khi mở ứng dụng, và *Kiểm tra kết nối* chỉ làm mới kết quả đó.
 - **Key nằm trong Keychain của macOS.** Key không bao giờ được lưu trong file thường.
 - **Claude Code của bạn vẫn như cũ.** Mỗi profile có cài đặt và lịch sử riêng, nên không có gì
   lẫn từ profile này sang profile khác. Nếu muốn, bạn có thể dùng chung hướng dẫn, kỹ năng và
   agent cho tất cả.
-- **Có chấm cho biết kết nối có chạy không.** *Kiểm tra kết nối* nhờ CLI trả lời một câu ngắn, giống cách lệnh của
-  bạn làm, và nói chỗ nào sai: key, địa chỉ, tên model, đăng nhập hay mạng. Kết quả được giữ giữa các lần mở, nên bạn
-  thấy ngay trạng thái của mọi profile khi mở ứng dụng.
+- **Bộ Orchestration.** Một nút thêm một bộ subagent (scout, researcher, builder, tester, reviewer, committer) và
+  hướng dẫn cho phiên chính vào một profile, để model mạnh lo lập kế hoạch còn các model rẻ hơn lo đọc và gõ. Không có
+  gì ngoài profile đó bị đụng tới.
+- **Trình khởi chạy trên thanh menu.** Mở bất kỳ profile nào chỉ bằng một cú nhấp, trong thư mục riêng của nó hoặc
+  một trong năm thư mục bạn dùng gần nhất.
+- **Thống kê token theo profile.** Xem hôm nay, 7 ngày gần nhất và tất cả, đếm ngay trên máy bạn từ lịch sử riêng của
+  profile, kèm đơn giá mỗi triệu token (tùy chọn) để ước tính chi phí.
 - **Chọn model từ danh sách.** Gõ tên model nào cũng được, hoặc chọn từ những model nhà cung cấp
   đưa ra.
-- **Mở ngay chỗ bạn làm việc.** Chạy profile trong Terminal hoặc iTerm2, vào thẳng thư mục dự án.
-- **Xóa sạch.** Xóa một profile là mọi thứ thuộc về nó đi theo.
+- **Xóa sạch.** Xóa một profile (kể cả từ chính dòng của nó) là mọi thứ thuộc về nó đi theo.
 - **Tiếng Anh và tiếng Việt**, giao diện sáng hoặc tối theo máy của bạn.
 - **Tự cập nhật.** App báo khi có bản mới và cài bằng một cú bấm, sau khi kiểm tra bản đó thật sự
   đến từ chúng tôi.
 
 <p align="center">
+  <img src="docs/images/terminal-dark.png" alt="Một profile chạy Claude Code trong terminal ngay trong cửa sổ" width="760">
+</p>
+
+<p align="center">
   <img src="docs/images/main-light.png" alt="Cùng cửa sổ đó ở giao diện sáng" width="560">
   &nbsp;
-  <img src="docs/images/settings-vi.png" alt="Cửa sổ cài đặt: ngôn ngữ, giao diện, terminal và cập nhật" width="230">
+  <img src="docs/images/settings-vi.png" alt="Cửa sổ cài đặt: ngôn ngữ, giao diện, terminal, kiểm tra kết nối và cập nhật" width="230">
 </p>
 
 ## Cài đặt
@@ -55,11 +71,14 @@ Bạn cần một máy Mac **Apple Silicon** chạy **macOS 14 trở lên**.
 3. Lần đầu, bấm chuột phải vào app rồi chọn **Mở**. macOS chỉ hỏi một lần, vì app chưa được Apple
    notarize.
 
+Đang dùng **Claude Profiles 0.2.0**? Hãy tải bản này bằng tay một lần, vì app cũ không tự cập nhật lên một app đổi
+tên được, rồi xóa `Claude Profiles.app` cũ. Profile, key và lệnh của bạn được giữ nguyên.
+
 ## Bắt đầu trong ba bước
 
-1. Bấm **+**, chọn một mẫu nhà cung cấp (hoặc bắt đầu từ trống) và gõ tên.
+1. Bấm **+**, chọn CLI và một mẫu nhà cung cấp (hoặc bắt đầu từ trống) và gõ tên.
 2. Dán key và bấm **Kiểm tra kết nối**. Rồi **Lưu**.
-3. Bấm **Mở trong terminal**, hoặc gõ lệnh của profile ở terminal bất kỳ.
+3. Mở tab **Terminal**, hoặc bấm **Mở trong terminal**, hoặc gõ lệnh của profile ở terminal bất kỳ.
 
 Khi bạn lưu profile đầu tiên, app hỏi có làm cho các lệnh chạy được ở mọi terminal không. App
 luôn hỏi trước, và bạn hoàn tác được bất cứ lúc nào trong phần cài đặt.
@@ -75,7 +94,14 @@ Không. Cài đặt Claude Code của bạn được để yên. Mỗi profile c
 
 **Dùng được với nhà cung cấp nào?**
 Bất kỳ nhà cung cấp nào có địa chỉ tương thích Claude. Các mẫu có sẵn phủ những nhà phổ biến, còn
-địa chỉ khác bạn gõ tay.
+địa chỉ khác bạn gõ tay. Hoặc dùng gói đăng ký Claude của bạn: chọn mẫu đó và đăng nhập ở lần đầu mở profile.
+
+**Hỗ trợ những CLI nào?**
+Hiện là Claude Code. Khi tạo profile, app tìm các CLI đã cài trên máy bạn. Các CLI khác đang được lên kế hoạch.
+
+**Dữ liệu của tôi nằm ở đâu?**
+Trong `~/.claude-profiles` (profile, launcher, một thư mục cấu hình cho mỗi profile) và Keychain của macOS (key). Thư
+mục giữ tên ban đầu của app, nên không phải chuyển gì khi app đổi tên.
 
 **Kiểm tra kết nối tốn bao nhiêu?**
 Một yêu cầu ngắn qua CLI: khoảng 1.500 token vào và vài token ra. Ứng dụng cũng làm vậy một lần cho profile chưa có
@@ -87,7 +113,7 @@ Key, lệnh và lịch sử đã lưu của nó đều bị xóa. Nếu đó là
 thiết lập terminal mà nó đã thêm không.
 
 **Có chạy trên Mac Intel không?**
-Chưa. Phiên bản 0.1 chỉ chạy trên Apple Silicon.
+Chưa. App chỉ chạy trên Apple Silicon.
 
 ## Xem thêm
 

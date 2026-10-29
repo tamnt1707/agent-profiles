@@ -2,7 +2,9 @@
 
 ## English
 
-You need a Mac with macOS 14 or later and the Xcode Command Line Tools (Swift 6.2).
+You need a Mac with macOS 14 or later and the Xcode Command Line Tools (Swift 6.2). The first build
+downloads the one dependency, [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (the terminal inside
+the app), at the exact version pinned in `Package.resolved`, so it needs the network once.
 
 ```sh
 ./build-mac.sh              # build and install into ~/Applications
@@ -24,7 +26,9 @@ tests, and `Sources/AgentProfiles` holds the SwiftUI interface.
 
 ## Tiếng Việt
 
-Bạn cần một máy Mac chạy macOS 14 trở lên và Xcode Command Line Tools (Swift 6.2).
+Bạn cần một máy Mac chạy macOS 14 trở lên và Xcode Command Line Tools (Swift 6.2). Lần build đầu tải về dependency
+duy nhất, [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (terminal trong ứng dụng), đúng phiên bản được ghim
+trong `Package.resolved`, nên cần mạng một lần.
 
 ```sh
 ./build-mac.sh              # build và cài vào ~/Applications
