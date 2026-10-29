@@ -15,12 +15,20 @@ See which account a profile is signed in with.
   with (email, plan and organization), or says that it is not signed in. It is read with `claude auth status`, which
   reads the local sign-in and costs no tokens. The refresh button asks again.
 
+**Fixed**
+- *Test connection* was missing on a Claude subscription profile. It is there again, below the model fields, and
+  tells you when the account is not signed in.
+
 ### Tiếng Việt
 
 **Mới**
 - **Tài khoản.** Tab Cài đặt của *Mặc định* và của profile Claude subscription hiện tài khoản đang đăng nhập (email,
   gói và tổ chức), hoặc báo là chưa đăng nhập. Thông tin đọc bằng `claude auth status`, chỉ đọc đăng nhập ở máy nên
   không tốn token. Nút làm mới sẽ hỏi lại.
+
+**Đã sửa**
+- Nút *Kiểm tra kết nối* bị mất ở profile Claude subscription. Giờ nó có lại, nằm dưới các ô model, và báo khi tài
+  khoản chưa đăng nhập.
 
 ## [0.4.1] - 2026-10-29
 
