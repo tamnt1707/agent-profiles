@@ -60,13 +60,15 @@ struct TerminalPane: View {
 
     var body: some View {
         content
-            // The tab is open and nothing runs yet: run the profile.
-            .task(id: slug) { model.startTerminalIfNeeded(of: slug) }
-            .alert(confirmTitle, isPresented: $model.isConfirmingTerminalAction) {
-                Button(model.loc.t(confirmButtonKey), role: .destructive) { model.confirmTerminalAction() }
+            // Opening the tab starts nothing: the chooser asks how first.
+            .alert(model.terminalActionText().title, isPresented: $model.isConfirmingTerminalAction) {
+                // Starting a session ends nothing: only a restart or a close is a destructive button.
+                Button(model.terminalActionText().button, role: model.terminalActionEndsSession ? .destructive : nil) {
+                    model.confirmTerminalAction()
+                }
                 Button(model.loc.t("actions.cancel"), role: .cancel) { model.cancelTerminalAction() }
             } message: {
-                Text(model.loc.t("terminal.confirm.message"))
+                Text(model.terminalActionText().message)
             }
     }
 
@@ -75,7 +77,9 @@ struct TerminalPane: View {
         // The views are not observed, the book is: reading it draws the pane
         // again when a tab starts, ends or goes away.
         let tabs = model.terminals.book.sessions(for: slug)
-        if let active = model.activeSession(of: slug), let terminal = model.terminals.view(for: active.id) {
+        if tabs.isEmpty || model.launcherShown.contains(slug) {
+            LaunchChooser(model: model, slug: slug, canCancel: !tabs.isEmpty)
+        } else if let active = model.activeSession(of: slug), let terminal = model.terminals.view(for: active.id) {
             VStack(spacing: 0) {
                 sessionStrip(tabs, active: active)
                 Divider()
@@ -87,15 +91,7 @@ struct TerminalPane: View {
                 bar(for: active)
             }
         } else {
-            ContentUnavailableView {
-                Label(model.loc.t("terminal.empty.title"), systemImage: "terminal")
-            } description: {
-                Text(model.loc.t("terminal.empty.message"))
-            } actions: {
-                Button(model.loc.t("terminal.run")) { model.newSession(of: slug) }
-                    .keyboardShortcut(.defaultAction)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LaunchChooser(model: model, slug: slug, canCancel: false)
         }
     }
 
@@ -110,7 +106,7 @@ struct TerminalPane: View {
                     }
                 }
             }
-            Button { model.newSession(of: slug) } label: {
+            Button { model.showLauncher(of: slug) } label: {
                 Image(systemName: "plus")
             }
             .buttonStyle(.borderless)
@@ -128,6 +124,11 @@ struct TerminalPane: View {
                 .foregroundColor(tab.state == .running ? Color(nsColor: .systemGreen) : Color.secondary)
             Text(model.loc.count("terminal.session.label", tab.number))
                 .font(.callout)
+            if model.terminals.mode(for: tab.id) != .normal {
+                Text(model.modeName(model.terminals.mode(for: tab.id)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Button { model.requestClose(tab.id) } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .semibold))
@@ -160,8 +161,13 @@ struct TerminalPane: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 8)
+            if model.terminals.mode(for: tab.id) != .normal {
+                Label(model.modeName(model.terminals.mode(for: tab.id)), systemImage: "point.3.connected.trianglepath.dotted")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Button(model.loc.t("terminal.restart")) { model.requestRestart(tab.id) }
-            Button(model.loc.t("terminal.new")) { model.newSession(of: slug) }
+            Button(model.loc.t("terminal.new")) { model.showLauncher(of: slug) }
             Button(model.loc.t("terminal.closeSession")) { model.requestClose(tab.id) }
         }
         .controlSize(.small)
@@ -177,14 +183,74 @@ struct TerminalPane: View {
         case .exited(nil): return model.loc.t("terminal.state.exited")
         }
     }
+}
 
-    private var confirmTitle: String {
-        if case .close = model.pendingTerminalAction { return model.loc.t("terminal.confirm.close.title") }
-        return model.loc.t("terminal.confirm.restart.title")
+/// The modes a tab can run in, in the order the menus show them.
+enum TerminalModeChoice {
+    static let all: [TerminalMode] = [.normal, .orchestrated(.sequential), .orchestrated(.queue)]
+}
+
+/// How a new tab starts: plain Claude, or Claude as the orchestrator of a workflow.
+struct LaunchChooser: View {
+    @Bindable var model: AppModel
+    let slug: String
+    let canCancel: Bool
+
+    var body: some View {
+        let choice = model.launchChoice(of: slug)
+        VStack(spacing: 14) {
+            Image(systemName: "terminal")
+                .font(.system(size: 34))
+                .foregroundStyle(.secondary)
+            Text(model.loc.t("terminal.empty.title")).font(.title3.bold())
+            Picker("", selection: Binding(
+                get: { model.launchChoice(of: slug) },
+                set: { model.setLaunchChoice($0, of: slug) }
+            )) {
+                ForEach(TerminalModeChoice.all, id: \.self) { Text(model.modeName($0)).tag($0) }
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            Text(description(of: choice))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
+                .fixedSize(horizontal: false, vertical: true)
+            if let note = agentsNote(for: choice) {
+                Label(note.text, systemImage: note.icon)
+                    .font(.callout)
+                    .foregroundColor(note.warn ? Color(nsColor: .systemOrange) : .secondary)
+                    .frame(maxWidth: 460)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                if canCancel {
+                    Button(model.loc.t("actions.cancel")) { model.hideLauncher(of: slug) }
+                }
+                Button(model.loc.t("terminal.run")) { model.startSession(of: slug, mode: choice) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var confirmButtonKey: String {
-        if case .close = model.pendingTerminalAction { return "terminal.closeSession" }
-        return "terminal.restart"
+    private func description(of mode: TerminalMode) -> String {
+        switch mode {
+        case .normal: return model.loc.t("terminal.mode.normal.hint")
+        case .orchestrated(.sequential): return model.loc.t("terminal.mode.sequential.hint")
+        case .orchestrated(.queue): return model.loc.t("terminal.mode.queue.hint")
+        }
+    }
+
+    /// Whether the agents of the mode are there. Nothing for the normal mode.
+    private func agentsNote(for mode: TerminalMode) -> (text: String, icon: String, warn: Bool)? {
+        guard mode.workflow != nil, let profile = model.data.profiles.first(where: { $0.slug == slug }) else { return nil }
+        if !profile.isolate { return (model.loc.t("orch.notIsolated"), "exclamationmark.triangle", true) }
+        if model.needsAgents(mode, of: profile) {
+            return (model.loc.t("terminal.agents.willInstall"), "arrow.down.circle", true)
+        }
+        return (model.loc.t("terminal.agents.ready"), "checkmark.circle", false)
     }
 }

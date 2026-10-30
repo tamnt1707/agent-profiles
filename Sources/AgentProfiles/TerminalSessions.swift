@@ -50,6 +50,14 @@ final class TerminalSessions {
     /// The live terminal of each tab, by the identity of the tab.
     @ObservationIgnored private var runs: [Int: Run] = [:]
 
+    /// The mode each tab was started in. Read by the bar of the tab.
+    private(set) var modes: [Int: TerminalMode] = [:]
+
+    /// The mode a tab runs in.
+    func mode(for id: Int) -> TerminalMode {
+        modes[id] ?? .normal
+    }
+
     /// The terminal view of a tab, `nil` when it does not exist.
     func view(for id: Int) -> LocalProcessTerminalView? {
         runs[id]?.view
@@ -67,20 +75,28 @@ final class TerminalSessions {
     ///
     /// - Throws: `ProfileError.unsafeFolderToOpen` when a path is not safe.
     @discardableResult
-    func open(_ profile: Profile, paths: Paths, folder: String?) throws -> Int {
-        let command = try EmbeddedTerminalSpec.shellCommand(for: profile, paths: paths, workdirOverride: folder)
+    func open(_ profile: Profile, paths: Paths, folder: String?, mode: TerminalMode = .normal) throws -> Int {
+        let command = try EmbeddedTerminalSpec.shellCommand(
+            for: profile, paths: paths, workdirOverride: folder, mode: mode
+        )
         let tab = book.open(profile.slug)
+        modes[tab.id] = mode
         run(id: tab.id, run: tab.run, command: command, folder: folder, start: Self.startFolder(paths))
         return tab.id
     }
 
     /// Starts a tab again: its process ends if it runs, and a new one starts in
-    /// a new, empty terminal, in the folder the tab had.
+    /// a new, empty terminal, in the folder the tab had, with a new conversation.
+    /// The mode stays the one the tab was opened in.
     func restart(_ id: Int, profile: Profile, paths: Paths) throws {
         let folder = runs[id]?.folder
-        let command = try EmbeddedTerminalSpec.shellCommand(for: profile, paths: paths, workdirOverride: folder)
+        let newMode = modes[id] ?? .normal
+        let command = try EmbeddedTerminalSpec.shellCommand(
+            for: profile, paths: paths, workdirOverride: folder, mode: newMode
+        )
         runs[id]?.view.terminate()
         guard let number = book.restart(id) else { return }
+        modes[id] = newMode
         run(id: id, run: number, command: command, folder: folder, start: Self.startFolder(paths))
     }
 
@@ -115,6 +131,7 @@ final class TerminalSessions {
     func close(_ id: Int) {
         runs[id]?.view.terminate()
         runs[id] = nil
+        modes[id] = nil
         book.close(id)
     }
 
@@ -123,6 +140,7 @@ final class TerminalSessions {
         for id in book.closeAll(slug) {
             runs[id]?.view.terminate()
             runs[id] = nil
+            modes[id] = nil
         }
     }
 

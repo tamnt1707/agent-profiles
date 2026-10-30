@@ -25,7 +25,8 @@ Agent Profiles.
 - **Một profile cho mỗi nhà cung cấp.** Đặt tên, nhập địa chỉ, key và model. Xong.
 - **Terminal ngay trong ứng dụng.** Mở một profile là terminal của nó nằm ngay trong cửa sổ, có tab
   (*Phiên mới*, *Khởi động lại phiên*, *Đóng phiên*). Profile vẫn chạy khi bạn xem profile khác, và cột bên
-  đánh dấu những profile đang chạy. Thích Terminal hoặc iTerm2 hơn? Đổi trong cài đặt.
+  đánh dấu những profile đang chạy. Mỗi tab mới hỏi cách mở: *Bình thường* hoặc điều phối (xem bên dưới). Thích
+  Terminal hoặc iTerm2 hơn? Đổi trong cài đặt.
 - **Một lệnh cho mỗi profile.** Lệnh đặt theo tên profile (bạn đổi tên được) và chạy được ở
   terminal nào, thư mục nào.
 - **Mẫu có sẵn** cho gói đăng ký Claude của bạn (không cần địa chỉ và key, chỉ cần đăng nhập), OpenRouter,
@@ -39,7 +40,13 @@ Agent Profiles.
   agent cho tất cả.
 - **Bộ Orchestration.** Một nút thêm một bộ subagent (scout, researcher, builder, tester, reviewer, committer) và
   hướng dẫn cho phiên chính vào một profile, để model mạnh lo lập kế hoạch còn các model rẻ hơn lo đọc và gõ. Không có
-  gì ngoài profile đó bị đụng tới.
+  gì ngoài profile đó bị đụng tới. Có hai quy trình, mỗi quy trình được vẽ thành sơ đồ trong app: *Tuần tự* (agent điều
+  phối giao từng bước) và *Hàng đợi* (coder merge vào nhánh task khi qua lint và format, thư ký ghi hàng đợi, tester
+  làm theo đúng thứ tự, và chưa gì được merge lên nhánh cao hơn cho đến khi mọi thứ xanh). Quy trình hàng đợi thêm
+  `frontend-2d`, `frontend-3d`, `backend` và `secretary`. Cài lại sẽ cập nhật agent tại chỗ (có bản `.bak`) và gỡ những
+  agent kit đã bỏ.
+- **Mở với vai trò điều phối.** Ở tab Terminal, chọn *Điều phối* khi mở tab: Claude chạy với Opus effort medium và
+  hướng dẫn của quy trình, chỉ cho phiên đó. Agent còn thiếu được cài trước, và `CLAUDE.md` không bị sửa.
 - **Heartbeat cho cửa sổ 5 giờ.** Chọn giờ (và ngày) để app gửi một `ping` rất nhỏ qua CLI của profile, để cửa sổ
   dùng của gói subscription bắt đầu đúng lúc bạn muốn. Chạy cả khi app đã đóng, và cho bạn thấy ping gần nhất đã đi
   lúc nào và kết thúc ra sao.
@@ -57,7 +64,13 @@ Agent Profiles.
   đến từ chúng tôi.
 
 <p align="center">
-  <img src="docs/images/terminal-dark.png" alt="Một profile chạy Claude Code trong terminal ngay trong cửa sổ" width="760">
+  <img src="docs/images/terminal-dark.png" alt="Một profile chạy Claude Code ở vai trò điều phối (Opus, mức medium) trong terminal ngay trong cửa sổ" width="760">
+</p>
+
+<p align="center">
+  <img src="docs/images/terminal-chooser-vi.png" alt="Tab Terminal hỏi cách mở: bình thường, điều phối tuần tự hoặc điều phối hàng đợi" width="370">
+  &nbsp;
+  <img src="docs/images/orchestration-vi.png" alt="Tab Điều phối với quy trình hàng đợi được vẽ thành sơ đồ" width="370">
 </p>
 
 <p align="center">
@@ -75,6 +88,20 @@ Bạn cần một máy Mac **Apple Silicon** chạy **macOS 14 trở lên**.
 2. Mở file và kéo **Agent Profiles** vào **Applications**.
 3. Lần đầu, bấm chuột phải vào app rồi chọn **Mở**. macOS chỉ hỏi một lần, vì app chưa được Apple
    notarize.
+
+Thích dùng lệnh hơn? Một trong hai cách dưới đây cài app và không cần bấm chuột phải:
+
+```sh
+# script của repo này: bản mới nhất vào /Applications
+curl -fsSL https://raw.githubusercontent.com/tamnt1707/agent-profiles/main/scripts/install.sh | bash
+
+# hoặc Homebrew
+brew tap tamnt1707/agent-profiles https://github.com/tamnt1707/agent-profiles
+brew install --cask agent-profiles
+```
+
+Script nhận `--version 0.6.0` để cài đúng một phiên bản và `--uninstall` để gỡ app (profile và key được giữ).
+App tự cập nhật sau đó, nên không cần `brew upgrade`.
 
 Đang dùng **Claude Profiles 0.2.0**? Hãy tải bản này bằng tay một lần, vì app cũ không tự cập nhật lên một app đổi
 tên được, rồi xóa `Claude Profiles.app` cũ. Profile, key và lệnh của bạn được giữ nguyên.
@@ -119,6 +146,18 @@ thiết lập terminal mà nó đã thêm không.
 
 **Có chạy trên Mac Intel không?**
 Chưa. App chỉ chạy trên Apple Silicon.
+
+**Có chạy trên Windows hay Linux không?**
+Không. App dành cho macOS 14 trở lên: nó dùng Keychain của macOS, LaunchAgent và cửa sổ gốc.
+
+**Phiên điều phối có đổi profile của tôi không?**
+Chỉ phần agent: chúng được thêm vào `agents/` của profile, và khi cập nhật, thứ gì bị thay đều có bản `.bak`. Hướng dẫn
+của quy trình đi vào đúng phiên đó, không vào `CLAUDE.md`. Mở phiên bình thường sau đó là Claude Code thuần. Muốn dùng
+chế độ khác, mở tab mới; cuộc hội thoại trước vẫn mở lại được bằng `/resume`.
+
+**Gỡ app thế nào?**
+`scripts/install.sh --uninstall` (hoặc `brew uninstall --cask agent-profiles`, hoặc kéo app vào Thùng rác). Profile và
+key được giữ; muốn xóa hẳn thì xóa `~/.claude-profiles` và các key trong Keychain Access.
 
 ## Xem thêm
 

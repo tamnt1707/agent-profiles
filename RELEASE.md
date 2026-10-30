@@ -92,6 +92,11 @@ The release needs two assets:
 A draft and a pre-release are ignored by the app, so a release that is not
 ready simply does not show up.
 
+`scripts/release.sh` also rewrites `Casks/agent-profiles.rb` (the Homebrew cask and
+`scripts/install.sh` read the same release assets) with the version and the SHA-256 of the
+archive. Commit that change to `main` **after** the release is published, with the archive
+that was uploaded: a rebuilt archive has another sum and `brew install` would refuse it.
+
 ## 4. What the app does with a release
 
 1. `GET https://api.github.com/repos/<RELEASE_REPO>/releases/latest`, without
@@ -201,6 +206,11 @@ Bản phát hành cần hai tệp đính kèm:
 
 Bản nháp và bản pre-release bị ứng dụng bỏ qua, nên một bản phát hành chưa
 xong sẽ không hiện ra.
+
+`scripts/release.sh` cũng ghi lại `Casks/agent-profiles.rb` (cask Homebrew; `scripts/install.sh` dùng
+cùng các tệp của bản phát hành) với phiên bản và SHA-256 của tệp zip. Hãy commit thay đổi đó vào `main`
+**sau khi** bản phát hành đã được publish, đúng với tệp zip đã tải lên: một tệp zip dựng lại có tổng
+khác và `brew install` sẽ từ chối.
 
 ## 4. Ứng dụng làm gì với một bản phát hành
 

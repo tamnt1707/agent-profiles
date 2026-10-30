@@ -7,8 +7,38 @@ import Foundation
 /// `install.sh` of the kit writes, so a profile that was set up with the script
 /// is recognized, and the other way round.
 public enum OrchestrationKit {
-    /// The agents, in the order of the kit.
+    /// How the agents work together.
+    public enum Workflow: String, Equatable, Sendable, CaseIterable {
+        /// The orchestrator takes a change through code, tests and review before it is merged.
+        case sequential
+        /// Coders merge as soon as lint and format pass; a secretary queues the merges and the tester follows the queue.
+        case queue
+    }
+
+    /// The agents of the sequential workflow, in the order of the kit.
     public static let agentNames = ["scout", "researcher", "builder", "tester", "reviewer", "committer"]
+
+    /// The agents of the queue workflow.
+    public static let queueAgentNames = [
+        "scout", "researcher", "frontend-2d", "frontend-3d", "backend", "builder",
+        "secretary", "tester", "reviewer", "committer",
+    ]
+
+    /// The agents of a workflow.
+    public static func agentNames(for workflow: Workflow) -> [String] {
+        workflow == .queue ? queueAgentNames : agentNames
+    }
+
+    /// Names that an earlier version of the kit wrote and the kit no longer has.
+    /// An install or an update takes the file of such a name out of `agents/`,
+    /// after it copied it to `<name>.md.bak.<time>`. When an agent is renamed or
+    /// dropped, its old name goes here.
+    public static let retiredAgentNames: [String] = []
+
+    /// The agents that only the queue workflow has.
+    static var queueOnlyAgentNames: [String] {
+        queueAgentNames.filter { !agentNames.contains($0) }
+    }
 
     /// The lines that mark the block of `CLAUDE.md` that the kit owns.
     public static let beginMark = "<!-- BEGIN claude-orchestration-kit (managed by install.sh; edits inside this block are overwritten on reinstall) -->"
@@ -67,8 +97,9 @@ public enum OrchestrationKit {
     }
 
     /// The text of `agents/<name>.md` for a model mode.
-    public static func agentText(_ name: String, mode: ModelMode) -> String? {
-        guard let source = agentSources[name] else { return nil }
+    public static func agentText(_ name: String, mode: ModelMode, workflow: Workflow = .sequential) -> String? {
+        let queued = workflow == .queue ? queueAgentSources[name] : nil
+        guard let source = queued ?? agentSources[name] else { return nil }
         var text = source + "\n"
         if mode == .inherit {
             // Only the model line of the frontmatter changes.
@@ -81,8 +112,23 @@ public enum OrchestrationKit {
     }
 
     /// The managed block of `CLAUDE.md`, marks included, with its final newline.
-    public static var block: String {
-        beginMark + "\n" + templateSource + "\n" + endMark + "\n"
+    public static var block: String { block(for: .sequential) }
+
+    /// The managed block of a workflow.
+    public static func block(for workflow: Workflow) -> String {
+        let template = workflow == .queue ? queueTemplateSource : templateSource
+        return beginMark + "\n" + template + "\n" + endMark + "\n"
+    }
+
+    /// The instructions of the orchestrator of a workflow, without the marks of the block.
+    public static func instructions(for workflow: Workflow) -> String {
+        workflow == .queue ? queueTemplateSource : templateSource
+    }
+
+    /// The workflow that a `CLAUDE.md` block belongs to.
+    public static func workflow(ofBlockIn text: String) -> Workflow? {
+        guard hasBlock(text) else { return nil }
+        return text.contains(queueMarker) ? .queue : .sequential
     }
 
     /// `text` without the managed block, and without the one blank line that is put before it.
@@ -117,14 +163,14 @@ public enum OrchestrationKit {
     }
 
     /// `text` with the managed block added, or replaced when it is there.
-    public static func addingBlock(to text: String) -> String {
+    public static func addingBlock(to text: String, workflow: Workflow = .sequential) -> String {
         var out = removingBlock(from: text)
         if !out.isEmpty {
             // One blank line between the content of the user and the block.
             if !out.hasSuffix("\n") { out += "\n" }
             out += "\n"
         }
-        return out + block
+        return out + block(for: workflow)
     }
 
     /// `true` when the text has the managed block.
@@ -156,7 +202,9 @@ public enum OrchestrationItem: Equatable, Sendable {
 
 /// What is installed in the config folder of a profile.
 public struct OrchestrationStatus: Equatable, Sendable {
-    /// How many of the six agent files are there.
+    /// The workflow that is installed (the sequential one when nothing is).
+    public var workflow: OrchestrationKit.Workflow
+    /// How many of the agent files of that workflow are there.
     public var agentsPresent: Int
     /// How many of them are what the kit would write now.
     public var agentsCurrent: Int
@@ -177,7 +225,7 @@ public struct OrchestrationStatus: Equatable, Sendable {
 
     /// Everything that can be written is written, and is current.
     public var isCurrent: Bool {
-        let agentsDone = agentsRefusal != nil || agentsCurrent == OrchestrationKit.agentNames.count
+        let agentsDone = agentsRefusal != nil || agentsCurrent == OrchestrationKit.agentNames(for: workflow).count
         let blockDone = claudeMdRefusal != nil || blockCurrent
         return agentsDone && blockDone
     }
@@ -212,21 +260,32 @@ extension Store {
     public func orchestrationStatus(for profile: Profile) -> OrchestrationStatus {
         let (mode, reason) = OrchestrationKit.modelMode(for: profile)
         var status = OrchestrationStatus(
-            agentsPresent: 0, agentsCurrent: 0, hasBlock: false, blockCurrent: false,
+            workflow: .sequential, agentsPresent: 0, agentsCurrent: 0, hasBlock: false, blockCurrent: false,
             agentsRefusal: nil, claudeMdRefusal: nil, mode: mode, reason: reason
         )
         guard let home = try? kitFolder(for: profile),
               SafeFileSystem.kind(of: home) == .directory else { return status }
 
+        // The workflow is told by the block, or by the secretary when there is no block.
+        let claudeMd = home.appendingPathComponent("CLAUDE.md")
         let agentsDir = home.appendingPathComponent("agents")
+        if SafeFileSystem.kind(of: claudeMd) == .file,
+           let text = try? String(contentsOf: claudeMd, encoding: .utf8),
+           let found = OrchestrationKit.workflow(ofBlockIn: text) {
+            status.workflow = found
+        } else if SafeFileSystem.kind(of: agentsDir.appendingPathComponent("secretary.md")) == .file {
+            status.workflow = .queue
+        }
+        let workflow = status.workflow
+
         switch SafeFileSystem.kind(of: agentsDir) {
         case .directory:
-            for name in OrchestrationKit.agentNames {
+            for name in OrchestrationKit.agentNames(for: workflow) {
                 let file = agentsDir.appendingPathComponent("\(name).md")
                 guard SafeFileSystem.kind(of: file) == .file else { continue }
                 status.agentsPresent += 1
                 if let text = try? String(contentsOf: file, encoding: .utf8),
-                   text == OrchestrationKit.agentText(name, mode: mode) {
+                   text == OrchestrationKit.agentText(name, mode: mode, workflow: workflow) {
                     status.agentsCurrent += 1
                 }
             }
@@ -235,13 +294,12 @@ extension Store {
         default: status.agentsRefusal = .unusable
         }
 
-        let claudeMd = home.appendingPathComponent("CLAUDE.md")
         switch SafeFileSystem.kind(of: claudeMd) {
         case .file:
             if let text = try? String(contentsOf: claudeMd, encoding: .utf8) {
                 status.hasBlock = OrchestrationKit.hasBlock(text)
                 status.blockCurrent = status.hasBlock
-                    && text == OrchestrationKit.addingBlock(to: text)
+                    && text == OrchestrationKit.addingBlock(to: text, workflow: workflow)
             }
         case .missing: break
         case .link: status.claudeMdRefusal = .shared
@@ -250,13 +308,27 @@ extension Store {
         return status
     }
 
+    /// `true` when the agents of `workflow` are all there and current, so a session can start as its orchestrator.
+    public func orchestrationAgentsReady(for profile: Profile, workflow: OrchestrationKit.Workflow) -> Bool {
+        let status = orchestrationStatus(for: profile)
+        return status.workflow == workflow
+            && status.agentsRefusal == nil
+            && status.agentsCurrent == OrchestrationKit.agentNames(for: workflow).count
+    }
+
     /// Installs the agents and the orchestrator block into the config folder of the profile.
     ///
     /// A link is never written through: a profile that shares `agents/` or
     /// `CLAUDE.md` with `~/.claude` would change the files of another profile.
     /// The part that is a link is refused and reported; the other one is done.
     /// A file that is replaced is first copied to `<file>.bak.<timestamp>`.
-    public func installOrchestration(for profile: Profile, now: Date = Date()) throws -> OrchestrationReport {
+    public func installOrchestration(
+        for profile: Profile,
+        workflow: OrchestrationKit.Workflow = .sequential,
+        withBlock: Bool = true,
+        retired: [String] = OrchestrationKit.retiredAgentNames,
+        now: Date = Date()
+    ) throws -> OrchestrationReport {
         let home = try orchestrationHome(for: profile, create: true)
         let (mode, reason) = OrchestrationKit.modelMode(for: profile)
         let stamp = Self.backupStamp(now)
@@ -273,11 +345,15 @@ extension Store {
                 catch { throw OrchestrationError.ioFailed(agentsDir.path) }
             }
             var changed = 0
-            for name in OrchestrationKit.agentNames {
-                guard let text = OrchestrationKit.agentText(name, mode: mode) else { continue }
+            for name in OrchestrationKit.agentNames(for: workflow) {
+                guard let text = OrchestrationKit.agentText(name, mode: mode, workflow: workflow) else { continue }
                 let file = agentsDir.appendingPathComponent("\(name).md")
                 if try writeKitFile(text, to: file, stamp: stamp) { changed += 1 }
             }
+            // Switching to the sequential workflow takes the agents out that only the queue has;
+            // so do the names that the kit dropped.
+            let leaving = (workflow == .sequential ? OrchestrationKit.queueOnlyAgentNames : []) + retired
+            changed += try retireAgents(leaving, in: agentsDir, stamp: stamp)
             agents = .done(changed: changed)
         }
 
@@ -289,13 +365,21 @@ extension Store {
         case .directory, .other: block = .refused(.unusable)
         case .missing, .file:
             let current = (try? String(contentsOf: claudeMd, encoding: .utf8)) ?? ""
-            let changed = try writeKitFile(OrchestrationKit.addingBlock(to: current), to: claudeMd, stamp: stamp)
-            block = .done(changed: changed ? 1 : 0)
+            if withBlock {
+                let changed = try writeKitFile(OrchestrationKit.addingBlock(to: current, workflow: workflow), to: claudeMd, stamp: stamp)
+                block = .done(changed: changed ? 1 : 0)
+            } else if OrchestrationKit.hasBlock(current) {
+                // The instructions go into the session instead: a block would give them to every session.
+                let changed = try writeKitFile(OrchestrationKit.removingBlock(from: current), to: claudeMd, stamp: stamp)
+                block = .done(changed: changed ? 1 : 0)
+            } else {
+                block = .done(changed: 0)
+            }
         }
         return OrchestrationReport(agents: agents, claudeMd: block, mode: mode, reason: reason)
     }
 
-    /// Removes the six agent files and the managed block. The rest of `agents/` and
+    /// Removes the agent files of both workflows and the managed block. The rest of `agents/` and
     /// of `CLAUDE.md` is left as it is. A link is never written through.
     public func removeOrchestration(for profile: Profile, now: Date = Date()) throws -> OrchestrationReport {
         let home = try orchestrationHome(for: profile, create: false)
@@ -310,7 +394,7 @@ extension Store {
         case .missing: agents = .done(changed: 0)
         case .directory:
             var changed = 0
-            for name in OrchestrationKit.agentNames {
+            for name in OrchestrationKit.agentNames + OrchestrationKit.queueOnlyAgentNames {
                 let file = agentsDir.appendingPathComponent("\(name).md")
                 guard SafeFileSystem.kind(of: file) == .file else { continue }
                 try SafeFileSystem.remove(at: file)
@@ -335,6 +419,24 @@ extension Store {
             }
         }
         return OrchestrationReport(agents: agents, claudeMd: block, mode: mode, reason: reason)
+    }
+
+    /// Takes the agent files of `names` out of `agents/`. Each one is copied to
+    /// `<name>.md.bak.<stamp>` first, so a file that the user changed is not lost.
+    /// Returns how many files were taken out.
+    private func retireAgents(_ names: [String], in agentsDir: URL, stamp: String) throws -> Int {
+        var removed = 0
+        for name in names where Slug.isSafe(name) {
+            let file = agentsDir.appendingPathComponent("\(name).md")
+            guard SafeFileSystem.kind(of: file) == .file else { continue }
+            let backup = agentsDir.appendingPathComponent("\(name).md.bak.\(stamp)")
+            if SafeFileSystem.kind(of: backup) == .missing {
+                try? FileManager.default.copyItem(at: file, to: backup)
+            }
+            try SafeFileSystem.remove(at: file)
+            removed += 1
+        }
+        return removed
     }
 
     /// Replaces a link to `~/.claude` (`agents` or `CLAUDE.md`) in the config folder

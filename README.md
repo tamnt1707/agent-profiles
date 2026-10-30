@@ -25,7 +25,8 @@ called Agent Profiles.
 - **One profile per provider.** Give it a name, an address, a key and a model. Done.
 - **A terminal inside the app.** Open a profile and its terminal is right in the window, with tabs
   (*New session*, *Restart session*, *Close session*). A profile keeps running while you look at
-  another one, and the sidebar marks the ones that run. Prefer Terminal or iTerm2? Switch in the settings.
+  another one, and the sidebar marks the ones that run. A new tab asks how to start: *Normal*, or as an
+  orchestrator (see below). Prefer Terminal or iTerm2? Switch in the settings.
 - **One command per profile.** The command is named after the profile (you can rename it)
   and works from any terminal, in any folder.
 - **Ready-made templates** for your Claude subscription (no address and no key, you just sign in),
@@ -42,6 +43,14 @@ called Agent Profiles.
 - **Orchestration kit.** One button adds a set of subagents (scout, researcher, builder, tester,
   reviewer, committer) and the instructions for the main session to one profile, so a strong model
   can plan while cheaper ones do the reading and the typing. Nothing outside that profile is touched.
+  Two workflows, each drawn as a diagram in the app: *Sequential* (the orchestrator hands out one step at a
+  time) and *Queue* (coders merge into a task branch once lint and format pass, a secretary writes the queue,
+  the tester follows it in order, and nothing goes to a higher branch until everything is green). The queue
+  workflow adds `frontend-2d`, `frontend-3d`, `backend` and `secretary`. Reinstalling updates the agents in
+  place with a `.bak` backup and removes the ones the kit has dropped.
+- **Start as an orchestrator.** In the Terminal tab, pick *Orchestrator* when you open a tab: Claude starts
+  with Opus at medium effort and the instructions of the workflow, for that session only. Missing agents are
+  installed first, and `CLAUDE.md` is not touched.
 - **Heartbeat for your 5 hour window.** Pick the times (and days) at which the app sends one tiny `ping`
   through a profile's CLI, so the usage window of your subscription starts when you want it to. It runs even
   when the app is closed, and shows you when the last ping went out and how it ended.
@@ -59,7 +68,13 @@ called Agent Profiles.
   click, after checking that it really comes from us.
 
 <p align="center">
-  <img src="docs/images/terminal-dark.png" alt="A profile running Claude Code in the terminal inside the window" width="760">
+  <img src="docs/images/terminal-dark.png" alt="A profile running Claude Code as the orchestrator (Opus, medium effort) in the terminal inside the window" width="760">
+</p>
+
+<p align="center">
+  <img src="docs/images/terminal-chooser-en.png" alt="The Terminal tab asks how to start: normal, orchestrator sequential or orchestrator queue" width="370">
+  &nbsp;
+  <img src="docs/images/orchestration-en.png" alt="The Orchestration tab with the queue workflow drawn as a diagram" width="370">
 </p>
 
 <p align="center">
@@ -77,6 +92,20 @@ You need a Mac with **Apple Silicon** running **macOS 14 or later**.
 2. Open it and drag **Agent Profiles** into **Applications**.
 3. The first time, right-click the app and choose **Open**. macOS asks once because the app is
    not notarized by Apple yet.
+
+Prefer a command? Either of these installs the app and needs no right-click:
+
+```sh
+# the script of this repository: latest release into /Applications
+curl -fsSL https://raw.githubusercontent.com/tamnt1707/agent-profiles/main/scripts/install.sh | bash
+
+# or Homebrew
+brew tap tamnt1707/agent-profiles https://github.com/tamnt1707/agent-profiles
+brew install --cask agent-profiles
+```
+
+The script takes `--version 0.6.0` for a given version and `--uninstall` to remove the app (your profiles
+and keys stay). The app updates itself afterwards, so `brew upgrade` is not needed.
 
 Coming from **Claude Profiles 0.2.0**? Download this version by hand once, because the old app cannot
 update itself to a differently named app, then delete the old `Claude Profiles.app`. Your profiles, keys
@@ -124,6 +153,19 @@ also offers to remove the terminal setup it added.
 
 **Does it work on an Intel Mac?**
 Not yet. The app runs on Apple Silicon only.
+
+**Does it work on Windows or Linux?**
+No. The app is for macOS 14 or later: it uses the macOS Keychain, LaunchAgents and the native window.
+
+**Does an orchestrator session change my profile?**
+Only the agents: they are added to `agents/` of the profile, and an update keeps a `.bak` of anything it
+replaces. The instructions of the workflow go into that one session, not into `CLAUDE.md`. Starting a normal
+session afterwards gives you plain Claude Code. To use another mode, open a new tab; the earlier conversation
+stays available with `/resume`.
+
+**How do I remove the app?**
+`scripts/install.sh --uninstall` (or `brew uninstall --cask agent-profiles`, or drag the app to the Trash). Your
+profiles and keys stay; delete `~/.claude-profiles` and the keys in Keychain Access if you want them gone too.
 
 ## More
 

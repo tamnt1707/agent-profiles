@@ -4,6 +4,49 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.6.0] - 2026-10-30
+
+A queue workflow for the orchestration kit, diagrams of both workflows, and a choice of how a terminal starts.
+
+### English
+
+**New**
+- **Queue workflow.** The *Orchestration* tab has a second workflow next to *Sequential*. Coders merge into the task
+  branch as soon as lint and format pass, a `secretary` agent writes one numbered file per merge into
+  `.orchestra/queue/`, and the tester follows the queue in order and runs the whole suite when no more code is coming.
+  A bug becomes a new queue entry for backend or frontend. The task branch goes into a higher branch only when
+  everything is green. It never touches `main` or `master`.
+- **New agents.** `frontend-2d` (Sonnet) and `frontend-3d` (Opus, medium effort) replace the single frontend agent of
+  the queue workflow: easy tasks go to 2D, 3D work also covers 2D, and never both on one task. Also `backend`,
+  `secretary` and a tester that follows the queue. `builder` stays for other work.
+- **Diagrams.** The *Orchestration* tab draws the chosen workflow as a diagram. It works offline.
+- **Update removes retired agents.** The kit keeps a list of names it dropped; installing removes them (with a
+  `.bak` backup). Switching from queue to sequential removes the agents only the queue uses, also with a backup.
+- **Start mode of a terminal.** The *Terminal* tab no longer starts Claude when you open it. It asks how: *Normal*
+  (as before), or *Orchestrator: sequential* / *queue*. An orchestrator session starts Claude with Opus at medium
+  effort and the instructions of the workflow, for that session only (nothing is written to `CLAUDE.md`). If the
+  agents are not in the profile, the app says so and installs them first. The mode shows next to the name of the tab.
+  To use another mode, open a new tab; the earlier conversation stays available with `/resume`.
+
+### Tiếng Việt
+
+**Mới**
+- **Quy trình hàng đợi.** Tab *Orchestration* có thêm quy trình thứ hai cạnh *Tuần tự*. Coder merge vào nhánh task
+  ngay khi qua lint và format, agent `secretary` ghi mỗi lần merge thành một file có số thứ tự trong
+  `.orchestra/queue/`, tester làm theo hàng đợi đúng thứ tự và chạy toàn bộ bộ test khi không còn code mới. Bug thành
+  một mục mới trong hàng đợi giao cho backend hoặc frontend. Nhánh task chỉ được merge lên nhánh cao hơn khi mọi thứ
+  đều xanh. Quy trình không bao giờ đụng vào `main` hay `master`.
+- **Agent mới.** `frontend-2d` (Sonnet) và `frontend-3d` (Opus, effort medium) thay cho một agent frontend của quy
+  trình hàng đợi: việc dễ giao 2D, việc 3D đã bao gồm 2D, và không dùng cả hai trên một task. Thêm `backend`,
+  `secretary` và tester làm theo hàng đợi. `builder` vẫn dùng cho việc khác.
+- **Sơ đồ.** Tab *Orchestration* vẽ quy trình đang chọn thành sơ đồ, chạy được khi không có mạng.
+- **Cập nhật gỡ agent cũ.** Kit giữ danh sách tên đã bỏ; khi cài, các agent đó bị gỡ (có bản `.bak`). Chuyển từ
+  hàng đợi sang tuần tự cũng gỡ các agent chỉ hàng đợi dùng, cũng có bản sao lưu.
+- **Chế độ mở terminal.** Tab *Terminal* không tự chạy Claude khi mở nữa mà hỏi cách mở: *Bình thường* (như cũ),
+  hoặc *Điều phối: tuần tự* / *hàng đợi*. Phiên điều phối chạy Claude với Opus effort medium và hướng dẫn của quy
+  trình, chỉ cho phiên đó (không ghi gì vào `CLAUDE.md`). Nếu profile chưa có agent, app báo và cài trước. Chế độ
+  hiện cạnh tên tab. Muốn dùng chế độ khác, mở tab mới; cuộc hội thoại trước vẫn mở lại được bằng `/resume`.
+
 ## [0.5.0] - 2026-10-29
 
 See which account a profile is signed in with.

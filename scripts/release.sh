@@ -10,7 +10,7 @@
 #   * runs the tests and builds the app with ./build-mac.sh --no-install,
 #   * packs the app into build/Agent-Profiles-<version>-macos.zip,
 #   * signs the archive with the private key of $RELEASE_KEY_FILE,
-#   * prints the SHA-256 sums,
+#   * prints the SHA-256 sums and updates Casks/agent-profiles.rb with them,
 #   * takes the release notes from the section of this version in CHANGELOG.md,
 #   * prints (and with --create-draft runs) the `gh release create` command.
 #
@@ -94,6 +94,10 @@ swift scripts/release-sign.swift "$RELEASE_KEY_FILE" "$ARCHIVE" "$ARCHIVE.sig"
 echo ""
 echo "--- SHA-256 ---"
 shasum -a 256 "$ARCHIVE" "$ARCHIVE.sig" "$DISK_IMAGE"
+
+# 6b. The Homebrew cask takes the version and the sum of this archive. Commit it
+#     after the release is published (see RELEASE.md).
+scripts/update-cask.sh "$ARCHIVE"
 
 # 7. The release command. It is only run with --create-draft, and then as a
 #    draft: the notes and the assets can be looked at before it is public.
