@@ -156,3 +156,40 @@ public struct TerminalSessionBook: Equatable, Sendable {
         nextNumber[old] = nil
     }
 }
+
+/// How a tab of the embedded terminal runs Claude.
+public enum TerminalMode: Equatable, Hashable, Sendable {
+    /// Plain Claude Code: the model and the instructions of the profile.
+    case normal
+    /// Claude Code as the orchestrator of a workflow: Opus at medium effort, and the
+    /// instructions of the workflow added to the system prompt of this session only.
+    case orchestrated(OrchestrationKit.Workflow)
+
+    public var workflow: OrchestrationKit.Workflow? {
+        if case .orchestrated(let workflow) = self { return workflow }
+        return nil
+    }
+}
+
+extension EmbeddedTerminalSpec {
+    /// The words that follow the command of the profile for a mode.
+    ///
+    /// The instructions of an orchestrator go into the system prompt of this
+    /// session only. Claude Code keeps that prompt with the conversation, so a
+    /// new mode needs a new conversation: `--resume` would bring the old prompt back.
+    static func arguments(for mode: TerminalMode) -> String {
+        guard case .orchestrated(let workflow) = mode else { return "" }
+        return " --model opus --effort medium --append-system-prompt "
+            + ShellQuote.quote(OrchestrationKit.instructions(for: workflow))
+    }
+
+    /// The command of a tab that starts in `mode`.
+    public static func shellCommand(
+        for profile: Profile,
+        paths: Paths,
+        workdirOverride: String? = nil,
+        mode: TerminalMode
+    ) throws -> String {
+        try shellCommand(for: profile, paths: paths, workdirOverride: workdirOverride) + arguments(for: mode)
+    }
+}

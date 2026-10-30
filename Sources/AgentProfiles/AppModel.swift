@@ -1135,28 +1135,99 @@ final class AppModel {
         selectedSessions[slug] = id
     }
 
-    /// Opens the first tab when the terminal tab of a profile is shown and it
-    /// has none: opening the tab is enough, there is no button to press.
-    func startTerminalIfNeeded(of slug: String) {
-        guard terminals.book.sessions(for: slug).isEmpty else { return }
-        newSession(of: slug)
+    /// The mode that the chooser of a profile shows, and starts.
+    var launchChoices: [String: TerminalMode] = [:]
+    /// The profiles whose chooser is open on top of their tabs ("+").
+    var launcherShown: Set<String> = []
+
+    func launchChoice(of slug: String) -> TerminalMode { launchChoices[slug] ?? .normal }
+
+    func setLaunchChoice(_ mode: TerminalMode, of slug: String) {
+        guard launchChoices[slug] != mode else { return }
+        launchChoices[slug] = mode
     }
 
-    /// Opens a new tab for the profile, in the folder of the profile.
-    func newSession(of slug: String) {
+    /// Opens the chooser: how a new tab should start.
+    func showLauncher(of slug: String) {
+        launcherShown.insert(slug)
+    }
+
+    func hideLauncher(of slug: String) {
+        launcherShown.remove(slug)
+    }
+
+    /// `true` when the agents of the mode are not installed in the profile yet.
+    func needsAgents(_ mode: TerminalMode, of profile: Profile) -> Bool {
+        guard let workflow = mode.workflow else { return false }
+        return !store.orchestrationAgentsReady(for: profile, workflow: workflow)
+    }
+
+    /// Starts a new tab in a mode. An orchestrator mode with agents that are not there
+    /// asks first: starting installs them.
+    func startSession(of slug: String, mode: TerminalMode) {
         guard let profile = data.profiles.first(where: { $0.slug == slug }) else { return }
-        do {
-            selectedSessions[slug] = try terminals.open(profile, paths: store.paths, folder: nil)
-            status = Status(kind: .success, text: loc.t("status.embeddedRunning", profile.name))
-        } catch {
-            report(error)
+        if needsAgents(mode, of: profile) {
+            pendingTerminalAction = .start(slug, mode)
+            isConfirmingTerminalAction = true
+        } else {
+            perform(.start(slug, mode))
         }
+    }
+
+    /// The name of a mode, for the chooser, the bar and the tab.
+    func modeName(_ mode: TerminalMode) -> String {
+        switch mode {
+        case .normal: return loc.t("terminal.mode.normal")
+        case .orchestrated(.sequential): return loc.t("terminal.mode.sequential")
+        case .orchestrated(.queue): return loc.t("terminal.mode.queue")
+        }
+    }
+
+    /// The question about a start or a change of mode.
+    func terminalActionText() -> (title: String, message: String, button: String) {
+        switch pendingTerminalAction {
+        case .start(_, let mode)?:
+            return (loc.t("terminal.confirm.start.title", modeName(mode)),
+                    loc.t("terminal.confirm.start.message", modeName(mode)),
+                    loc.t("terminal.confirm.start.button"))
+        case .close?:
+            return (loc.t("terminal.confirm.close.title"), loc.t("terminal.confirm.message"), loc.t("terminal.closeSession"))
+        default:
+            return (loc.t("terminal.confirm.restart.title"), loc.t("terminal.confirm.message"), loc.t("terminal.restart"))
+        }
+    }
+
+    /// Installs the agents of the mode into the profile, for a session. `false` when that
+    /// was not possible; the reason is in the status then.
+    private func prepareAgents(for mode: TerminalMode, of profile: Profile) -> Bool {
+        guard let workflow = mode.workflow else { return true }
+        guard store.orchestrationAgentsReady(for: profile, workflow: workflow) == false else { return true }
+        do {
+            // The agents only: the instructions go into the session, not into CLAUDE.md.
+            let report = try store.installOrchestration(for: profile, workflow: workflow, withBlock: false)
+            if case .refused = report.agents {
+                status = Status(kind: .failure, text: loc.t("orch.shared.agents"))
+                refreshOrchestration()
+                return false
+            }
+        } catch {
+            reportOrchestration(error)
+            return false
+        }
+        refreshOrchestration()
+        return true
+    }
+
+    /// Opens a new tab in the normal mode, in the folder of the profile.
+    func newSession(of slug: String) {
+        startSession(of: slug, mode: .normal)
     }
 
     /// What a question about a running tab is for.
     enum TerminalAction: Equatable {
         case restart(Int)
         case close(Int)
+        case start(String, TerminalMode)
     }
 
     /// The action that waits for the answer of the question about a running process.
@@ -1201,6 +1272,16 @@ final class AppModel {
                   let profile = data.profiles.first(where: { $0.slug == slug }) else { return }
             do {
                 try terminals.restart(id, profile: profile, paths: store.paths)
+            } catch {
+                report(error)
+            }
+        case .start(let slug, let mode):
+            guard let profile = data.profiles.first(where: { $0.slug == slug }),
+                  prepareAgents(for: mode, of: profile) else { return }
+            do {
+                selectedSessions[slug] = try terminals.open(profile, paths: store.paths, folder: nil, mode: mode)
+                launcherShown.remove(slug)
+                status = Status(kind: .success, text: loc.t("status.embeddedRunning", profile.name))
             } catch {
                 report(error)
             }

@@ -6,6 +6,8 @@ import AgentProfilesCore
 struct ProfileEditorView: View {
     @Bindable var model: AppModel
     @State private var presetID = ""
+    @State private var isDiagramShown = true
+    @State private var diagramHeight: CGFloat = 320
     /// Which page of the profile the form shows: its settings, its usage or its orchestration.
     var page: AppModel.DetailTab = .settings
 
@@ -258,6 +260,15 @@ struct ProfileEditorView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                DisclosureGroup(model.loc.t("orch.diagram.title"), isExpanded: $isDiagramShown) {
+                    MermaidView(
+                        source: OrchestrationKit.diagram(for: model.orchestrationWorkflow) {
+                            model.loc.t("orch.diagram." + $0)
+                        },
+                        height: $diagramHeight
+                    )
+                    .frame(height: max(diagramHeight, 120))
+                }
                 Text(orchestrationStatusText(state))
                     .font(.callout)
                 Text(orchestrationModeText(state))
