@@ -356,7 +356,7 @@
 
 /* Orchestration kit */
 "orch.section" = "Điều phối (Orchestration)";
-"orch.hint" = "Sáu subagent (scout, researcher, builder, tester, reviewer, committer) và hướng dẫn cho orchestrator, chỉ cài vào profile này. Các profile khác và ~/.claude không bị đụng tới.";
+"orch.hint" = "Các subagent (scout, researcher, builder, tester, reviewer, committer và, ở quy trình hàng đợi, frontend, backend, secretary) và hướng dẫn cho orchestrator, chỉ cài vào profile này. Các profile khác và ~/.claude không bị đụng tới.";
 "orch.install" = "Cài vào profile này";
 "orch.update" = "Cập nhật";
 "orch.remove" = "Gỡ";
@@ -479,3 +479,10 @@
 "account.unavailable" = "Không đọc được tài khoản";
 "account.notSignedIn" = "Chưa đăng nhập. Mở profile trong terminal và đăng nhập.";
 "account.signedIn" = "Đã đăng nhập";
+"orch.workflow" = "Quy trình";
+"orch.workflow.sequential" = "Tuần tự";
+"orch.workflow.queue" = "Hàng đợi";
+"orch.workflow.sequential.hint" = "Code, test và review từng thay đổi rồi mới merge. An toàn nhưng chậm khi nhiều việc chạy cùng lúc.";
+"orch.workflow.queue.hint" = "Coder merge ngay khi qua lint và format. Thư ký ghi mỗi lần merge vào hàng đợi đánh số (.orchestra/queue), tester làm theo thứ tự, và chạy toàn bộ test khi không còn code mới. Frontend chia thành frontend-2d (Sonnet) và frontend-3d (Opus), backend có agent riêng.";
+"orch.status.otherWorkflow" = "Đang cài một quy trình khác. Bấm Cập nhật để chuyển.";
+"orch.mode.tiered.queue" = "Model: scout, secretary và committer dùng Haiku, frontend-3d dùng Opus, các agent còn lại dùng Sonnet.";

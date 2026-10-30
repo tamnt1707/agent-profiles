@@ -73,6 +73,8 @@ final class AppModel {
 
     /// The shared item (a link to `~/.claude`) the user is asked to copy, if any.
     var orchestrationUnshare: OrchestrationItem?
+    /// The workflow the Orchestration tab shows and installs. It follows what is installed.
+    var orchestrationWorkflow: OrchestrationKit.Workflow = .sequential
     /// Set while the question about the copy is open.
     var isConfirmingUnshare: Bool = false
 
@@ -933,14 +935,17 @@ final class AppModel {
             orchestration = nil
             return
         }
-        orchestration = store.orchestrationStatus(for: profile)
+        let found = store.orchestrationStatus(for: profile)
+        orchestration = found
+        // What is installed decides the choice; with nothing installed the choice is kept.
+        if !found.isEmpty, orchestrationWorkflow != found.workflow { orchestrationWorkflow = found.workflow }
     }
 
     /// Installs (or updates) the agents and the instructions into the saved profile.
     func installOrchestration() {
         guard let profile = currentProfile else { return }
         do {
-            let result = try store.installOrchestration(for: profile)
+            let result = try store.installOrchestration(for: profile, workflow: orchestrationWorkflow)
             status = Status(kind: .success, text: orchestrationText(result, removing: false))
         } catch {
             reportOrchestration(error)

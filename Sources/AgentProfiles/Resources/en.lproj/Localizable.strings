@@ -356,7 +356,7 @@
 
 /* Orchestration kit */
 "orch.section" = "Orchestration";
-"orch.hint" = "Six subagents (scout, researcher, builder, tester, reviewer, committer) and the instructions of the orchestrator, installed into this profile only. Your other profiles and ~/.claude are not touched.";
+"orch.hint" = "Subagents (scout, researcher, builder, tester, reviewer, committer and, in the queue workflow, frontend, backend and secretary) and the instructions of the orchestrator, installed into this profile only. Your other profiles and ~/.claude are not touched.";
 "orch.install" = "Install in this profile";
 "orch.update" = "Update";
 "orch.remove" = "Remove";
@@ -479,3 +479,10 @@
 "account.unavailable" = "Could not read the account";
 "account.notSignedIn" = "Not signed in. Open this profile in the terminal and sign in.";
 "account.signedIn" = "Signed in";
+"orch.workflow" = "Workflow";
+"orch.workflow.sequential" = "Sequential";
+"orch.workflow.queue" = "Queue";
+"orch.workflow.sequential.hint" = "Code, test and review one change at a time, then merge. Safe, but slow when several things run.";
+"orch.workflow.queue.hint" = "Coders merge as soon as lint and format pass. A secretary writes each merge into a numbered queue (.orchestra/queue), the tester follows it in order, and the suite runs when no more code is coming. Frontend is split into frontend-2d (Sonnet) and frontend-3d (Opus), backend has its own agent.";
+"orch.status.otherWorkflow" = "A different workflow is installed. Update to switch.";
+"orch.mode.tiered.queue" = "Models: scout, secretary and committer use Haiku, frontend-3d uses Opus, the others Sonnet.";

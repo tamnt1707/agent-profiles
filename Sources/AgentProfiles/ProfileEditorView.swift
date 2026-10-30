@@ -249,6 +249,15 @@ struct ProfileEditorView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
+                Picker(model.loc.t("orch.workflow"), selection: $model.orchestrationWorkflow) {
+                    Text(model.loc.t("orch.workflow.sequential")).tag(OrchestrationKit.Workflow.sequential)
+                    Text(model.loc.t("orch.workflow.queue")).tag(OrchestrationKit.Workflow.queue)
+                }
+                .pickerStyle(.segmented)
+                Text(model.loc.t(model.orchestrationWorkflow == .queue ? "orch.workflow.queue.hint" : "orch.workflow.sequential.hint"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(orchestrationStatusText(state))
                     .font(.callout)
                 Text(orchestrationModeText(state))
@@ -265,7 +274,7 @@ struct ProfileEditorView: View {
                     Button(model.loc.t(state.isEmpty ? "orch.install" : "orch.update")) {
                         model.installOrchestration()
                     }
-                    .disabled(state.isCurrent && !state.isEmpty)
+                    .disabled(state.isCurrent && !state.isEmpty && state.workflow == model.orchestrationWorkflow)
                     if !state.isEmpty {
                         Button(model.loc.t("orch.remove")) { model.removeOrchestration() }
                     }
@@ -300,9 +309,11 @@ struct ProfileEditorView: View {
 
     private func orchestrationStatusText(_ state: OrchestrationStatus) -> String {
         if state.isEmpty { return model.loc.t("orch.status.none") }
+        if state.workflow != model.orchestrationWorkflow { return model.loc.t("orch.status.otherWorkflow") }
         if state.isCurrent { return model.loc.t("orch.status.current") }
-        if state.agentsPresent > 0, state.agentsPresent < OrchestrationKit.agentNames.count {
-            return model.loc.count("orch.status.partial", state.agentsPresent, OrchestrationKit.agentNames.count)
+        let total = OrchestrationKit.agentNames(for: state.workflow).count
+        if state.agentsPresent > 0, state.agentsPresent < total {
+            return model.loc.count("orch.status.partial", state.agentsPresent, total)
         }
         return model.loc.t("orch.status.outdated")
     }
@@ -310,7 +321,7 @@ struct ProfileEditorView: View {
     private func orchestrationModeText(_ state: OrchestrationStatus) -> String {
         switch state.reason {
         case .anthropic, .distinctModels:
-            return model.loc.t("orch.mode.tiered")
+            return model.loc.t(model.orchestrationWorkflow == .queue ? "orch.mode.tiered.queue" : "orch.mode.tiered")
         case .noMapping(let host):
             return model.loc.t("orch.mode.inherit", model.loc.t("orch.reason.noMapping", host))
         case .sameModel(let name):
