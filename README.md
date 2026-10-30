@@ -68,7 +68,13 @@ called Agent Profiles.
   click, after checking that it really comes from us.
 
 <p align="center">
-  <img src="docs/images/terminal-dark.png" alt="A profile running Claude Code in the terminal inside the window" width="760">
+  <img src="docs/images/terminal-dark.png" alt="A profile running Claude Code as the orchestrator (Opus, medium effort) in the terminal inside the window" width="760">
+</p>
+
+<p align="center">
+  <img src="docs/images/terminal-chooser-en.png" alt="The Terminal tab asks how to start: normal, orchestrator sequential or orchestrator queue" width="370">
+  &nbsp;
+  <img src="docs/images/orchestration-en.png" alt="The Orchestration tab with the queue workflow drawn as a diagram" width="370">
 </p>
 
 <p align="center">

@@ -64,7 +64,13 @@ Agent Profiles.
   đến từ chúng tôi.
 
 <p align="center">
-  <img src="docs/images/terminal-dark.png" alt="Một profile chạy Claude Code trong terminal ngay trong cửa sổ" width="760">
+  <img src="docs/images/terminal-dark.png" alt="Một profile chạy Claude Code ở vai trò điều phối (Opus, mức medium) trong terminal ngay trong cửa sổ" width="760">
+</p>
+
+<p align="center">
+  <img src="docs/images/terminal-chooser-vi.png" alt="Tab Terminal hỏi cách mở: bình thường, điều phối tuần tự hoặc điều phối hàng đợi" width="370">
+  &nbsp;
+  <img src="docs/images/orchestration-vi.png" alt="Tab Điều phối với quy trình hàng đợi được vẽ thành sơ đồ" width="370">
 </p>
 
 <p align="center">
