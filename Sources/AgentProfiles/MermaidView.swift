@@ -27,7 +27,9 @@ struct MermaidView: NSViewRepresentable {
     }
 
     private static let script: String = {
-        guard let url = Bundle.module.url(forResource: "mermaid.min", withExtension: "js"),
+        // Not Bundle.module: in the installed app it looks beside the .app and in the build
+        // folder of the machine that built it, and stops the app when neither is there.
+        guard let url = ResourceLocator.bundle.url(forResource: "mermaid.min", withExtension: "js"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return "" }
         // Nothing in the script may close the tag it sits in.
         return text.replacingOccurrences(of: "</script", with: "<\\/script")
