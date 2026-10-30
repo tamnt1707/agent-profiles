@@ -1,6 +1,6 @@
 cask "agent-profiles" do
   version "0.6.0"
-  sha256 "8c29a89c6854faa9336686853bf01b75bdf3d16cd15e0d8dd45f7b48238d82d8"
+  sha256 "b9b261d04e97c55d27873ead8efae9c2802f8ac06dc8f1f2d1af3488339a5440"
 
   url "https://github.com/tamnt1707/agent-profiles/releases/download/v#{version}/Agent-Profiles-#{version}-macos.zip"
   name "Agent Profiles"
