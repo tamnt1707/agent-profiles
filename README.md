@@ -148,6 +148,19 @@ also offers to remove the terminal setup it added.
 **Does it work on an Intel Mac?**
 Not yet. The app runs on Apple Silicon only.
 
+**Does it work on Windows or Linux?**
+No. The app is for macOS 14 or later: it uses the macOS Keychain, LaunchAgents and the native window.
+
+**Does an orchestrator session change my profile?**
+Only the agents: they are added to `agents/` of the profile, and an update keeps a `.bak` of anything it
+replaces. The instructions of the workflow go into that one session, not into `CLAUDE.md`. Starting a normal
+session afterwards gives you plain Claude Code. To use another mode, open a new tab; the earlier conversation
+stays available with `/resume`.
+
+**How do I remove the app?**
+`scripts/install.sh --uninstall` (or `brew uninstall --cask agent-profiles`, or drag the app to the Trash). Your
+profiles and keys stay; delete `~/.claude-profiles` and the keys in Keychain Access if you want them gone too.
+
 ## More
 
 - [What is new in each version](CHANGELOG.md)

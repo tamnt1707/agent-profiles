@@ -141,6 +141,18 @@ thiết lập terminal mà nó đã thêm không.
 **Có chạy trên Mac Intel không?**
 Chưa. App chỉ chạy trên Apple Silicon.
 
+**Có chạy trên Windows hay Linux không?**
+Không. App dành cho macOS 14 trở lên: nó dùng Keychain của macOS, LaunchAgent và cửa sổ gốc.
+
+**Phiên điều phối có đổi profile của tôi không?**
+Chỉ phần agent: chúng được thêm vào `agents/` của profile, và khi cập nhật, thứ gì bị thay đều có bản `.bak`. Hướng dẫn
+của quy trình đi vào đúng phiên đó, không vào `CLAUDE.md`. Mở phiên bình thường sau đó là Claude Code thuần. Muốn dùng
+chế độ khác, mở tab mới; cuộc hội thoại trước vẫn mở lại được bằng `/resume`.
+
+**Gỡ app thế nào?**
+`scripts/install.sh --uninstall` (hoặc `brew uninstall --cask agent-profiles`, hoặc kéo app vào Thùng rác). Profile và
+key được giữ; muốn xóa hẳn thì xóa `~/.claude-profiles` và các key trong Keychain Access.
+
 ## Xem thêm
 
 - [Có gì mới ở mỗi phiên bản](CHANGELOG.md)
