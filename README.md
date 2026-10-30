@@ -25,7 +25,8 @@ called Agent Profiles.
 - **One profile per provider.** Give it a name, an address, a key and a model. Done.
 - **A terminal inside the app.** Open a profile and its terminal is right in the window, with tabs
   (*New session*, *Restart session*, *Close session*). A profile keeps running while you look at
-  another one, and the sidebar marks the ones that run. Prefer Terminal or iTerm2? Switch in the settings.
+  another one, and the sidebar marks the ones that run. A new tab asks how to start: *Normal*, or as an
+  orchestrator (see below). Prefer Terminal or iTerm2? Switch in the settings.
 - **One command per profile.** The command is named after the profile (you can rename it)
   and works from any terminal, in any folder.
 - **Ready-made templates** for your Claude subscription (no address and no key, you just sign in),
@@ -42,6 +43,14 @@ called Agent Profiles.
 - **Orchestration kit.** One button adds a set of subagents (scout, researcher, builder, tester,
   reviewer, committer) and the instructions for the main session to one profile, so a strong model
   can plan while cheaper ones do the reading and the typing. Nothing outside that profile is touched.
+  Two workflows, each drawn as a diagram in the app: *Sequential* (the orchestrator hands out one step at a
+  time) and *Queue* (coders merge into a task branch once lint and format pass, a secretary writes the queue,
+  the tester follows it in order, and nothing goes to a higher branch until everything is green). The queue
+  workflow adds `frontend-2d`, `frontend-3d`, `backend` and `secretary`. Reinstalling updates the agents in
+  place with a `.bak` backup and removes the ones the kit has dropped.
+- **Start as an orchestrator.** In the Terminal tab, pick *Orchestrator* when you open a tab: Claude starts
+  with Opus at medium effort and the instructions of the workflow, for that session only. Missing agents are
+  installed first, and `CLAUDE.md` is not touched.
 - **Heartbeat for your 5 hour window.** Pick the times (and days) at which the app sends one tiny `ping`
   through a profile's CLI, so the usage window of your subscription starts when you want it to. It runs even
   when the app is closed, and shows you when the last ping went out and how it ended.

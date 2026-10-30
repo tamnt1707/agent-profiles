@@ -25,7 +25,8 @@ Agent Profiles.
 - **Một profile cho mỗi nhà cung cấp.** Đặt tên, nhập địa chỉ, key và model. Xong.
 - **Terminal ngay trong ứng dụng.** Mở một profile là terminal của nó nằm ngay trong cửa sổ, có tab
   (*Phiên mới*, *Khởi động lại phiên*, *Đóng phiên*). Profile vẫn chạy khi bạn xem profile khác, và cột bên
-  đánh dấu những profile đang chạy. Thích Terminal hoặc iTerm2 hơn? Đổi trong cài đặt.
+  đánh dấu những profile đang chạy. Mỗi tab mới hỏi cách mở: *Bình thường* hoặc điều phối (xem bên dưới). Thích
+  Terminal hoặc iTerm2 hơn? Đổi trong cài đặt.
 - **Một lệnh cho mỗi profile.** Lệnh đặt theo tên profile (bạn đổi tên được) và chạy được ở
   terminal nào, thư mục nào.
 - **Mẫu có sẵn** cho gói đăng ký Claude của bạn (không cần địa chỉ và key, chỉ cần đăng nhập), OpenRouter,
@@ -39,7 +40,13 @@ Agent Profiles.
   agent cho tất cả.
 - **Bộ Orchestration.** Một nút thêm một bộ subagent (scout, researcher, builder, tester, reviewer, committer) và
   hướng dẫn cho phiên chính vào một profile, để model mạnh lo lập kế hoạch còn các model rẻ hơn lo đọc và gõ. Không có
-  gì ngoài profile đó bị đụng tới.
+  gì ngoài profile đó bị đụng tới. Có hai quy trình, mỗi quy trình được vẽ thành sơ đồ trong app: *Tuần tự* (agent điều
+  phối giao từng bước) và *Hàng đợi* (coder merge vào nhánh task khi qua lint và format, thư ký ghi hàng đợi, tester
+  làm theo đúng thứ tự, và chưa gì được merge lên nhánh cao hơn cho đến khi mọi thứ xanh). Quy trình hàng đợi thêm
+  `frontend-2d`, `frontend-3d`, `backend` và `secretary`. Cài lại sẽ cập nhật agent tại chỗ (có bản `.bak`) và gỡ những
+  agent kit đã bỏ.
+- **Mở với vai trò điều phối.** Ở tab Terminal, chọn *Điều phối* khi mở tab: Claude chạy với Opus effort medium và
+  hướng dẫn của quy trình, chỉ cho phiên đó. Agent còn thiếu được cài trước, và `CLAUDE.md` không bị sửa.
 - **Heartbeat cho cửa sổ 5 giờ.** Chọn giờ (và ngày) để app gửi một `ping` rất nhỏ qua CLI của profile, để cửa sổ
   dùng của gói subscription bắt đầu đúng lúc bạn muốn. Chạy cả khi app đã đóng, và cho bạn thấy ping gần nhất đã đi
   lúc nào và kết thúc ra sao.
