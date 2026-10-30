@@ -4,6 +4,24 @@ All notable changes to Claude Profiles are listed here, newest first. The versio
 is the one in the `VERSION` file. `scripts/release.sh` takes the section of that
 version as the notes of the GitHub release.
 
+## [0.6.1] - 2026-10-30
+
+A fix for a crash in the *Orchestration* tab.
+
+### English
+
+**Fixed**
+- **The app quit when the *Orchestration* tab was opened** on a Mac other than the one that built it. The diagram
+  script was looked up in a place that exists only on the build machine; it is now found inside the app, like
+  the other resources. Version 0.6.0 is affected, so update to this one.
+
+### Tiếng Việt
+
+**Đã sửa**
+- **App tự thoát khi mở tab *Orchestration*** trên máy khác với máy đã build ra nó. Script vẽ sơ đồ được tìm ở
+  một chỗ chỉ có trên máy build; giờ nó được tìm ngay trong app, như các tài nguyên khác. Bản 0.6.0 bị lỗi này,
+  hãy cập nhật lên bản này.
+
 ## [0.6.0] - 2026-10-30
 
 A queue workflow for the orchestration kit, diagrams of both workflows, and a choice of how a terminal starts.
