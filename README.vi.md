@@ -83,6 +83,20 @@ Bạn cần một máy Mac **Apple Silicon** chạy **macOS 14 trở lên**.
 3. Lần đầu, bấm chuột phải vào app rồi chọn **Mở**. macOS chỉ hỏi một lần, vì app chưa được Apple
    notarize.
 
+Thích dùng lệnh hơn? Một trong hai cách dưới đây cài app và không cần bấm chuột phải:
+
+```sh
+# script của repo này: bản mới nhất vào /Applications
+curl -fsSL https://raw.githubusercontent.com/tamnt1707/agent-profiles/main/scripts/install.sh | bash
+
+# hoặc Homebrew
+brew tap tamnt1707/agent-profiles https://github.com/tamnt1707/agent-profiles
+brew install --cask agent-profiles
+```
+
+Script nhận `--version 0.6.0` để cài đúng một phiên bản và `--uninstall` để gỡ app (profile và key được giữ).
+App tự cập nhật sau đó, nên không cần `brew upgrade`.
+
 Đang dùng **Claude Profiles 0.2.0**? Hãy tải bản này bằng tay một lần, vì app cũ không tự cập nhật lên một app đổi
 tên được, rồi xóa `Claude Profiles.app` cũ. Profile, key và lệnh của bạn được giữ nguyên.
 

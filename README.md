@@ -87,6 +87,20 @@ You need a Mac with **Apple Silicon** running **macOS 14 or later**.
 3. The first time, right-click the app and choose **Open**. macOS asks once because the app is
    not notarized by Apple yet.
 
+Prefer a command? Either of these installs the app and needs no right-click:
+
+```sh
+# the script of this repository: latest release into /Applications
+curl -fsSL https://raw.githubusercontent.com/tamnt1707/agent-profiles/main/scripts/install.sh | bash
+
+# or Homebrew
+brew tap tamnt1707/agent-profiles https://github.com/tamnt1707/agent-profiles
+brew install --cask agent-profiles
+```
+
+The script takes `--version 0.6.0` for a given version and `--uninstall` to remove the app (your profiles
+and keys stay). The app updates itself afterwards, so `brew upgrade` is not needed.
+
 Coming from **Claude Profiles 0.2.0**? Download this version by hand once, because the old app cannot
 update itself to a differently named app, then delete the old `Claude Profiles.app`. Your profiles, keys
 and commands carry over as they are.
