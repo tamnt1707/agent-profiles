@@ -1183,7 +1183,16 @@ final class AppModel {
         }
     }
 
-    /// The question about a start or a change of mode.
+    /// `true` when the pending action ends a running process (a restart or a close), `false`
+    /// for a start, which only asks about installing agents.
+    var terminalActionEndsSession: Bool {
+        switch pendingTerminalAction {
+        case .restart?, .close?: return true
+        default: return false
+        }
+    }
+
+    /// The question about a start, a restart or a close.
     func terminalActionText() -> (title: String, message: String, button: String) {
         switch pendingTerminalAction {
         case .start(_, let mode)?:

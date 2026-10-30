@@ -62,7 +62,10 @@ struct TerminalPane: View {
         content
             // Opening the tab starts nothing: the chooser asks how first.
             .alert(model.terminalActionText().title, isPresented: $model.isConfirmingTerminalAction) {
-                Button(model.terminalActionText().button, role: .destructive) { model.confirmTerminalAction() }
+                // Starting a session ends nothing: only a restart or a close is a destructive button.
+                Button(model.terminalActionText().button, role: model.terminalActionEndsSession ? .destructive : nil) {
+                    model.confirmTerminalAction()
+                }
                 Button(model.loc.t("actions.cancel"), role: .cancel) { model.cancelTerminalAction() }
             } message: {
                 Text(model.terminalActionText().message)
