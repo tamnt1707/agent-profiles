@@ -171,6 +171,7 @@ profiles and keys stay; delete `~/.claude-profiles` and the keys in Keychain Acc
 
 - [What is new in each version](CHANGELOG.md)
 - [Building the app yourself](docs/BUILDING.md)
+- [Support the project on Ko-fi](https://ko-fi.com/tamnt) if the app saves you time
 
 Agent Profiles is an independent project. It is not made by, or affiliated with, Anthropic or
 any of the providers it can connect to. All product names belong to their owners.

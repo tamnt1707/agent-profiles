@@ -163,6 +163,7 @@ key được giữ; muốn xóa hẳn thì xóa `~/.claude-profiles` và các ke
 
 - [Có gì mới ở mỗi phiên bản](CHANGELOG.md)
 - [Tự build app](docs/BUILDING.md)
+- [Ủng hộ dự án trên Ko-fi](https://ko-fi.com/tamnt) nếu app giúp bạn tiết kiệm thời gian
 
 Agent Profiles là một dự án độc lập. Dự án không do Anthropic hay các nhà cung cấp mà nó kết nối
 tạo ra, và cũng không liên kết với họ. Mọi tên sản phẩm thuộc về chủ sở hữu của chúng.
