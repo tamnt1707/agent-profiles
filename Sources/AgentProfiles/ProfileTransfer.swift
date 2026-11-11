@@ -88,9 +88,12 @@ extension AppModel {
         importPreview = preview
     }
 
-    /// The choice of the user for one conflicting profile.
+    /// The choice of the user for one conflicting profile. The value that is
+    /// already there is not written again.
     func setImportChoice(_ choice: ImportChoice, for id: Int) {
-        guard var preview = importPreview else { return }
+        guard SettingsChange.isDifferent(importPreview?.choices[id] ?? .skip, choice),
+              var preview = importPreview
+        else { return }
         preview.choices[id] = choice
         preview.actions = importActions(for: preview)
         importPreview = preview
