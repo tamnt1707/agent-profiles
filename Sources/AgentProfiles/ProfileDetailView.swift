@@ -1,7 +1,8 @@
 import SwiftUI
 import AgentProfilesCore
 
-/// The right side of the window for one profile: its settings, terminal, usage or orchestration.
+/// The right side of the window for one profile: its settings, terminal, usage,
+/// orchestration or Claude Code files.
 ///
 /// The terminals of a profile keep running while another profile is shown, so
 /// the switch says which profile has a process and the sidebar marks it.
@@ -17,6 +18,11 @@ struct ProfileDetailView: View {
                 switch model.detailTab(for: slug) {
                 case .terminal:
                     TerminalPane(model: model, slug: slug)
+                case .claudeConfig:
+                    if let profile = model.currentProfile {
+                        ClaudeConfigView(model: model, profile: profile, editor: model.claudeConfigEditor(for: profile))
+                            .id(slug)
+                    }
                 case .settings where model.currentProfile?.isDefaultClaude == true:
                     DefaultSettingsView(model: model)
                 case let page:
@@ -42,10 +48,11 @@ struct ProfileDetailView: View {
                     .tag(AppModel.DetailTab.terminal)
                 Text(model.loc.t("terminal.tab.usage")).tag(AppModel.DetailTab.usage)
                 Text(model.loc.t("terminal.tab.orchestration")).tag(AppModel.DetailTab.orchestration)
+                Text(model.loc.t("terminal.tab.claude")).tag(AppModel.DetailTab.claudeConfig)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(maxWidth: 460)
+            .frame(maxWidth: 560)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)

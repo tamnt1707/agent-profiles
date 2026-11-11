@@ -106,6 +106,8 @@ final class AppModel {
         case terminal
         case usage
         case orchestration
+        /// The MCP servers and the permission rules of Claude Code.
+        case claudeConfig
     }
 
     /// The tab of each profile. A profile that is not here shows its settings.
@@ -121,6 +123,21 @@ final class AppModel {
     func setDetailTab(_ tab: DetailTab, for slug: String) {
         guard detailTabs[slug] != tab else { return }
         detailTabs[slug] = tab
+    }
+
+    /// The editors of the Claude Code files, one per profile, so edits that are
+    /// not saved yet survive a switch of tab or of profile. Not observed: an
+    /// editor is made while the tab is drawn, and observes itself.
+    @ObservationIgnored private var claudeConfigEditors: [String: ClaudeConfigEditor] = [:]
+
+    /// The editor of the Claude Code files of a profile. A profile whose files
+    /// moved (a rename, a change of isolation) gets a new one.
+    func claudeConfigEditor(for profile: Profile) -> ClaudeConfigEditor {
+        let location = ClaudeConfigLocation.of(profile, paths: store.paths)
+        if let editor = claudeConfigEditors[profile.slug], editor.location == location { return editor }
+        let editor = ClaudeConfigEditor(location: location)
+        claudeConfigEditors[profile.slug] = editor
+        return editor
     }
 
     /// The updater of the app: it checks the releases and installs them.
@@ -1607,6 +1624,7 @@ final class AppModel {
         terminals.closeAll(profile.slug)
         detailTabs[profile.slug] = nil
         selectedSessions[profile.slug] = nil
+        claudeConfigEditors[profile.slug] = nil
 
         let removal: RemovalReport
         do {
