@@ -157,6 +157,10 @@ public actor UsageScanner {
         // Today and the six days before it.
         let weekStart = Self.dayKey(calendar.date(byAdding: .day, value: -6, to: now) ?? now, calendar)
 
+        // The first day of the calendar month of `now`: the day keys sort like
+        // the dates, so the month is a range of keys.
+        let monthStart = Self.monthStartKey(now, calendar)
+
         var summary = UsageSummary()
         var changed = false
         // The entries of a profile that does not exist any more leave the cache
@@ -213,6 +217,9 @@ public actor UsageScanner {
                         }
                         if day >= weekStart && day <= todayKey {
                             summary.last7Days += totals
+                        }
+                        if day >= monthStart && day <= todayKey {
+                            summary.thisMonth += totals
                         }
                     }
                     summary.allTime += entry.undated
@@ -690,6 +697,11 @@ public actor UsageScanner {
             return String(repeating: "0", count: max(0, width - text.count)) + text
         }
         return "\(pad(parts.year, 4))-\(pad(parts.month, 2))-\(pad(parts.day, 2))"
+    }
+
+    /// `yyyy-MM-01` of the month of a moment, in the calendar's time zone.
+    static func monthStartKey(_ date: Date, _ calendar: Calendar) -> String {
+        String(dayKey(date, calendar).prefix(7)) + "-01"
     }
 
     /// Identifies the calendar and time zone the day keys were made with.

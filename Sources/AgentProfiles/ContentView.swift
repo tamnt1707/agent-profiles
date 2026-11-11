@@ -221,6 +221,7 @@ private struct ProfileRow: View {
         // test or the key changes. The closure of a TimelineView does not do that.
         let lastTest = model.health.lastTest(for: profile)
         let key = model.keyPresence.state(for: profile.slug)
+        let budget = model.budgetLevel(forSlug: profile.slug)
         HStack(alignment: .center, spacing: 8) {
             // The minute tick only redraws the dot, so a test ages into "not tested" with no request.
             // The date of the tick is the start of the minute, before a test made in it:
@@ -239,6 +240,10 @@ private struct ProfileRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
+            // The estimated cost is near or over a limit of the profile.
+            if budget != .ok {
+                BudgetBadge(loc: model.loc, level: budget)
+            }
             // The process of the profile runs in the terminal of the app.
             if model.terminals.book.runningCount(for: profile.slug) > 0 {
                 Image(systemName: "terminal.fill")

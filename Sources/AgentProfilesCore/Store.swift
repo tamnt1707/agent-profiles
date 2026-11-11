@@ -330,6 +330,12 @@ public struct Store {
         else {
             throw ProfileError.invalidPrice
         }
+        // The limits are typed by hand too: only finite values above zero are kept.
+        guard CostBudget.isValidBudget(profile.dailyBudgetUSD),
+              CostBudget.isValidBudget(profile.monthlyBudgetUSD)
+        else {
+            throw ProfileError.invalidBudget
+        }
     }
 
     // MARK: - Command name
@@ -780,6 +786,13 @@ enum JSONText {
         }
         if profile.heartbeat != .off {
             fields.append("\"heartbeat\": " + profile.heartbeat.jsonText(indent: indent + 2, escape: escape))
+        }
+        // The limits are written only when set, like the prices.
+        if let budget = profile.dailyBudgetUSD {
+            fields.append("\"daily_budget_usd\": \(budget)")
+        }
+        if let budget = profile.monthlyBudgetUSD {
+            fields.append("\"monthly_budget_usd\": \(budget)")
         }
         var out = pad + "{\n"
         out += fields.map { inner + $0 }.joined(separator: ",\n") + "\n"

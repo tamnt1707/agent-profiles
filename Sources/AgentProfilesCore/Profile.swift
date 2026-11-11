@@ -68,6 +68,10 @@ public struct Profile: Codable, Equatable, Sendable {
     public var agent: AgentKind
     /// The schedule that starts the usage window. Written only when it is not off.
     public var heartbeat: Heartbeat
+    /// Limit of the estimated cost of one day, in USD. `nil` when not set.
+    public var dailyBudgetUSD: Double?
+    /// Limit of the estimated cost of one calendar month, in USD. `nil` when not set.
+    public var monthlyBudgetUSD: Double?
 
     public init(
         name: String = "",
@@ -86,7 +90,9 @@ public struct Profile: Codable, Equatable, Sendable {
         priceInputPerMillion: Double? = nil,
         priceOutputPerMillion: Double? = nil,
         agent: AgentKind = .default,
-        heartbeat: Heartbeat = .off
+        heartbeat: Heartbeat = .off,
+        dailyBudgetUSD: Double? = nil,
+        monthlyBudgetUSD: Double? = nil
     ) {
         self.name = name
         self.slug = slug
@@ -105,6 +111,8 @@ public struct Profile: Codable, Equatable, Sendable {
         self.priceOutputPerMillion = priceOutputPerMillion
         self.agent = agent
         self.heartbeat = heartbeat
+        self.dailyBudgetUSD = dailyBudgetUSD
+        self.monthlyBudgetUSD = monthlyBudgetUSD
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -125,6 +133,8 @@ public struct Profile: Codable, Equatable, Sendable {
         case priceOutputPerMillion = "price_output_per_million"
         case agent
         case heartbeat
+        case dailyBudgetUSD = "daily_budget_usd"
+        case monthlyBudgetUSD = "monthly_budget_usd"
     }
 
     public init(from decoder: Decoder) throws {
@@ -165,6 +175,21 @@ public struct Profile: Codable, Equatable, Sendable {
         agent = (try? c.decode(AgentKind.self, forKey: .agent)) ?? .default
         // Lenient too: a broken schedule is dropped, the profile still loads.
         heartbeat = (try? c.decode(Heartbeat.self, forKey: .heartbeat)) ?? .off
+        // Lenient like the prices: a broken limit is dropped, not an error.
+        dailyBudgetUSD = Self.lenientBudget(c, forKey: .dailyBudgetUSD)
+        monthlyBudgetUSD = Self.lenientBudget(c, forKey: .monthlyBudgetUSD)
+    }
+
+    /// The limit of the file, or `nil` when it is not there or is broken.
+    ///
+    /// A limit that is not a number, that is not finite or that is zero or
+    /// negative is dropped.
+    private static func lenientBudget(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Double? {
+        guard let value = try? container.decode(Double.self, forKey: key) else { return nil }
+        return CostBudget.isValidBudget(value) ? value : nil
     }
 
     /// The price of the file, or `nil` when it is not there or is broken.
@@ -209,6 +234,9 @@ public struct Profile: Codable, Equatable, Sendable {
         if heartbeat != .off {
             try c.encode(heartbeat, forKey: .heartbeat)
         }
+        // Written only when set, so a profile without a limit stays as it was.
+        try c.encodeIfPresent(dailyBudgetUSD, forKey: .dailyBudgetUSD)
+        try c.encodeIfPresent(monthlyBudgetUSD, forKey: .monthlyBudgetUSD)
     }
 }
 
