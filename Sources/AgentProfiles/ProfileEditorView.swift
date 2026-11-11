@@ -510,6 +510,7 @@ struct ProfileEditorView: View {
 
         usageRow(model.loc.t("editor.usage.today"), summary?.today)
         usageRow(model.loc.t("editor.usage.week"), summary?.last7Days)
+        usageRow(model.loc.t("editor.usage.month"), summary?.thisMonth)
         usageRow(model.loc.t("editor.usage.allTime"), summary?.allTime)
 
         // The files that could not be read are counted, never named.
@@ -572,6 +573,8 @@ struct ProfileEditorView: View {
             .padding(.vertical, 4)
         }
 
+        budgetRows(summary: summary)
+
         Text(model.loc.t("editor.usage.note"))
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -579,6 +582,66 @@ struct ProfileEditorView: View {
         Text(model.loc.t("editor.usage.cacheNote"))
             .font(.callout)
             .foregroundStyle(.secondary)
+    }
+
+    /// The cost limits: spent against each limit, and the two fields.
+    ///
+    /// The limits are about the estimated cost, so the fields are only enabled
+    /// when both prices are set. The default setup has no limits: it is not
+    /// saved in the list of profiles.
+    @ViewBuilder
+    private func budgetRows(summary: UsageSummary?) -> some View {
+        if let draft = model.draft, !draft.isDefaultClaude {
+            let hasPrices = draft.priceInputPerMillion != nil && draft.priceOutputPerMillion != nil
+            if hasPrices, let summary {
+                let status = CostBudget.status(of: draft, summary: summary)
+                if let day = status.day {
+                    budgetRow(model.loc.t("editor.usage.budgetDay"), day)
+                }
+                if let month = status.month {
+                    budgetRow(model.loc.t("editor.usage.budgetMonth"), month)
+                }
+            }
+            DisclosureGroup(model.loc.t("editor.usage.budgets")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.loc.t(hasPrices ? "editor.usage.budgetHelp" : "editor.usage.budgetNeedsPrices"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    LabeledContent(model.loc.t("editor.usage.budgetDaily")) {
+                        TextField(model.loc.t("editor.usage.budgetDaily"), value: price(\.dailyBudgetUSD), format: .number)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    LabeledContent(model.loc.t("editor.usage.budgetMonthly")) {
+                        TextField(model.loc.t("editor.usage.budgetMonthly"), value: price(\.monthlyBudgetUSD), format: .number)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
+                .padding(.vertical, 4)
+                .disabled(!hasPrices)
+            }
+        }
+    }
+
+    /// One limit: the estimated cost of the window against the limit. The
+    /// level is written in words too, so that it is not carried by color alone.
+    private func budgetRow(_ title: String, _ status: BudgetLimitStatus) -> some View {
+        let locale = model.loc.locale
+        let amounts = model.loc.t(
+            "editor.usage.budgetOf",
+            UsageCost.format(status.spent, locale: locale),
+            UsageCost.format(status.limit, locale: locale)
+        )
+        let word = status.level == .ok ? "" : " · " + model.loc.t(status.level == .over ? "budget.status.over" : "budget.status.near")
+        return LabeledContent(title) {
+            Text(amounts + word)
+                .monospacedDigit()
+                .foregroundStyle(status.level.color)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(amounts + word)
     }
 
     /// One window of the usage. The detail shows in the tooltip and is read

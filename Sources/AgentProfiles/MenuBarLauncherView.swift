@@ -50,6 +50,10 @@ struct MenuBarLauncherView: View {
                         Image(nsImage: HealthDotImage.image(for: state))
                     }
                     profileLabel(profile)
+                    let budget = model.budgetLevel(forSlug: profile.slug)
+                    if budget != .ok {
+                        Image(systemName: budget.symbolName)
+                    }
                 }
             }
             .disabled(!profile.isEnabled)
@@ -101,6 +105,12 @@ struct MenuBarLauncherView: View {
         var label = Text(profile.name) + Text(verbatim: "  \(profile.command)").foregroundStyle(.secondary)
         if profile.hint == .noKey {
             label = label + Text(verbatim: "  — \(model.loc.t("menubar.noKey"))").foregroundStyle(.secondary)
+        }
+        // The estimated cost is near or over a limit.
+        switch model.budgetLevel(forSlug: profile.slug) {
+        case .ok: break
+        case .near: label = label + Text(verbatim: "  — \(model.loc.t("menubar.budget.near"))").foregroundStyle(.secondary)
+        case .over: label = label + Text(verbatim: "  — \(model.loc.t("menubar.budget.over"))").foregroundStyle(.secondary)
         }
         return label
     }

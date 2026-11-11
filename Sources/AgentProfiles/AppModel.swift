@@ -254,6 +254,9 @@ final class AppModel {
     private var usageTasks: [String: Task<Void, Never>] = [:]
     /// Reads the session files of the profiles. Its cache lives in the data folder.
     private let usageScanner: UsageScanner
+    /// What was already notified about the cost limits, kept next to the usage cache.
+    private let noticeStore: BudgetNoticeStore
+    private var noticeLedger = BudgetNoticeLedger()
     /// The observer of the notification that tells the app that it is active
     /// again. It is removed when the model goes away.
     ///
@@ -266,12 +269,16 @@ final class AppModel {
     init(store: Store = Store(), loc: Loc? = nil, updater: UpdateController? = nil) {
         self.store = store
         self.usageScanner = UsageScanner(paths: store.paths)
+        self.noticeStore = BudgetNoticeStore(paths: store.paths)
         self.healthCache = HealthCacheStore(paths: store.paths)
         self.loc = loc ?? Loc()
         self.updater = updater ?? UpdateController()
         load()
         refreshPathStatus()
         observeDidBecomeActive()
+        noticeLedger = noticeStore.load()
+        // Only the profiles that have a cost limit are counted at launch.
+        refreshBudgets()
     }
 
     deinit {
@@ -296,6 +303,8 @@ final class AppModel {
             // used on its own actor.
             MainActor.assumeIsolated {
                 self?.refreshStoredKeys()
+                // A new day or month, or new sessions, can move a limit.
+                self?.refreshBudgets()
             }
         }
     }
@@ -705,6 +714,10 @@ final class AppModel {
             refreshMenuBarFolders()
             // The counted tokens of the old settings are gone with them.
             forgetUsage(before: previousProfile, after: draft)
+            // The first limit of a profile asks for the permission to notify.
+            if hasBudget(draft) && !hasBudget(previousProfile) {
+                BudgetNotifier.requestAuthorization()
+            }
             // The schedule of the profile, and the agent of a name it left.
             syncHeartbeats()
             // A profile that was renamed leaves nothing behind in the menu.
@@ -721,6 +734,8 @@ final class AppModel {
 
             // The warning stays: after a recovering save it names the copy until dismissed.
             status = Status(kind: .success, text: loc.t("status.saved", store.paths.command(for: draft.slug)))
+            // New or changed limits are checked against the usage right away.
+            refreshBudgets()
             offerPathSetupIfNeeded(slug: draft.slug)
             return true
         } catch {
@@ -835,6 +850,11 @@ final class AppModel {
     /// Counts the usage of the saved profile again. The files are read off the main thread.
     func loadUsage() {
         guard let profile = currentProfile else { return }
+        startUsageScan(of: profile)
+    }
+
+    /// Counts the usage of a saved profile off the main thread.
+    private func startUsageScan(of profile: Profile) {
         let slug = profile.slug
         usageTasks[slug]?.cancel()
         let generation = (usageGenerations[slug] ?? 0) + 1
@@ -865,6 +885,7 @@ final class AppModel {
             switch outcome {
             case .success(let result):
                 usageResults[slug] = result
+                notifyBudgets(for: slug)
             case .failure(let error):
                 report(error)
             }
@@ -916,6 +937,75 @@ final class AppModel {
         guard previous.slug != saved.slug || previous.isolate != saved.isolate else { return }
         cancelUsage(for: previous.slug)
         usageResults[saved.slug] = nil
+    }
+
+    // MARK: - Cost limits
+
+    /// The status of the cost limits of a saved profile, or `nil` when its
+    /// usage was not counted (yet) or it is not a profile of the list.
+    func budgetStatus(forSlug slug: String) -> BudgetStatus? {
+        guard let profile = data.profiles.first(where: { $0.slug == slug }), !profile.isDefaultClaude,
+              case .available(let summary, _)? = usageResults[slug]
+        else { return nil }
+        return CostBudget.status(of: profile, summary: summary)
+    }
+
+    /// How close a saved profile is to a limit. `ok` when it has none.
+    func budgetLevel(forSlug slug: String) -> BudgetLevel {
+        budgetStatus(forSlug: slug)?.level ?? .ok
+    }
+
+    /// `true` when a profile has a limit that can be checked.
+    private func hasBudget(_ profile: Profile?) -> Bool {
+        guard let profile else { return false }
+        return profile.dailyBudgetUSD != nil || profile.monthlyBudgetUSD != nil
+    }
+
+    /// Counts the profiles that have a limit, so that their badge and their
+    /// notifications are up to date. A profile that is being counted is left
+    /// alone. The files of the other profiles are not read.
+    func refreshBudgets() {
+        let slugs = Set(data.profiles.map(\.slug))
+        var ledger = noticeLedger
+        ledger.retain(slugs: slugs)
+        if ledger != noticeLedger {
+            noticeLedger = ledger
+            noticeStore.save(ledger)
+        }
+        for profile in userProfiles
+        where hasBudget(profile) && profile.isolate && !isUsageLoading(profile.slug) {
+            startUsageScan(of: profile)
+        }
+    }
+
+    /// Notifies about the lines of the limits that the counted usage of a
+    /// profile crossed, once for each line of each day or month.
+    private func notifyBudgets(for slug: String) {
+        guard let profile = data.profiles.first(where: { $0.slug == slug }),
+              let status = budgetStatus(forSlug: slug)
+        else { return }
+        let notices = noticeLedger.due(slug: slug, status: status, now: Date())
+        guard !notices.isEmpty else { return }
+        // Written before the banners are shown: a notice that cannot be
+        // remembered is better lost than shown again at every launch.
+        noticeStore.save(noticeLedger)
+        let locale = loc.locale
+        for notice in notices {
+            let title = loc.t(
+                notice.level == .over ? "budget.notice.over.title" : "budget.notice.near.title",
+                profile.name
+            )
+            let body = loc.t(
+                notice.window == .daily ? "budget.notice.daily.body" : "budget.notice.monthly.body",
+                UsageCost.format(notice.spent, locale: locale),
+                UsageCost.format(notice.limit, locale: locale)
+            )
+            BudgetNotifier.post(
+                identifier: "budget-\(slug)-\(notice.window.rawValue)-\(notice.level.rawValue)",
+                title: title,
+                body: body
+            )
+        }
     }
 
     // MARK: - Actions
@@ -1631,6 +1721,9 @@ final class AppModel {
         // The numbers of a profile that is gone are gone with it: a profile
         // that is added again with the same name starts at zero.
         cancelUsage(for: profile.slug)
+        // What was notified about the limits of the profile goes with it.
+        noticeLedger.forget(slug: profile.slug)
+        noticeStore.save(noticeLedger)
         syncHeartbeats()
         do {
             try store.save(data)
@@ -2503,6 +2596,8 @@ extension ProfileError {
             return loc.t("error.unsafeFolder.save", FolderPathSafety.visible(path))
         case .invalidPrice:
             return loc.t("error.invalidPrice")
+        case .invalidBudget:
+            return loc.t("error.invalidBudget")
         case .heartbeatFailed(let message):
             return loc.t("error.heartbeat", message)
         }
