@@ -155,7 +155,8 @@ final class Loc {
             commandTemplate: t("delete.item.command"),
             folderTemplate: t("delete.item.folder"),
             folderSizeTemplate: t("delete.item.folderSize"),
-            scheduleText: t("delete.item.schedule")
+            scheduleText: t("delete.item.schedule"),
+            loginText: t("delete.item.login")
         )
     }
 }

@@ -518,3 +518,6 @@
 "terminal.confirm.start.title" = "Bắt đầu làm người điều phối (%@)?";
 "terminal.confirm.start.message" = "Profile này chưa cài các agent của quy trình. Bắt đầu sẽ cài chúng, rồi khởi động Claude chạy Opus mức medium với hướng dẫn điều phối. Chỉ phiên này nhận hướng dẫn, không ghi vào CLAUDE.md.";
 "terminal.confirm.start.button" = "Cài và bắt đầu";
+
+"delete.item.login" = "tài khoản Claude đã đăng nhập trong profile này, nếu có";
+"delete.failure.login" = "mục đăng nhập Claude \"%@\" trong Keychain";

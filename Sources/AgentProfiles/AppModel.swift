@@ -1687,6 +1687,9 @@ final class AppModel {
         if report.removedHeartbeat {
             removed.append(loc.t("delete.item.schedule"))
         }
+        if report.removedLogin {
+            removed.append(loc.t("delete.item.login"))
+        }
 
         var text = loc.t("status.deleted", profile.name)
         if !removed.isEmpty {
@@ -1706,6 +1709,7 @@ final class AppModel {
         case .script(let path): return loc.t("delete.failure.command", path)
         case .home(let path): return loc.t("delete.failure.folder", path)
         case .heartbeat(let path): return loc.t("delete.failure.schedule", path)
+        case .login(let service): return loc.t("delete.failure.login", service)
         case .dataFile: return loc.t("delete.failure.dataFile")
         }
     }

@@ -23,6 +23,8 @@ public enum RemovalFailure: Equatable, Sendable {
     case home(String)
     /// The schedule of the heartbeat: its agent or its log (the path).
     case heartbeat(String)
+    /// The Claude Code sign-in of the config folder (the Keychain service).
+    case login(String)
     /// The entry in `profiles.json`.
     case dataFile
 }
@@ -37,6 +39,8 @@ public struct RemovalReport: Equatable, Sendable {
     public var removedHome: Bool
     /// The agent of the heartbeat and its log are gone (`false` when it had none).
     public var removedHeartbeat: Bool
+    /// The Claude Code sign-in of the config folder is gone (`false` when there was none).
+    public var removedLogin: Bool
     /// What is still on the disk.
     public var failures: [RemovalFailure]
 
@@ -45,12 +49,14 @@ public struct RemovalReport: Equatable, Sendable {
         removedScript: Bool = false,
         removedHome: Bool = false,
         removedHeartbeat: Bool = false,
+        removedLogin: Bool = false,
         failures: [RemovalFailure] = []
     ) {
         self.removedKey = removedKey
         self.removedScript = removedScript
         self.removedHome = removedHome
         self.removedHeartbeat = removedHeartbeat
+        self.removedLogin = removedLogin
         self.failures = failures
     }
 }
@@ -126,12 +132,16 @@ public struct Store {
     /// Runs `launchctl` for the heartbeat agents. Injected by tests.
     private let heartbeatRunner: ProcessRunner
 
+    /// Removes the Claude Code sign-in of a config folder. Injected by tests.
+    private let logins: ClaudeLoginStore
+
     public init(
         paths: Paths = Paths(),
         keys: KeyStore = KeychainStore(),
-        heartbeatRunner: ProcessRunner = SystemProcessRunner()
+        heartbeatRunner: ProcessRunner = SystemProcessRunner(),
+        logins: ClaudeLoginStore = SecurityToolLoginStore()
     ) {
-        self.init(paths: paths, keys: keys, heartbeatRunner: heartbeatRunner, writeBackup: { bytes, target in
+        self.init(paths: paths, keys: keys, heartbeatRunner: heartbeatRunner, logins: logins, writeBackup: { bytes, target in
             try bytes.write(to: target, options: .withoutOverwriting)
         })
     }
@@ -140,12 +150,14 @@ public struct Store {
         paths: Paths,
         keys: KeyStore,
         heartbeatRunner: ProcessRunner = SystemProcessRunner(),
+        logins: ClaudeLoginStore = SecurityToolLoginStore(),
         writeBackup: @escaping (Data, URL) throws -> Void
     ) {
         self.paths = paths
         self.keys = keys
         self.writeBackup = writeBackup
         self.heartbeatRunner = heartbeatRunner
+        self.logins = logins
     }
 
     /// `true` when the last `load()` could not read `profiles.json`. Automatic
@@ -568,6 +580,13 @@ public struct Store {
             throw error
         }
 
+        // The Claude Code sign-in belongs to the path of the old folder: the
+        // renamed profile is signed out anyway, and a profile added later with
+        // the old name must not find the old account.
+        if let renamedFrom {
+            _ = try? logins.removeLogin(configDir: paths.home(for: renamedFrom).path)
+        }
+
         // The failed state ends with the next successful write of profiles.json.
         if loadState.failed {
             loadState.recovering = true
@@ -633,6 +652,16 @@ public struct Store {
             report.removedKey = true
         } catch {
             report.failures.append(.key(profile.slug))
+        }
+
+        // 1b. The Claude Code sign-in of the folder. It is not inside the
+        // folder: without this, a profile added again with the same name
+        // would be signed in to the old account.
+        let loginService = ClaudeLogin.service(forConfigDir: home.path)
+        do {
+            report.removedLogin = try logins.removeLogin(configDir: home.path)
+        } catch {
+            report.failures.append(.login(loginService))
         }
 
         // 2. The launcher. A file of another program is never deleted.

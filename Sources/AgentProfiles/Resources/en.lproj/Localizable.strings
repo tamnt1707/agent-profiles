@@ -518,3 +518,6 @@
 "terminal.confirm.start.title" = "Start as orchestrator (%@)?";
 "terminal.confirm.start.message" = "The agents of this workflow are not installed in this profile. Starting installs them, then starts Claude on Opus at medium effort with the orchestrator instructions. Only this session gets the instructions, not CLAUDE.md.";
 "terminal.confirm.start.button" = "Install and start";
+
+"delete.item.login" = "the Claude account signed in to this profile, if any";
+"delete.failure.login" = "the Claude sign-in \"%@\" in the Keychain";
