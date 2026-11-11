@@ -44,7 +44,7 @@ struct ContentView: View {
         // watches that itself, so it also happens without this window.
         // The preview of an import: nothing is created before it is answered.
         .sheet(item: $model.importPreview) { preview in
-            ImportPreviewView(model: model, preview: preview)
+            ImportPreviewView(model: model, opened: preview)
         }
         .alert(model.loc.t("update.unsaved.title"), isPresented: $model.isConfirmingUpdate) {
             Button(model.loc.t("update.unsaved.save")) { model.saveAndUpdate() }

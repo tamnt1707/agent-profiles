@@ -221,7 +221,11 @@ extension AppModel {
 /// for a conflict the choice between Skip and Import as copy.
 struct ImportPreviewView: View {
     @Bindable var model: AppModel
-    let preview: ImportPreview
+    /// The preview the sheet was opened with.
+    let opened: ImportPreview
+
+    /// The preview with the latest choices of the user.
+    private var preview: ImportPreview { model.importPreview ?? opened }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
