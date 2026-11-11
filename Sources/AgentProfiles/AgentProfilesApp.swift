@@ -88,6 +88,7 @@ struct AgentProfilesApp: App {
 /// The menu bar commands.
 struct AppCommands: Commands {
     @Bindable var model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -99,6 +100,17 @@ struct AppCommands: Commands {
             Button(model.loc.t("actions.save")) { model.save() }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(model.draft == nil)
+
+            Divider()
+
+            Button(model.loc.t("menu.exportProfiles")) { model.exportProfiles() }
+                .disabled(model.userProfiles.isEmpty)
+            Button(model.loc.t("menu.importProfiles")) {
+                // The preview opens on the main window, so the window is shown first.
+                openWindow(id: MenuBarLauncherView.mainWindowID)
+                model.importProfiles()
+            }
+            .disabled(model.dataFailed)
         }
 
         // The menu of the app itself: "Agent Profiles > Check for Updates…".

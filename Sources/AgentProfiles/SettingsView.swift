@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Bindable var model: AppModel
     /// The shell whose setup waits for the confirmation of its removal.
     @State private var shellToRemove: ShellKind?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         TabView {
@@ -63,6 +64,23 @@ struct SettingsView: View {
 
             Section(model.loc.t("menubar.section")) {
                 Toggle(model.loc.t("menubar.show"), isOn: menuBarBinding)
+            }
+
+            Section(model.loc.t("settings.transfer.section")) {
+                HStack {
+                    Button(model.loc.t("menu.exportProfiles")) { model.exportProfiles() }
+                        .disabled(model.userProfiles.isEmpty)
+                    Button(model.loc.t("menu.importProfiles")) {
+                        // The preview opens on the main window, so the window is shown first.
+                        openWindow(id: MenuBarLauncherView.mainWindowID)
+                        model.importProfiles()
+                    }
+                    .disabled(model.dataFailed)
+                }
+                Text(model.loc.t("settings.transfer.hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section(model.loc.t("pathSetup.section")) {
