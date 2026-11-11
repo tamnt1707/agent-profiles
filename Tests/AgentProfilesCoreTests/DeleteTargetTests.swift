@@ -24,6 +24,7 @@ final class DeleteTargetTests: XCTestCase {
         XCTAssertEqual(target?.name, "Work")
         XCTAssertEqual(target?.items, [
             .key(account: "work"),
+            .login,
             .command(name: "claude-work"),
             .folder(path: paths.home(for: "work").path, bytes: 42),
         ])

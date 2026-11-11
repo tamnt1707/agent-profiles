@@ -106,6 +106,8 @@ public struct DeleteDialogStrings: Equatable, Sendable {
     public var folderSizeTemplate: String
     /// The line of the heartbeat: its LaunchAgent and its log.
     public var scheduleText: String
+    /// The line of the Claude Code sign-in of the profile.
+    public var loginText: String
 
     public init(
         introTemplate: String,
@@ -114,7 +116,8 @@ public struct DeleteDialogStrings: Equatable, Sendable {
         commandTemplate: String,
         folderTemplate: String,
         folderSizeTemplate: String,
-        scheduleText: String = "the heartbeat schedule and its log"
+        scheduleText: String = "the heartbeat schedule and its log",
+        loginText: String = "the Claude account signed in to this profile, if any"
     ) {
         self.introTemplate = introTemplate
         self.warning = warning
@@ -123,6 +126,7 @@ public struct DeleteDialogStrings: Equatable, Sendable {
         self.folderTemplate = folderTemplate
         self.folderSizeTemplate = folderSizeTemplate
         self.scheduleText = scheduleText
+        self.loginText = loginText
     }
 
     public static let english = DeleteDialogStrings(
@@ -141,7 +145,8 @@ public struct DeleteDialogStrings: Equatable, Sendable {
         commandTemplate: "lệnh %@",
         folderTemplate: "thư mục %@ (sessions và history)",
         folderSizeTemplate: "thư mục %@ (sessions và history, %@)",
-        scheduleText: "lịch heartbeat và log của nó"
+        scheduleText: "lịch heartbeat và log của nó",
+        loginText: "tài khoản Claude đã đăng nhập trong profile này, nếu có"
     )
 }
 
@@ -180,6 +185,8 @@ public enum DeleteDialogText {
             return strings.keyText
         case .schedule:
             return strings.scheduleText
+        case .login:
+            return strings.loginText
         case .command(let name):
             return TemplateFormat.fill(strings.commandTemplate, [name])
         case .folder(let path, let bytes):

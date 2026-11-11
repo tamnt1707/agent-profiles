@@ -56,6 +56,7 @@
 "editor.apiKey.label" = "API key";
 "editor.apiKey.stored" = "đã lưu trong Keychain — để trống nếu không đổi";
 "editor.apiKey.hint" = "dán key vào đây";
+"editor.apiKey.copied" = "key của profile gốc sẽ được sao chép khi bạn lưu — để trống nếu không đổi";
 "editor.apiKey.show" = "Hiện";
 "editor.apiKey.hide" = "Ẩn";
 "editor.models.section" = "Model";
@@ -88,6 +89,9 @@
 "actions.confirmDelete" = "Xóa profile";
 "actions.unsaved" = "Có thay đổi chưa lưu.";
 "actions.reveal" = "Mở thư mục";
+"actions.duplicate" = "Nhân bản";
+"duplicate.name" = "%@ (bản sao)";
+"duplicate.hint" = "Sao chép từ %@. Phần đăng nhập và lịch sử không được sao chép: hãy đăng nhập lại trong profile này.";
 "actions.close" = "Đóng";
 
 /* Xóa */
@@ -518,3 +522,6 @@
 "terminal.confirm.start.title" = "Bắt đầu làm người điều phối (%@)?";
 "terminal.confirm.start.message" = "Profile này chưa cài các agent của quy trình. Bắt đầu sẽ cài chúng, rồi khởi động Claude chạy Opus mức medium với hướng dẫn điều phối. Chỉ phiên này nhận hướng dẫn, không ghi vào CLAUDE.md.";
 "terminal.confirm.start.button" = "Cài và bắt đầu";
+
+"delete.item.login" = "tài khoản Claude đã đăng nhập trong profile này, nếu có";
+"delete.failure.login" = "mục đăng nhập Claude \"%@\" trong Keychain";

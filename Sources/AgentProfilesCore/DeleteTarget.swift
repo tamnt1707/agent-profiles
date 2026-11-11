@@ -13,6 +13,8 @@ public struct DeleteTarget: Equatable, Sendable {
         case folder(path: String, bytes: Int?)
         /// The heartbeat: its LaunchAgent and its log.
         case schedule
+        /// The Claude Code sign-in of the config folder, when there is one.
+        case login
     }
 
     /// The name of the saved profile.
@@ -34,6 +36,7 @@ public struct DeleteTarget: Equatable, Sendable {
         name = saved.name
         var list: [Item] = [
             .key(account: saved.slug),
+            .login,
             .command(name: paths.command(for: saved.slug)),
             .folder(path: home.path, bytes: measure(home)),
         ]

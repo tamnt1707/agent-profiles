@@ -84,6 +84,12 @@ struct ProfileEditorView: View {
                     .textFieldStyle(.roundedBorder)
             }
 
+            if model.draftIndex == nil, let source = model.duplicateSourceName {
+                Label(model.loc.t("duplicate.hint", source), systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             commandSection
 
             if let draft = model.draft, ProviderEndpoint.usesCliLogin(draft) {
@@ -139,6 +145,10 @@ struct ProfileEditorView: View {
 
                         if model.hasStoredKey {
                             Label(model.loc.t("editor.apiKey.stored"), systemImage: "lock.fill")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else if model.duplicateCarriesKey {
+                            Text(model.loc.t("editor.apiKey.copied"))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
