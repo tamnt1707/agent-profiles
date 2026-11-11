@@ -42,6 +42,10 @@ struct ContentView: View {
         }
         // The key presence is re-read when the app becomes active. The model
         // watches that itself, so it also happens without this window.
+        // The preview of an import: nothing is created before it is answered.
+        .sheet(item: $model.importPreview) { preview in
+            ImportPreviewView(model: model, opened: preview)
+        }
         .alert(model.loc.t("update.unsaved.title"), isPresented: $model.isConfirmingUpdate) {
             Button(model.loc.t("update.unsaved.save")) { model.saveAndUpdate() }
             Button(model.loc.t("update.unsaved.discard")) { model.discardAndUpdate() }

@@ -56,6 +56,9 @@ final class AppModel {
     /// Set while the delete confirmation is open.
     var isConfirmingDelete: Bool = false
 
+    /// The import that waits for the answer of its preview sheet, `nil` when none.
+    var importPreview: ImportPreview?
+
     /// The state of the delete confirmation: the items it lists and the
     /// measurement of the config folder that is still on its way.
     private(set) var deleteDialog = DeleteDialogState()
@@ -727,6 +730,17 @@ final class AppModel {
             report(error)
             return false
         }
+    }
+
+    /// Profiles were added by an import: the keys, the folders of the menu,
+    /// the last tests, the name of the command and the schedules are looked
+    /// at again, like after a load.
+    func profilesImported() {
+        health.profilesLoaded(data.profiles)
+        refreshStoredKeys()
+        refreshMenuBarFolders()
+        refreshForeignCommandPath()
+        syncHeartbeats()
     }
 
     // MARK: - Account
