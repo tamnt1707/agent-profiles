@@ -56,6 +56,7 @@
 "editor.apiKey.label" = "API key";
 "editor.apiKey.stored" = "đã lưu trong Keychain — để trống nếu không đổi";
 "editor.apiKey.hint" = "dán key vào đây";
+"editor.apiKey.copied" = "key của profile gốc sẽ được sao chép khi bạn lưu — để trống nếu không đổi";
 "editor.apiKey.show" = "Hiện";
 "editor.apiKey.hide" = "Ẩn";
 "editor.models.section" = "Model";
@@ -88,6 +89,9 @@
 "actions.confirmDelete" = "Xóa profile";
 "actions.unsaved" = "Có thay đổi chưa lưu.";
 "actions.reveal" = "Mở thư mục";
+"actions.duplicate" = "Nhân bản";
+"duplicate.name" = "%@ (bản sao)";
+"duplicate.hint" = "Sao chép từ %@. Phần đăng nhập và lịch sử không được sao chép: hãy đăng nhập lại trong profile này.";
 "actions.close" = "Đóng";
 
 /* Xóa */

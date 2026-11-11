@@ -75,6 +75,8 @@ struct ContentView: View {
                 // The menu acts on the row that was clicked, not on the edited profile.
                 Button(model.loc.t("actions.copyCommand")) { model.copyCommand(for: profile) }
                 Button(model.loc.t("actions.reveal")) { model.revealFolder(for: profile) }
+                // The copy is made from the saved profile of the row, the default setup included.
+                Button(model.loc.t("actions.duplicate")) { model.requestDuplicate(of: profile) }
                 // The default setup is the user's own ~/.claude: it has no Delete.
                 if !profile.isDefaultClaude {
                     Divider()

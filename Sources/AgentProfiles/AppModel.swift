@@ -50,6 +50,17 @@ final class AppModel {
     /// Whether the API key field shows the plain text.
     var revealKey: Bool = false
 
+    /// The slug of the profile the open draft was copied from, `nil` when the
+    /// draft is not a copy. The key of that profile is copied on save.
+    private(set) var duplicateSourceSlug: String?
+
+    /// The name of the profile the open draft was copied from, while the draft
+    /// is a new, unsaved copy.
+    private(set) var duplicateSourceName: String?
+
+    /// `true` when the open copy will take the key of its source on save.
+    private(set) var duplicateCarriesKey: Bool = false
+
     /// The message of the status bar.
     var status: Status?
 
@@ -134,6 +145,8 @@ final class AppModel {
     enum PendingSwitch: Equatable {
         case profile(String)
         case newProfile
+        /// A copy of the profile with this slug.
+        case duplicate(String)
         /// Reading `profiles.json` again, once the file reads.
         case reload
     }
@@ -423,6 +436,7 @@ final class AppModel {
         keyInput = ""
         revealKey = false
         hasStoredKey = (try? store.keys.hasKey(profile.slug)) ?? false
+        forgetDuplicateSource()
         // Another profile is shown: a measurement of the old one must not
         // come back and change the text of the next question.
         cancelDelete()
@@ -502,6 +516,11 @@ final class AppModel {
         switch pending {
         case .newProfile:
             newProfile()
+        case .duplicate(let slug):
+            // A save that renamed the edited profile moved its slug: the saved profile is then the open one.
+            if let profile = data.profiles.first(where: { $0.slug == slug }) ?? currentProfile {
+                duplicate(profile)
+            }
         case .profile(let slug):
             if let profile = data.profiles.first(where: { $0.slug == slug }) {
                 select(profile)
@@ -523,10 +542,58 @@ final class AppModel {
         keyInput = ""
         revealKey = false
         hasStoredKey = false
+        forgetDuplicateSource()
         cancelDelete()
         selectedSlug = nil
         // A new profile has no name yet: nothing takes it.
         refreshForeignCommandPath()
+    }
+
+    /// "Duplicate" in the sidebar menu and the Profile menu: after the unsaved
+    /// changes are answered, a new draft is made from the SAVED profile.
+    func requestDuplicate(of profile: Profile? = nil) {
+        guard let source = profile ?? currentProfile,
+              let saved = data.profiles.first(where: { $0.slug == source.slug })
+        else { return }
+        guard !hasUnsavedChanges else {
+            pendingSwitch = .duplicate(saved.slug)
+            isConfirmingSwitch = true
+            return
+        }
+        duplicate(saved)
+    }
+
+    /// Starts a new, unsaved profile with the settings of a saved one.
+    ///
+    /// Nothing is written here: not the launcher, not the config folder and not
+    /// the key. The key of the source is copied when the copy is saved.
+    private func duplicate(_ source: Profile) {
+        refreshAgents()
+        cancelConnectionChecks()
+        let copy = ProfileDuplicate.make(
+            from: source,
+            existing: data.profiles,
+            nameTemplate: loc.t("duplicate.name"),
+            isTaken: { [store] slug in store.foreignCommandPath(for: slug, ownedBy: nil) != nil }
+        )
+        draft = copy
+        draftIndex = nil
+        command = CommandNameDraft(profile: copy)
+        keyInput = ""
+        revealKey = false
+        hasStoredKey = false
+        cancelDelete()
+        selectedSlug = nil
+        duplicateSourceSlug = source.slug
+        duplicateSourceName = source.name
+        duplicateCarriesKey = source.auth != .none && ((try? store.keys.hasKey(source.slug)) ?? false)
+        refreshForeignCommandPath()
+    }
+
+    private func forgetDuplicateSource() {
+        duplicateSourceSlug = nil
+        duplicateSourceName = nil
+        duplicateCarriesKey = false
     }
 
     /// Applies a provider template. Only used while creating a profile.
@@ -569,6 +636,14 @@ final class AppModel {
         // looked at again, so the editor can tell right away that the name
         // is taken by a file that this app did not write.
         refreshForeignCommandPath()
+    }
+
+    /// The key that the save hands to the store: the typed one, or, while the
+    /// draft is a copy and nothing is typed, the key of the profile it was
+    /// copied from. The key store of the source is read only here, at the save.
+    private func keyToStore(for draft: Profile) -> String? {
+        guard draftIndex == nil, draft.auth != .none else { return keyInput }
+        return ProfileDuplicate.keyToStore(typed: keyInput, sourceSlug: duplicateSourceSlug, keys: store.keys) ?? keyInput
     }
 
     /// `true` when the editor holds changes that are not saved yet.
@@ -664,7 +739,7 @@ final class AppModel {
                 draft,
                 others: otherProfiles,
                 previous: currentProfile,
-                key: keyInput,
+                key: keyToStore(for: draft),
                 strings: loc.scriptStrings
             )
             draft.slug = result.slug
@@ -691,6 +766,7 @@ final class AppModel {
             self.draft = draft
             command = CommandNameDraft(profile: draft)
             keyInput = ""
+            forgetDuplicateSource()
             hasStoredKey = (try? store.keys.hasKey(draft.slug)) ?? false
             // The config folder may have moved with a rename.
             refreshOrchestration()

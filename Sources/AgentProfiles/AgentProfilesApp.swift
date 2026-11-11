@@ -93,6 +93,10 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button(model.loc.t("sidebar.add")) { model.newProfile() }
                 .keyboardShortcut("n", modifiers: .command)
+
+            Button(model.loc.t("actions.duplicate")) { model.requestDuplicate() }
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(model.currentProfile == nil)
         }
 
         CommandGroup(replacing: .saveItem) {

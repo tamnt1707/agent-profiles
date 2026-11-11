@@ -56,6 +56,7 @@
 "editor.apiKey.label" = "API key";
 "editor.apiKey.stored" = "stored in the Keychain — leave empty to keep it";
 "editor.apiKey.hint" = "paste the key here";
+"editor.apiKey.copied" = "the key of the original profile is copied when you save — leave empty to keep it";
 "editor.apiKey.show" = "Show";
 "editor.apiKey.hide" = "Hide";
 "editor.models.section" = "Models";
@@ -88,6 +89,9 @@
 "actions.confirmDelete" = "Delete profile";
 "actions.unsaved" = "Unsaved changes";
 "actions.reveal" = "Open folder";
+"actions.duplicate" = "Duplicate";
+"duplicate.name" = "%@ copy";
+"duplicate.hint" = "Copied from %@. The sign-in and history are not copied: sign in again in this profile.";
 "actions.close" = "Close";
 
 /* Delete */
