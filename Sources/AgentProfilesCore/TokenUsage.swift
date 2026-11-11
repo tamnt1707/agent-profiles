@@ -64,12 +64,15 @@ public struct UsageSummary: Equatable, Sendable {
     public var today: TokenTotals
     /// The local calendar day of `now` and the six days before it.
     public var last7Days: TokenTotals
+    /// The local calendar month of `now`, from its first day to `now`.
+    public var thisMonth: TokenTotals
     /// Every reply that was read, including the ones without a timestamp.
     public var allTime: TokenTotals
 
-    public init(today: TokenTotals = TokenTotals(), last7Days: TokenTotals = TokenTotals(), allTime: TokenTotals = TokenTotals()) {
+    public init(today: TokenTotals = TokenTotals(), last7Days: TokenTotals = TokenTotals(), thisMonth: TokenTotals = TokenTotals(), allTime: TokenTotals = TokenTotals()) {
         self.today = today
         self.last7Days = last7Days
+        self.thisMonth = thisMonth
         self.allTime = allTime
     }
 }

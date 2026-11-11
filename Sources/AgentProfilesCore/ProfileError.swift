@@ -44,6 +44,8 @@ public enum ProfileError: LocalizedError, Equatable {
     case unsafeFolderToSave(String)
     /// A price per million tokens is not a finite number of zero or more.
     case invalidPrice
+    /// A cost limit is not a finite number above zero.
+    case invalidBudget
     /// The heartbeat agent could not be set up or run.
     case heartbeatFailed(String)
 
@@ -68,6 +70,7 @@ public enum ProfileError: LocalizedError, Equatable {
         case .unsafeFolderToOpen(let path): return "refusing to open an unsafe path: \(path)"
         case .unsafeFolderToSave(let path): return "refusing to save an unsafe working directory: \(path)"
         case .invalidPrice: return "price per million tokens must be a finite number of zero or more"
+        case .invalidBudget: return "cost limit must be a finite number above zero"
         case .heartbeatFailed(let message): return "heartbeat: \(message)"
         }
     }
