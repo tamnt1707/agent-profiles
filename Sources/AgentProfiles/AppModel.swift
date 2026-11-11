@@ -710,6 +710,9 @@ final class AppModel {
             // A profile that was renamed leaves nothing behind in the menu.
             if let previousProfile, previousProfile.slug != draft.slug {
                 forgetMenuBarState(for: previousProfile.slug)
+                // The login of the old folder was removed with the rename.
+                forgetAccount(of: previousProfile.slug)
+                forgetAccount(of: draft.slug)
             }
 
             do {
@@ -751,10 +754,19 @@ final class AppModel {
         let paths = store.paths
         accountTasks[slug] = Task { [weak self] in
             let info = await AccountProbe().fetch(profile: profile, paths: paths)
-            guard let self else { return }
+            // A profile deleted or renamed meanwhile does not get the answer back.
+            guard let self, !Task.isCancelled else { return }
             self.accounts[slug] = info.map(AccountState.known) ?? .unavailable
             self.accountTasks[slug] = nil
         }
+    }
+
+    /// Forgets the account of a slug, and an answer that is still on its way.
+    /// A profile added later with the same name starts signed out.
+    private func forgetAccount(of slug: String) {
+        accountTasks[slug]?.cancel()
+        accountTasks[slug] = nil
+        accounts[slug] = nil
     }
 
     // MARK: - Heartbeat
@@ -1607,6 +1619,7 @@ final class AppModel {
         terminals.closeAll(profile.slug)
         detailTabs[profile.slug] = nil
         selectedSessions[profile.slug] = nil
+        forgetAccount(of: profile.slug)
 
         let removal: RemovalReport
         do {
